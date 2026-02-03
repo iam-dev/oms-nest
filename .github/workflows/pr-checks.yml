@@ -8,7 +8,7 @@ on:
 jobs:
   # Code quality checks
   code-quality:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     name: Code Quality & Standards
 
     steps:
@@ -65,7 +65,7 @@ jobs:
 
   # Security and dependency checks
   security-checks:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     name: Security Analysis
 
     steps:
@@ -247,7 +247,7 @@ jobs:
 
   # Documentation checks
   documentation-check:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     name: Documentation Validation
 
     steps:
@@ -291,7 +291,7 @@ jobs:
 
   # Ralph Loop compatibility check
   ralph-loop-compatibility:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     name: Ralph Loop Compatibility
 
     steps:
@@ -342,7 +342,7 @@ jobs:
 
   # PR summary comment
   pr-summary:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     name: PR Summary
     needs: [code-quality, security-checks, api-validation, performance-check, documentation-check, ralph-loop-compatibility]
     if: always()

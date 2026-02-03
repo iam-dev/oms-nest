@@ -41,7 +41,7 @@ jobs:
   # Security scanning and linting
   security-scan:
     name: Security Scan
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
@@ -358,7 +358,7 @@ jobs:
   # E2E tests against deployed staging environment
   e2e-tests:
     name: Run E2E Tests
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     needs: deploy-staging
     defaults:
       run:
@@ -399,7 +399,7 @@ jobs:
   # Slack notification
   notify:
     name: Notify Deployment Status
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     needs: [deploy-staging, e2e-tests]
     if: always()
 
