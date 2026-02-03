@@ -1,4 +1,4 @@
-name: 🚀 OMS DevSecOps Pipeline (Ralph Loop Compatible)
+name: 🚀 OMS DevSecOps Pipeline
 
 on:
   push:
@@ -12,8 +12,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_BASE: ${{ github.repository }}
-  # Ralph Loop automation flags
-  RALPH_LOOP_MODE: true
   SECURITY_SCAN_ENABLED: true
   E2E_TESTING_ENABLED: true
 
@@ -68,7 +66,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
@@ -79,7 +77,7 @@ jobs:
         working-directory: backend
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
           # Generate dependency report
           npm list --all --json > dependency-report.json
 
@@ -87,13 +85,13 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
 
       - name: 📦 E2E Dependencies Audit
         working-directory: e2e
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
 
       - name: 📊 Upload Dependency Reports
         uses: actions/upload-artifact@v4
@@ -142,7 +140,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: src/package-lock.json
 
@@ -189,7 +187,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -218,7 +216,7 @@ jobs:
   # 🎭 Comprehensive End-to-End Testing with Playwright
   test-e2e:
     runs-on: ubuntu-latest
-    name: 🎭 Comprehensive E2E Tests (Ralph Loop)
+    name: 🎭 Comprehensive E2E Tests
     needs: [test-backend, test-frontend]
 
     services:
@@ -258,7 +256,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
@@ -323,7 +321,6 @@ jobs:
           E2E_API_URL: http://localhost:3001
           ENVIRONMENT: local
           CI: true
-          RALPH_LOOP_MODE: true
 
       - name: 🎭 Run smoke tests (critical path)
         if: matrix.project == 'chromium'
