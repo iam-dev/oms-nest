@@ -23,24 +23,24 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
-            src/package-lock.json
+            backend/package-lock.json
             frontend/package-lock.json
 
       # Backend code quality
       - name: Install backend dependencies
-        working-directory: src
+        working-directory: backend
         run: npm ci
 
       - name: Backend linting
-        working-directory: src
+        working-directory: backend
         run: npm run lint
 
       - name: Backend type checking
-        working-directory: src
+        working-directory: backend
         run: npx tsc --noEmit
 
       - name: Backend tests with coverage
-        working-directory: src
+        working-directory: backend
         run: npm run test:cov
         env:
           NODE_ENV: test
@@ -81,7 +81,7 @@ jobs:
           node-version: '20'
 
       - name: Backend security audit
-        working-directory: src
+        working-directory: backend
         run: |
           npm ci
           npm audit --audit-level=high
@@ -129,14 +129,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
-        working-directory: src
+        working-directory: backend
         run: npm ci
 
       - name: Start backend server
-        working-directory: src
+        working-directory: backend
         run: |
           npm run start:dev &
           sleep 30
@@ -210,10 +210,10 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies and start backend
-        working-directory: src
+        working-directory: backend
         run: |
           npm ci
           npm run start:dev &
@@ -278,13 +278,7 @@ jobs:
       - name: Validate markdown files
         uses: DavidAnson/markdownlint-cli2-action@v19
         with:
-          globs: '**/*.md'
-          config: |
-            {
-              "default": true,
-              "MD013": false,
-              "MD033": false
-            }
+          globs: '**/*.md #node_modules'
 
   # PR summary comment
   pr-summary:
