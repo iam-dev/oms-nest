@@ -44,18 +44,18 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: 📊 Upload Trivy Results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: 🔎 SAST with CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: typescript, javascript
 
       - name: 🔍 CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
 
   # 🧪 Dependency and License Scanning
   dependency-scan:
@@ -70,6 +70,10 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
 
       - name: 📦 Backend Dependency Audit
         working-directory: backend
@@ -256,6 +260,10 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
 
       - name: 🏗️ Install backend dependencies
         working-directory: backend
