@@ -1,7 +1,8 @@
 # Staging environment overrides
 
 global:
-  environment: staging
+  # NestJS only accepts: development, production, test
+  environment: production
 
 backend:
   replicas: 2
