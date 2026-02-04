@@ -3,16 +3,21 @@
 # manage-secrets.sh - Secure secret management for OMS Kubernetes deployments
 #
 # Usage:
-#   ./manage-secrets.sh seal   <namespace> <env-file>   Seal secrets from a .env file
-#   ./manage-secrets.sh create <namespace> <env-file>   Create K8s secrets directly (dev only)
-#   ./manage-secrets.sh rotate <namespace>              Rotate secrets (re-seal with new cert)
-#   ./manage-secrets.sh verify <namespace>              Verify secrets exist and are valid
-#   ./manage-secrets.sh audit  <namespace>              Audit secret access in the namespace
+#   ./manage-secrets.sh seal   <namespace> <env-file> [--name <secret-name>] [--output <dir>]
+#   ./manage-secrets.sh create <namespace> <env-file> [--name <secret-name>]
+#   ./manage-secrets.sh rotate <namespace>            [--name <secret-name>] [--output <dir>]
+#   ./manage-secrets.sh verify <namespace>            [--name <secret-name>]
+#   ./manage-secrets.sh audit  <namespace>
+#
+# Options:
+#   --name <name>    Override the Kubernetes secret name (default: oms-nest-secrets)
+#   --output <dir>   Override the output directory for sealed YAML (default: kube/helm/oms-nest)
 #
 # Examples:
 #   ./manage-secrets.sh seal   oms-nest-staging  secrets.env
 #   ./manage-secrets.sh create oms-nest-staging  secrets.env
 #   ./manage-secrets.sh verify oms-nest-production
+#   ./manage-secrets.sh seal   oms-staging-v2 kube/secrets.env --name oms-app-secrets --output kubernetes/staging-v2
 #
 set -euo pipefail
 
@@ -38,6 +43,23 @@ REQUIRED_KEYS=(
 log()  { echo "[INFO]  $*"; }
 warn() { echo "[WARN]  $*" >&2; }
 err()  { echo "[ERROR] $*" >&2; exit 1; }
+
+# Parse --name and --output flags from remaining arguments
+# Sets SECRET_NAME and OUTPUT_DIR as side effects
+parse_flags() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)
+        [[ $# -ge 2 ]] || err "--name requires a value"
+        SECRET_NAME="$2"; shift 2 ;;
+      --output)
+        [[ $# -ge 2 ]] || err "--output requires a value"
+        OUTPUT_DIR="$2"; shift 2 ;;
+      *)
+        err "Unknown flag: $1" ;;
+    esac
+  done
+}
 
 check_deps() {
   for cmd in kubectl; do
@@ -94,6 +116,8 @@ validate_keys() {
 cmd_seal() {
   local namespace="$1"
   local env_file="$2"
+  shift 2
+  parse_flags "$@"
   check_seal_deps
 
   declare -A secrets
@@ -116,7 +140,9 @@ cmd_seal() {
     from_literal_args+=("--from-literal=${key}=${secrets[$key]}")
   done
 
-  local output_file="${CHART_DIR}/sealed-secret-${namespace}.yaml"
+  local dest_dir="${OUTPUT_DIR:-$CHART_DIR}"
+  local output_file="${dest_dir}/sealed-secret.yaml"
+  mkdir -p "$dest_dir"
 
   kubectl create secret generic "$SECRET_NAME" \
     --namespace="$namespace" \
@@ -137,6 +163,8 @@ cmd_seal() {
 cmd_create() {
   local namespace="$1"
   local env_file="$2"
+  shift 2
+  parse_flags "$@"
 
   declare -A secrets
   load_env_file "$env_file" secrets
@@ -158,6 +186,8 @@ cmd_create() {
 
 cmd_rotate() {
   local namespace="$1"
+  shift 1
+  parse_flags "$@"
   check_seal_deps
 
   log "Fetching current secret values from cluster..."
@@ -176,7 +206,9 @@ cmd_rotate() {
     > "$cert_file"
 
   log "Re-sealing with new certificate..."
-  local output_file="${CHART_DIR}/sealed-secret-${namespace}.yaml"
+  local dest_dir="${OUTPUT_DIR:-$CHART_DIR}"
+  local output_file="${dest_dir}/sealed-secret.yaml"
+  mkdir -p "$dest_dir"
 
   echo "$raw" | \
   kubeseal --cert "$cert_file" \
@@ -191,6 +223,8 @@ cmd_rotate() {
 
 cmd_verify() {
   local namespace="$1"
+  shift 1
+  parse_flags "$@"
 
   log "Verifying secrets in namespace '$namespace'..."
 
@@ -268,27 +302,27 @@ check_deps
 
 case "${1:-help}" in
   seal)
-    [[ $# -ge 3 ]] || err "Usage: $0 seal <namespace> <env-file>"
-    cmd_seal "$2" "$3"
+    [[ $# -ge 3 ]] || err "Usage: $0 seal <namespace> <env-file> [--name <name>] [--output <dir>]"
+    cmd_seal "$2" "$3" "${@:4}"
     ;;
   create)
-    [[ $# -ge 3 ]] || err "Usage: $0 create <namespace> <env-file>"
-    cmd_create "$2" "$3"
+    [[ $# -ge 3 ]] || err "Usage: $0 create <namespace> <env-file> [--name <name>]"
+    cmd_create "$2" "$3" "${@:4}"
     ;;
   rotate)
-    [[ $# -ge 2 ]] || err "Usage: $0 rotate <namespace>"
-    cmd_rotate "$2"
+    [[ $# -ge 2 ]] || err "Usage: $0 rotate <namespace> [--name <name>] [--output <dir>]"
+    cmd_rotate "$2" "${@:3}"
     ;;
   verify)
-    [[ $# -ge 2 ]] || err "Usage: $0 verify <namespace>"
-    cmd_verify "$2"
+    [[ $# -ge 2 ]] || err "Usage: $0 verify <namespace> [--name <name>]"
+    cmd_verify "$2" "${@:3}"
     ;;
   audit)
     [[ $# -ge 2 ]] || err "Usage: $0 audit <namespace>"
     cmd_audit "$2"
     ;;
   help|--help|-h)
-    head -20 "$0" | grep '^#' | sed 's/^# \?//'
+    head -25 "$0" | grep '^#' | sed 's/^# \?//'
     ;;
   *)
     err "Unknown command: $1. Use '$0 help' for usage."

@@ -227,63 +227,37 @@ jobs:
       run: |
         kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Validate required secrets are configured
+    - name: Install sealed-secrets controller
       run: |
-        # Fail fast if any required secret is missing rather than deploying
-        # with empty values. GitHub masks secret values, so we check length.
-        MISSING=""
-        check_secret() {
-          local name="$1"
-          local value="$2"
-          if [ -z "$value" ]; then
-            MISSING="${MISSING} ${name}"
+        helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets || true
+        helm repo update
+        helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
+          --namespace kube-system \
+          --set-string fullnameOverride=sealed-secrets-controller \
+          --wait --timeout 120s
+
+    - name: Apply SealedSecret from Git
+      run: |
+        kubectl apply -f kubernetes/staging-v2/sealed-secret.yaml
+
+    - name: Wait for secret to be unsealed
+      run: |
+        echo "Waiting for sealed-secrets controller to decrypt oms-app-secrets..."
+        for i in $(seq 1 30); do
+          if kubectl get secret oms-app-secrets -n ${{ env.K8S_NAMESPACE }} > /dev/null 2>&1; then
+            echo "oms-app-secrets decrypted successfully"
+            break
           fi
-        }
-        check_secret "DB_USERNAME" "${{ secrets.DB_USERNAME }}"
-        check_secret "DB_PASSWORD" "${{ secrets.DB_PASSWORD }}"
-        check_secret "DB_NAME" "${{ secrets.DB_NAME }}"
-        check_secret "DB_HOST" "${{ secrets.DB_HOST }}"
-        check_secret "JWT_SECRET_KEY" "${{ secrets.JWT_SECRET_KEY }}"
-        check_secret "ENCRYPTION_SECRET" "${{ secrets.ENCRYPTION_SECRET }}"
+          if [ "$i" -eq 30 ]; then
+            echo "::error::Timed out waiting for oms-app-secrets to be unsealed"
+            kubectl get sealedsecret -n ${{ env.K8S_NAMESPACE }} -o yaml || true
+            exit 1
+          fi
+          sleep 5
+        done
 
-        if [ -n "$MISSING" ]; then
-          echo "::error::Missing required GitHub secrets:${MISSING}"
-          echo "Configure these in Settings > Secrets and variables > Actions"
-          exit 1
-        fi
-        echo "All required secrets are configured"
-
-    - name: Create secrets from environment variables
+    - name: Create registry credentials
       run: |
-        set +x  # Disable command echoing to prevent secret leakage in logs
-
-        # Create application secrets (DB is external DigitalOcean managed database on port 25060, Redis is in-cluster)
-        kubectl create secret generic oms-app-secrets \
-          --namespace=${{ env.K8S_NAMESPACE }} \
-          --from-literal=DATABASE_TYPE="postgres" \
-          --from-literal=DATABASE_HOST="${{ secrets.DB_HOST }}" \
-          --from-literal=DATABASE_PORT="${{ secrets.DB_PORT || '25060' }}" \
-          --from-literal=DATABASE_USERNAME="${{ secrets.DB_USERNAME }}" \
-          --from-literal=DATABASE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-          --from-literal=DATABASE_NAME="${{ secrets.DB_NAME }}" \
-          --from-literal=DATABASE_SSL_ENABLED="true" \
-          --from-literal=DATABASE_REJECT_UNAUTHORIZED="false" \
-          --from-literal=DATABASE_SYNCHRONIZE="false" \
-          --from-literal=DATABASE_MAX_CONNECTIONS="100" \
-          --from-literal=AUTH_JWT_SECRET="${{ secrets.JWT_SECRET_KEY }}" \
-          --from-literal=AUTH_JWT_TOKEN_EXPIRES_IN="15m" \
-          --from-literal=AUTH_REFRESH_SECRET="${{ secrets.AUTH_REFRESH_SECRET || secrets.JWT_SECRET_KEY }}" \
-          --from-literal=AUTH_REFRESH_TOKEN_EXPIRES_IN="3650d" \
-          --from-literal=AUTH_FORGOT_SECRET="${{ secrets.AUTH_FORGOT_SECRET || secrets.JWT_SECRET_KEY }}" \
-          --from-literal=AUTH_FORGOT_TOKEN_EXPIRES_IN="30m" \
-          --from-literal=AUTH_CONFIRM_EMAIL_SECRET="${{ secrets.AUTH_CONFIRM_EMAIL_SECRET || secrets.JWT_SECRET_KEY }}" \
-          --from-literal=AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN="1d" \
-          --from-literal=REDIS_URL="redis://oms-redis-service:6379" \
-          --from-literal=ENCRYPTION_SECRET="${{ secrets.ENCRYPTION_SECRET }}" \
-          --from-literal=FILE_DRIVER="local" \
-          --dry-run=client -o yaml | kubectl apply -f -
-
-        # Create registry credentials
         kubectl create secret docker-registry registry-credentials \
           --namespace=${{ env.K8S_NAMESPACE }} \
           --docker-server=${{ env.REGISTRY }} \
@@ -291,14 +265,14 @@ jobs:
           --docker-password=${{ secrets.GITHUB_TOKEN }} \
           --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Verify secrets were created
+    - name: Verify secrets exist
       run: |
         echo "Verifying Kubernetes secrets exist..."
         for secret in oms-app-secrets registry-credentials; do
           if kubectl get secret "$secret" -n ${{ env.K8S_NAMESPACE }} > /dev/null 2>&1; then
             echo "  $secret [OK]"
           else
-            echo "::error::Secret $secret was not created"
+            echo "::error::Secret $secret was not found"
             exit 1
           fi
         done
