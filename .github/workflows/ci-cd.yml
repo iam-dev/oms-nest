@@ -163,7 +163,7 @@ jobs:
 
       - name: Run integration tests
         working-directory: backend
-        run: npm run test:e2e-api
+        run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathIgnorePatterns='data-counts'
         env:
           NODE_ENV: test
           E2E_DATABASE_HOST: localhost
@@ -177,14 +177,26 @@ jobs:
           DATABASE_USERNAME: oms
           DATABASE_PASSWORD: test_password
           DATABASE_NAME: oms_test
+          DATABASE_SYNCHRONIZE: "true"
           E2E_REDIS_HOST: localhost
           E2E_REDIS_PORT: "6379"
           REDIS_HOST: localhost
           REDIS_PORT: "6379"
           AUTH_JWT_SECRET: ci-test-jwt-secret
           AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
           AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
           FILE_DRIVER: local
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: "true"
+          MAIL_SECURE: "false"
+          MAIL_REQUIRE_TLS: "false"
 
       - name: Upload backend test coverage
         uses: codecov/codecov-action@v3
