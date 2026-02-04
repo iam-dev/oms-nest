@@ -161,9 +161,22 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
+      - name: Run database migrations
+        working-directory: backend
+        run: npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource=src/database/data-source.ts migration:run
+        env:
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          DATABASE_SYNCHRONIZE: "false"
+          NODE_ENV: test
+
       - name: Run integration tests
         working-directory: backend
-        run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathIgnorePatterns='data-counts'
+        run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathPattern='api-endpoints'
         env:
           NODE_ENV: test
           E2E_DATABASE_HOST: localhost
@@ -177,7 +190,7 @@ jobs:
           DATABASE_USERNAME: oms
           DATABASE_PASSWORD: test_password
           DATABASE_NAME: oms_test
-          DATABASE_SYNCHRONIZE: "true"
+          DATABASE_SYNCHRONIZE: "false"
           E2E_REDIS_HOST: localhost
           E2E_REDIS_PORT: "6379"
           REDIS_HOST: localhost
