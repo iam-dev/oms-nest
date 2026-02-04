@@ -32,6 +32,16 @@ export class CacheWarmingService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap() {
     await Promise.resolve();
+
+    const nodeEnv = this.configService.getOrThrow("app.nodeEnv", {
+      infer: true,
+    });
+
+    if (nodeEnv === "test") {
+      this.logger.log("Skipping cache warming in test environment");
+      return;
+    }
+
     // Delay initial warmup to ensure all modules are loaded
     setTimeout(() => {
       void this.warmupCriticalData();
