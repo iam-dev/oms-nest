@@ -257,16 +257,30 @@ jobs:
       run: |
         set +x  # Disable command echoing to prevent secret leakage in logs
 
-        # Create application secrets (DB is external DigitalOcean managed database, Redis is in-cluster)
+        # Create application secrets (DB is external DigitalOcean managed database on port 25060, Redis is in-cluster)
         kubectl create secret generic oms-app-secrets \
           --namespace=${{ env.K8S_NAMESPACE }} \
-          --from-literal=DATABASE_URL="postgresql://${{ secrets.DB_USERNAME }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}?sslmode=require" \
-          --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET_KEY }}" \
-          --from-literal=JWT_EXPIRES_IN="24h" \
+          --from-literal=DATABASE_TYPE="postgres" \
+          --from-literal=DATABASE_HOST="${{ secrets.DB_HOST }}" \
+          --from-literal=DATABASE_PORT="${{ secrets.DB_PORT || '25060' }}" \
+          --from-literal=DATABASE_USERNAME="${{ secrets.DB_USERNAME }}" \
+          --from-literal=DATABASE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+          --from-literal=DATABASE_NAME="${{ secrets.DB_NAME }}" \
+          --from-literal=DATABASE_SSL_ENABLED="true" \
+          --from-literal=DATABASE_REJECT_UNAUTHORIZED="false" \
+          --from-literal=DATABASE_SYNCHRONIZE="false" \
+          --from-literal=DATABASE_MAX_CONNECTIONS="100" \
+          --from-literal=AUTH_JWT_SECRET="${{ secrets.JWT_SECRET_KEY }}" \
+          --from-literal=AUTH_JWT_TOKEN_EXPIRES_IN="15m" \
+          --from-literal=AUTH_REFRESH_SECRET="${{ secrets.AUTH_REFRESH_SECRET || secrets.JWT_SECRET_KEY }}" \
+          --from-literal=AUTH_REFRESH_TOKEN_EXPIRES_IN="3650d" \
+          --from-literal=AUTH_FORGOT_SECRET="${{ secrets.AUTH_FORGOT_SECRET || secrets.JWT_SECRET_KEY }}" \
+          --from-literal=AUTH_FORGOT_TOKEN_EXPIRES_IN="30m" \
+          --from-literal=AUTH_CONFIRM_EMAIL_SECRET="${{ secrets.AUTH_CONFIRM_EMAIL_SECRET || secrets.JWT_SECRET_KEY }}" \
+          --from-literal=AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN="1d" \
           --from-literal=REDIS_URL="redis://oms-redis-service:6379" \
           --from-literal=ENCRYPTION_SECRET="${{ secrets.ENCRYPTION_SECRET }}" \
-          --from-literal=API_PORT="3001" \
-          --from-literal=NODE_ENV="staging" \
+          --from-literal=FILE_DRIVER="local" \
           --dry-run=client -o yaml | kubectl apply -f -
 
         # Create registry credentials
@@ -314,9 +328,8 @@ jobs:
 
     - name: Wait for backend to be ready
       run: |
-        kubectl wait --namespace=${{ env.K8S_NAMESPACE }} \
-          --for=condition=ready pod \
-          --selector=app=oms-backend \
+        kubectl rollout status deployment/oms-backend \
+          --namespace=${{ env.K8S_NAMESPACE }} \
           --timeout=300s
 
     - name: Deploy frontend application
@@ -324,9 +337,8 @@ jobs:
 
     - name: Wait for frontend to be ready
       run: |
-        kubectl wait --namespace=${{ env.K8S_NAMESPACE }} \
-          --for=condition=ready pod \
-          --selector=app=oms-frontend \
+        kubectl rollout status deployment/oms-frontend \
+          --namespace=${{ env.K8S_NAMESPACE }} \
           --timeout=300s
 
     - name: Deploy ingress configuration
@@ -350,10 +362,10 @@ jobs:
         sleep 60
 
         # Check backend health
-        curl -f https://api-staging-v2.ordermysaddle.com/health || echo "Backend health check failed"
+        curl -f https://api-staging-v2.ordermysaddle.com/api/health || echo "Backend health check failed"
 
-        # Check frontend health
-        curl -f https://staging-v2.ordermysaddle.com/api/health || echo "Frontend health check failed"
+        # Check frontend
+        curl -f https://staging-v2.ordermysaddle.com || echo "Frontend health check failed"
 
   # E2E tests against deployed staging environment
   e2e-tests:

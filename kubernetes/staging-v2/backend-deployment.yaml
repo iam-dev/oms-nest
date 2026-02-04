@@ -73,10 +73,10 @@ spec:
             drop:
             - ALL
 
-        # Health checks
+        # Health checks (paths include /api global prefix)
         livenessProbe:
           httpGet:
-            path: /health/live
+            path: /api/health/live
             port: 3001
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -85,7 +85,7 @@ spec:
 
         readinessProbe:
           httpGet:
-            path: /health/ready
+            path: /api/health/ready
             port: 3001
           initialDelaySeconds: 10
           periodSeconds: 5
@@ -95,7 +95,7 @@ spec:
         # Startup probe for slower initial startup
         startupProbe:
           httpGet:
-            path: /health/live
+            path: /api/health/live
             port: 3001
           initialDelaySeconds: 15
           periodSeconds: 10
