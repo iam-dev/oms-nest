@@ -166,6 +166,11 @@ jobs:
         run: npm run test:e2e
         env:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
