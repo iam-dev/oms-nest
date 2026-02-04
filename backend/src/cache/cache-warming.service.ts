@@ -327,7 +327,7 @@ export class CacheWarmingService implements OnApplicationBootstrap {
     return result;
   }
 
-  private async loadPopularProducts(): Promise<any[]> {
+  private loadPopularProducts(): any[] {
     // This would be implemented with actual product analytics
     // For now, return empty array
     this.logger.debug("Popular products loading not implemented yet");
