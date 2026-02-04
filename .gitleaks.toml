@@ -87,4 +87,5 @@ paths = [
     '''.git/.*''',
     '''docs/.*''',
     '''README.*''',
+    '''.*sealed-secret\.yaml$''',
 ]
