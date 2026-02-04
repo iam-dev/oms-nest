@@ -217,8 +217,8 @@ spec:
                 container('helm') {
                     script {
                         def healthUrl = env.BRANCH_NAME == 'production' ?
-                            'https://api-nest-production.ordermysaddle.com/health' :
-                            'https://api-nest-staging.ordermysaddle.com/health'
+                            'https://api-nest-production.ordermysaddle.com/api/health/ready' :
+                            'https://api-nest-staging.ordermysaddle.com/api/health/ready'
 
                         sh "wget -q -O- ${healthUrl} || exit 1"
                     }

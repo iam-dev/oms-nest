@@ -161,7 +161,7 @@ pipeline {
                                 --from-literal=MAIL_PASSWORD="${MAIL_PASS}" \
                                 --dry-run=client -o yaml | kubectl apply -f -
 
-                            kubectl create secret docker-registry ghcr-credentials \
+                            kubectl create secret docker-registry registry-credentials \
                                 --namespace="${namespace}" \
                                 --docker-server=ghcr.io \
                                 --docker-username="${GHCR_USER}" \
@@ -206,7 +206,7 @@ pipeline {
                         echo "Verifying secrets in namespace ${namespace}..."
                         kubectl get secret oms-nest-secrets -n ${namespace} \
                             -o jsonpath='{.metadata.name}' && echo " [OK]"
-                        kubectl get secret ghcr-credentials -n ${namespace} \
+                        kubectl get secret registry-credentials -n ${namespace} \
                             -o jsonpath='{.metadata.name}' && echo " [OK]"
                     """
                 }
@@ -231,11 +231,11 @@ pipeline {
                     sh """
                         kubectl exec deployment/oms-nest-${params.ENVIRONMENT}-backend \
                             -n ${namespace} -- \
-                            wget -q -O- http://localhost:3001/health || exit 1
+                            wget -q -O- http://localhost:3001/api/health/live || exit 1
 
                         kubectl exec deployment/oms-nest-${params.ENVIRONMENT}-backend \
                             -n ${namespace} -- \
-                            wget -q -O- http://localhost:3001/health/ready || exit 1
+                            wget -q -O- http://localhost:3001/api/health/ready || exit 1
                     """
 
                     echo "Health checks passed"
