@@ -25,6 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="${SCRIPT_DIR}/../helm/oms-nest"
 
 SECRET_NAME="oms-nest-secrets"
+OUTPUT_DIR=""
 SEALED_SECRETS_CONTROLLER="sealed-secrets-controller"
 SEALED_SECRETS_NS="kube-system"
 
@@ -39,6 +40,10 @@ REQUIRED_KEYS=(
   MAIL_DEFAULT_EMAIL MAIL_DEFAULT_NAME
   ENCRYPTION_SECRET
 )
+
+# Parallel arrays for loaded env key-value pairs (Bash 3.2 compatible)
+ENV_KEYS=()
+ENV_VALUES=()
 
 log()  { echo "[INFO]  $*"; }
 warn() { echo "[WARN]  $*" >&2; }
@@ -71,17 +76,17 @@ check_seal_deps() {
   command -v kubeseal >/dev/null 2>&1 || err "'kubeseal' is required. Install: brew install kubeseal"
 }
 
-# Load a .env file into an associative array, skipping comments and blank lines
+# Load a .env file into ENV_KEYS / ENV_VALUES parallel arrays
 load_env_file() {
   local file="$1"
   [[ -f "$file" ]] || err "Environment file not found: $file"
 
-  # Validate no obvious plaintext leaks in the file path itself
   if [[ "$file" == *".git/"* ]]; then
     err "Refusing to load secrets from inside .git directory"
   fi
 
-  local -n _map=$2
+  ENV_KEYS=()
+  ENV_VALUES=()
   while IFS='=' read -r key value; do
     # Skip comments and empty lines
     [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
@@ -93,15 +98,29 @@ load_env_file() {
     value="${value%\"}"
     value="${value#\'}"
     value="${value%\'}"
-    _map["$key"]="$value"
+    ENV_KEYS+=("$key")
+    ENV_VALUES+=("$value")
   done < "$file"
 }
 
+# Look up a value by key in ENV_KEYS/ENV_VALUES
+env_get() {
+  local needle="$1"
+  local i=0
+  while [[ $i -lt ${#ENV_KEYS[@]} ]]; do
+    if [[ "${ENV_KEYS[$i]}" == "$needle" ]]; then
+      echo "${ENV_VALUES[$i]}"
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
 validate_keys() {
-  local -n _secrets=$1
   local missing=()
   for key in "${REQUIRED_KEYS[@]}"; do
-    if [[ -z "${_secrets[$key]:-}" ]]; then
+    if ! env_get "$key" >/dev/null 2>&1; then
       missing+=("$key")
     fi
   done
@@ -113,6 +132,16 @@ validate_keys() {
   return 0
 }
 
+# Build --from-literal args from ENV_KEYS/ENV_VALUES into FROM_LITERAL_ARGS array
+build_from_literal_args() {
+  FROM_LITERAL_ARGS=()
+  local i=0
+  while [[ $i -lt ${#ENV_KEYS[@]} ]]; do
+    FROM_LITERAL_ARGS+=("--from-literal=${ENV_KEYS[$i]}=${ENV_VALUES[$i]}")
+    i=$((i + 1))
+  done
+}
+
 cmd_seal() {
   local namespace="$1"
   local env_file="$2"
@@ -120,9 +149,8 @@ cmd_seal() {
   parse_flags "$@"
   check_seal_deps
 
-  declare -A secrets
-  load_env_file "$env_file" secrets
-  validate_keys secrets || err "Cannot seal: missing required keys"
+  load_env_file "$env_file"
+  validate_keys || err "Cannot seal: missing required keys"
 
   log "Fetching sealed-secrets public cert..."
   local cert_file
@@ -135,10 +163,7 @@ cmd_seal() {
     > "$cert_file"
 
   log "Creating raw secret and sealing..."
-  local from_literal_args=()
-  for key in "${!secrets[@]}"; do
-    from_literal_args+=("--from-literal=${key}=${secrets[$key]}")
-  done
+  build_from_literal_args
 
   local dest_dir="${OUTPUT_DIR:-$CHART_DIR}"
   local output_file="${dest_dir}/sealed-secret.yaml"
@@ -146,7 +171,7 @@ cmd_seal() {
 
   kubectl create secret generic "$SECRET_NAME" \
     --namespace="$namespace" \
-    "${from_literal_args[@]}" \
+    "${FROM_LITERAL_ARGS[@]}" \
     --dry-run=client -o yaml | \
   kubeseal --cert "$cert_file" \
     --controller-name="$SEALED_SECRETS_CONTROLLER" \
@@ -166,19 +191,15 @@ cmd_create() {
   shift 2
   parse_flags "$@"
 
-  declare -A secrets
-  load_env_file "$env_file" secrets
-  validate_keys secrets || warn "Proceeding with missing keys..."
+  load_env_file "$env_file"
+  validate_keys || warn "Proceeding with missing keys..."
 
-  local from_literal_args=()
-  for key in "${!secrets[@]}"; do
-    from_literal_args+=("--from-literal=${key}=${secrets[$key]}")
-  done
+  build_from_literal_args
 
   log "Creating secret '$SECRET_NAME' in namespace '$namespace'..."
   kubectl create secret generic "$SECRET_NAME" \
     --namespace="$namespace" \
-    "${from_literal_args[@]}" \
+    "${FROM_LITERAL_ARGS[@]}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log "Secret created/updated successfully"
