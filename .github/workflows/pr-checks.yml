@@ -145,6 +145,21 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
           PORT: 3001
+          FILE_DRIVER: local
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: 'true'
+          MAIL_SECURE: 'false'
+          MAIL_REQUIRE_TLS: 'false'
 
       - name: Validate API endpoints
         run: |
@@ -222,6 +237,21 @@ jobs:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
+          FILE_DRIVER: local
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: 'true'
+          MAIL_SECURE: 'false'
+          MAIL_REQUIRE_TLS: 'false'
 
       - name: Basic performance validation
         run: |

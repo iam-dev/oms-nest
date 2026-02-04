@@ -28,6 +28,10 @@ spec:
             - 200mb
             - --maxmemory-policy
             - allkeys-lru
+            - --protected-mode
+            - "no"
+            - --save
+            - ""
           livenessProbe:
             exec:
               command:
