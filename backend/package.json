@@ -169,7 +169,12 @@
   "overrides": {
     "tar": ">=7.5.7",
     "fast-xml-parser": ">=5.3.4",
-    "lodash": ">=4.17.23"
+    "lodash": ">=4.17.23",
+    "fork-ts-checker-webpack-plugin": {
+      "schema-utils": {
+        "ajv-keywords": "^5.1.0"
+      }
+    }
   },
   "engines": {
     "node": ">=16.0.0",
