@@ -26,7 +26,6 @@ export class OrderLineEntity {
   id: number;
 
   @Column({ name: "order_id", type: "integer" })
-  @Index()
   orderId: number;
 
   @Column({ name: "product_id", type: "integer", nullable: true })
