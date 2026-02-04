@@ -163,16 +163,28 @@ jobs:
 
       - name: Run integration tests
         working-directory: backend
-        run: npm run test:e2e
+        run: npm run test:e2e-api
         env:
-          DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
+          NODE_ENV: test
+          E2E_DATABASE_HOST: localhost
+          E2E_DATABASE_PORT: "5432"
+          E2E_DATABASE_USERNAME: oms
+          E2E_DATABASE_PASSWORD: test_password
+          E2E_DATABASE_NAME: oms_test
+          DATABASE_TYPE: postgres
           DATABASE_HOST: localhost
           DATABASE_PORT: "5432"
           DATABASE_USERNAME: oms
           DATABASE_PASSWORD: test_password
           DATABASE_NAME: oms_test
-          REDIS_URL: redis://localhost:6379
-          NODE_ENV: test
+          E2E_REDIS_HOST: localhost
+          E2E_REDIS_PORT: "6379"
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          FILE_DRIVER: local
 
       - name: Upload backend test coverage
         uses: codecov/codecov-action@v3
