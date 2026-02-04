@@ -176,7 +176,7 @@ jobs:
 
       - name: Run integration tests
         working-directory: backend
-        run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathPattern='api-endpoints'
+        run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathPatterns='api-endpoints'
         env:
           NODE_ENV: test
           E2E_DATABASE_HOST: localhost
