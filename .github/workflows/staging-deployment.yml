@@ -1,4 +1,4 @@
-name: Deploy to Staging V2
+name: Deploy to Staging
 
 on:
   push:
@@ -9,10 +9,9 @@ on:
       environment:
         description: 'Target environment'
         required: true
-        default: 'staging-v2'
+        default: 'staging'
         type: choice
         options:
-        - staging-v2
         - staging
       force_deploy:
         description: 'Force deployment even if tests fail'
@@ -31,7 +30,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
   IMAGE_NAME_FRONTEND: ${{ github.repository }}-frontend
-  K8S_NAMESPACE: oms-staging-v2
+  K8S_NAMESPACE: oms-nest-staging
 
 jobs:
   # Security scanning and linting
@@ -50,7 +49,7 @@ jobs:
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
@@ -113,7 +112,7 @@ jobs:
           type=ref,event=branch
           type=ref,event=pr
           type=sha,prefix=sha-
-          type=raw,value=staging-v2-latest
+          type=raw,value=staging-latest
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -161,7 +160,7 @@ jobs:
     - name: Build application
       run: npm run build
       env:
-        NEXT_PUBLIC_API_URL: https://api-staging-v2.ordermysaddle.com
+        NEXT_PUBLIC_API_URL: https://api-nest-staging.ordermysaddle.com
         NODE_ENV: staging
 
     - name: Log in to Container Registry
@@ -180,7 +179,7 @@ jobs:
           type=ref,event=branch
           type=ref,event=pr
           type=sha,prefix=sha-
-          type=raw,value=staging-v2-latest
+          type=raw,value=staging-latest
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -192,16 +191,16 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           NODE_ENV=staging
-          NEXT_PUBLIC_API_URL=https://api-staging-v2.ordermysaddle.com
+          NEXT_PUBLIC_API_URL=https://api-nest-staging.ordermysaddle.com
 
-  # Deploy to Kubernetes staging-v2 namespace
+  # Deploy to Kubernetes oms-nest-staging namespace
   deploy-staging:
-    name: Deploy to Staging V2
+    name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [backend-build, frontend-build]
     environment:
-      name: staging-v2
-      url: https://staging-v2.ordermysaddle.com
+      name: staging
+      url: https://nest-staging.ordermysaddle.com
 
     steps:
     - uses: actions/checkout@v4
@@ -222,6 +221,15 @@ jobs:
     - name: Create namespace if not exists
       run: |
         kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Clean existing resources in namespace
+      run: |
+        # Remove any Helm releases from Jenkins-based deployments
+        helm uninstall oms-nest-staging -n ${{ env.K8S_NAMESPACE }} || true
+        # Delete all existing resources
+        kubectl delete deployments,services,statefulsets,configmaps,ingress,hpa --all -n ${{ env.K8S_NAMESPACE }} || true
+        # Wait for pods to terminate
+        kubectl wait --for=delete pods --all -n ${{ env.K8S_NAMESPACE }} --timeout=120s || true
 
     - name: Install sealed-secrets controller
       run: |
@@ -278,10 +286,10 @@ jobs:
         cd kubernetes/staging-v2
 
         # Update backend image tag
-        sed -i "s|ghcr.io/YOUR_ORG/oms-backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-v2-latest|g" backend-deployment.yaml
+        sed -i "s|ghcr.io/YOUR_ORG/oms-backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-latest|g" backend-deployment.yaml
 
         # Update frontend image tag
-        sed -i "s|ghcr.io/YOUR_ORG/oms-frontend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-v2-latest|g" frontend-deployment.yaml
+        sed -i "s|ghcr.io/YOUR_ORG/oms-frontend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-latest|g" frontend-deployment.yaml
 
     - name: Deploy Redis cache
       run: kubectl apply -f kubernetes/staging-v2/database-deployment.yaml
@@ -329,10 +337,10 @@ jobs:
         sleep 60
 
         # Check backend health
-        curl -f https://api-staging-v2.ordermysaddle.com/api/health || echo "Backend health check failed"
+        curl -f https://api-nest-staging.ordermysaddle.com/api/health || echo "Backend health check failed"
 
         # Check frontend
-        curl -f https://staging-v2.ordermysaddle.com || echo "Frontend health check failed"
+        curl -f https://nest-staging.ordermysaddle.com || echo "Frontend health check failed"
 
   # E2E tests against deployed staging environment
   e2e-tests:
@@ -362,8 +370,8 @@ jobs:
     - name: Run E2E tests
       run: npx playwright test
       env:
-        BASE_URL: https://staging-v2.ordermysaddle.com
-        API_URL: https://api-staging-v2.ordermysaddle.com
+        BASE_URL: https://nest-staging.ordermysaddle.com
+        API_URL: https://api-nest-staging.ordermysaddle.com
         TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
 
@@ -388,7 +396,7 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: success
-        text: '🚀 OMS Staging V2 deployment successful! All E2E tests passed.'
+        text: '🚀 OMS Staging deployment successful! All E2E tests passed.'
         webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     - name: Notify Slack on failure
@@ -396,5 +404,5 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: failure
-        text: '❌ OMS Staging V2 deployment failed! Check logs for details.'
+        text: '❌ OMS Staging deployment failed! Check logs for details.'
         webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
