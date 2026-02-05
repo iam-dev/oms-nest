@@ -24,7 +24,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: logLevels,
     cors: {
-      origin: ["http://localhost:3000"],
+      origin: [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://staging-v2.ordermysaddle.com",
+        "https://staging.ordermysaddle.com",
+        "https://ordermysaddle.com",
+      ],
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       allowedHeaders: [
