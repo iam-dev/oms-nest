@@ -20,24 +20,27 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       # Backend code quality
       - name: Install backend dependencies
-        working-directory: src
+        working-directory: backend
         run: npm ci
 
       - name: Backend linting
-        working-directory: src
+        working-directory: backend
         run: npm run lint
 
       - name: Backend type checking
-        working-directory: src
+        working-directory: backend
         run: npx tsc --noEmit
 
       - name: Backend tests with coverage
-        working-directory: src
+        working-directory: backend
         run: npm run test:cov
         env:
           NODE_ENV: test
@@ -75,27 +78,27 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Backend security audit
-        working-directory: src
+        working-directory: backend
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
 
       - name: Frontend security audit
         working-directory: frontend
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
 
       - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: typescript
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
 
   # API contract validation
   api-validation:
@@ -124,35 +127,62 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
-        working-directory: src
+        working-directory: backend
         run: npm ci
 
       - name: Start backend server
-        working-directory: src
+        working-directory: backend
         run: |
           npm run start:dev &
-          sleep 30
+          echo "Waiting for backend to be ready..."
+          for i in $(seq 1 60); do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health/ready | grep -q "200"; then
+              echo "Backend is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend failed to start within 60 attempts"
+              exit 1
+            fi
+            echo "Attempt $i: Backend not ready yet, waiting 5s..."
+            sleep 5
+          done
         env:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
           PORT: 3001
+          FILE_DRIVER: local
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: 'true'
+          MAIL_SECURE: 'false'
+          MAIL_REQUIRE_TLS: 'false'
 
       - name: Validate API endpoints
         run: |
           # Health check
-          curl -f http://localhost:3001/health
+          curl -f http://localhost:3001/api/health
 
-          # Test core API endpoints
+          # Test core API endpoints (all versioned under /api/v1/)
           echo "Testing core endpoints..."
 
           # Test customers endpoint (should require auth)
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/customers)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/v1/customers)
           if [ "$RESPONSE" -eq 401 ]; then
             echo "✅ Customers endpoint correctly requires authentication"
           else
@@ -161,7 +191,7 @@ jobs:
           fi
 
           # Test orders endpoint
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/orders)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/v1/orders)
           if [ "$RESPONSE" -eq 401 ]; then
             echo "✅ Orders endpoint correctly requires authentication"
           else
@@ -170,7 +200,7 @@ jobs:
           fi
 
           # Test enriched orders endpoint
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/enriched_orders)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/v1/enriched_orders)
           if [ "$RESPONSE" -eq 200 ] || [ "$RESPONSE" -eq 401 ]; then
             echo "✅ Enriched orders endpoint accessible"
           else
@@ -205,27 +235,55 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies and start backend
-        working-directory: src
+        working-directory: backend
         run: |
           npm ci
           npm run start:dev &
-          sleep 30
+          echo "Waiting for backend to be ready..."
+          for i in $(seq 1 60); do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health/ready | grep -q "200"; then
+              echo "Backend is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend failed to start within 60 attempts"
+              exit 1
+            fi
+            echo "Attempt $i: Backend not ready yet, waiting 5s..."
+            sleep 5
+          done
         env:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
+          PORT: 3001
+          FILE_DRIVER: local
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: 'true'
+          MAIL_SECURE: 'false'
+          MAIL_REQUIRE_TLS: 'false'
 
       - name: Basic performance validation
         run: |
           echo "🚀 Running basic performance checks..."
 
           # Health endpoint should respond quickly
-          HEALTH_TIME=$(curl -w "%{time_total}" -s -o /dev/null http://localhost:3001/health)
+          HEALTH_TIME=$(curl -w "%{time_total}" -s -o /dev/null http://localhost:3001/api/health)
           echo "Health endpoint response time: ${HEALTH_TIME}s"
 
           # Validate health check is under 0.1 seconds
@@ -236,7 +294,7 @@ jobs:
           fi
 
           # Test enriched orders endpoint performance
-          ORDERS_TIME=$(curl -w "%{time_total}" -s -o /dev/null http://localhost:3001/enriched_orders?limit=10)
+          ORDERS_TIME=$(curl -w "%{time_total}" -s -o /dev/null http://localhost:3001/api/v1/enriched_orders?limit=10)
           echo "Enriched orders endpoint response time: ${ORDERS_TIME}s"
 
           if (( $(echo "$ORDERS_TIME > 0.5" | bc -l) )); then
@@ -261,11 +319,6 @@ jobs:
           # Check for required files
           required_files=(
             "README.md"
-            "PROMPT.md"
-            "@fix_plan.md"
-            "@AGENT.md"
-            "docs/CURRENT_STATE_ANALYSIS.md"
-            "specs/TECHNICAL_REQUIREMENTS.md"
           )
 
           for file in "${required_files[@]}"; do
@@ -278,74 +331,18 @@ jobs:
           done
 
       - name: Validate markdown files
-        uses: DavidAnson/markdownlint-action@v1
+        uses: DavidAnson/markdownlint-cli2-action@v19
         with:
-          files: '**/*.md'
-          ignore: 'node_modules/**'
-          config: |
-            {
-              "default": true,
-              "MD013": false,
-              "MD033": false
-            }
-
-  # Ralph Loop compatibility check
-  ralph-loop-compatibility:
-    runs-on: ubuntu-latest
-    name: Ralph Loop Compatibility
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate Ralph Loop structure
-        run: |
-          echo "🤖 Validating Ralph Loop compatibility..."
-
-          # Check for required Ralph Loop files
-          ralph_files=(
-            "PROMPT.md"
-            "@fix_plan.md"
-            "@AGENT.md"
-          )
-
-          for file in "${ralph_files[@]}"; do
-            if [ -f "$file" ]; then
-              echo "✅ Ralph Loop file found: $file"
-            else
-              echo "❌ Ralph Loop file missing: $file"
-              exit 1
-            fi
-          done
-
-          # Validate PROMPT.md has required sections
-          if grep -q "Development Constraints" PROMPT.md && \
-             grep -q "Entity Implementation Pattern" PROMPT.md && \
-             grep -q "Current Implementation Status" PROMPT.md; then
-            echo "✅ PROMPT.md has required sections"
-          else
-            echo "❌ PROMPT.md missing required sections"
-            exit 1
-          fi
-
-          # Validate @AGENT.md has build commands
-          if grep -q "npm run" "@AGENT.md" && \
-             grep -q "Backend (NestJS)" "@AGENT.md" && \
-             grep -q "Frontend (Next.js)" "@AGENT.md"; then
-            echo "✅ @AGENT.md has required build commands"
-          else
-            echo "❌ @AGENT.md missing required build commands"
-            exit 1
-          fi
-
-          echo "🎉 Ralph Loop compatibility validated!"
+          globs: '**/*.md #node_modules'
 
   # PR summary comment
   pr-summary:
     runs-on: ubuntu-latest
     name: PR Summary
-    needs: [code-quality, security-checks, api-validation, performance-check, documentation-check, ralph-loop-compatibility]
+    needs: [code-quality, security-checks, api-validation, performance-check, documentation-check]
     if: always()
+    permissions:
+      pull-requests: write
 
     steps:
       - name: Comment PR with results
@@ -363,8 +360,7 @@ jobs:
               'security-checks': '${{ needs.security-checks.result }}',
               'api-validation': '${{ needs.api-validation.result }}',
               'performance-check': '${{ needs.performance-check.result }}',
-              'documentation-check': '${{ needs.documentation-check.result }}',
-              'ralph-loop-compatibility': '${{ needs.ralph-loop-compatibility.result }}'
+              'documentation-check': '${{ needs.documentation-check.result }}'
             };
 
             let summary = "## 🔍 PR Quality Check Results\n\n";

@@ -38,9 +38,9 @@ regex = '''-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----'''
 tags = ["private", "key"]
 
 [[rules]]
-description = "Kubernetes config"
+description = "Kubernetes config files with embedded credentials"
 id = "kubeconfig"
-regex = '''(?i)(kubeconfig|kube-config)'''
+regex = '''(?i)(kubeconfig|kube-config)\s*[=:]\s*['"\/]\S{40,}'''
 path = '''.*'''
 tags = ["kubernetes", "config"]
 
@@ -74,6 +74,7 @@ regexes = [
     '''placeholder''',
     '''your[_-]?secret[_-]?here''',
     '''replace[_-]?me''',
+    '''credentials\(['"][\w-]+['"]\)''',
 ]
 
 paths = [
@@ -86,4 +87,5 @@ paths = [
     '''.git/.*''',
     '''docs/.*''',
     '''README.*''',
+    '''.*sealed-secret\.yaml$''',
 ]

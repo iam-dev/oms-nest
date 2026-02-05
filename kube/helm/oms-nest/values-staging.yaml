@@ -4,6 +4,8 @@ global:
   environment: staging
 
 backend:
+  image:
+    pullPolicy: Always
   replicas: 2
   hpa:
     minReplicas: 2

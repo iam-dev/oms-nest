@@ -247,7 +247,9 @@ export class ReferenceCacheInterceptor implements NestInterceptor {
     }
 
     const referenceType = this.extractReferenceType(request);
-    const id = request.params.id;
+    const id = Array.isArray(request.params.id)
+      ? request.params.id[0]
+      : request.params.id;
 
     // Check cache first
     const cachedData = await this.cacheService.getReferenceData(

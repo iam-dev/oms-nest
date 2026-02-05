@@ -30,7 +30,11 @@ export class HealthController {
       () => this.db.pingCheck("nestjs-database"),
       () => this.redis.pingCheck("redis"),
       () => this.memory.checkHeap("memory_heap", 150 * 1024 * 1024),
-      () => this.disk.checkStorage("storage", { path: "/", threshold: 0.9 }),
+      () =>
+        this.disk.checkStorage("storage", {
+          path: "/",
+          thresholdPercent: 0.9,
+        }),
     ]);
   }
 
@@ -51,7 +55,11 @@ export class HealthController {
   liveness() {
     return this.health.check([
       () => this.memory.checkHeap("memory_heap", 200 * 1024 * 1024),
-      () => this.disk.checkStorage("storage", { path: "/", threshold: 0.95 }),
+      () =>
+        this.disk.checkStorage("storage", {
+          path: "/",
+          thresholdPercent: 0.95,
+        }),
     ]);
   }
 

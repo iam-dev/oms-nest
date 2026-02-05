@@ -72,13 +72,32 @@ class EnvironmentVariablesValidator {
   DATABASE_CERT: string;
 }
 
+function parseDatabaseTypeFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  const protocol = url.split("://")[0];
+  const protocolMap: Record<string, string> = {
+    postgresql: "postgres",
+    postgres: "postgres",
+    mysql: "mysql",
+    mariadb: "mariadb",
+    mongodb: "mongodb",
+    "mongodb+srv": "mongodb",
+    mssql: "mssql",
+  };
+  return protocolMap[protocol];
+}
+
 export default registerAs<DatabaseConfig>("database", () => {
   validateConfig(process.env, EnvironmentVariablesValidator);
 
+  const type =
+    process.env.DATABASE_TYPE ??
+    parseDatabaseTypeFromUrl(process.env.DATABASE_URL);
+
   return {
-    isDocumentDatabase: ["mongodb"].includes(process.env.DATABASE_TYPE ?? ""),
+    isDocumentDatabase: ["mongodb"].includes(type ?? ""),
     url: process.env.DATABASE_URL,
-    type: process.env.DATABASE_TYPE,
+    type,
     host: process.env.DATABASE_HOST,
     port: process.env.DATABASE_PORT
       ? parseInt(process.env.DATABASE_PORT, 10)

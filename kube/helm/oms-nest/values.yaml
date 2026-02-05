@@ -2,13 +2,13 @@
 # Override per environment in values-staging.yaml / values-production.yaml
 
 global:
-  environment: staging
+  environment: development
   imagePullSecrets:
-    - name: ghcr-credentials
+    - name: registry-credentials
 
 backend:
   image:
-    repository: ghcr.io/ordermysaddle/oms_nest/backend
+    repository: ghcr.io/iam-dev/oms-nest-backend
     tag: latest
     pullPolicy: IfNotPresent
   port: 3001
@@ -28,30 +28,30 @@ backend:
       memory: 1Gi
   probes:
     liveness:
-      path: /health/live
+      path: /api/health/live
       initialDelaySeconds: 30
-      periodSeconds: 15
-      timeoutSeconds: 5
-      failureThreshold: 3
-    readiness:
-      path: /health/ready
-      initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
-    startup:
-      path: /health
+    readiness:
+      path: /api/health/ready
       initialDelaySeconds: 10
       periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+    startup:
+      path: /api/health/live
+      initialDelaySeconds: 15
+      periodSeconds: 10
       timeoutSeconds: 5
-      failureThreshold: 30
+      failureThreshold: 18
   migration:
     enabled: true
     command: ["npm", "run", "migration:run"]
 
 frontend:
   image:
-    repository: ghcr.io/ordermysaddle/oms_nest/frontend
+    repository: ghcr.io/iam-dev/oms-nest-frontend
     tag: latest
     pullPolicy: IfNotPresent
   port: 3000

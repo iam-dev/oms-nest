@@ -35,6 +35,7 @@ import { CacheInvalidationProcessor } from "./processors/cache-invalidation.proc
             port: redisConfig?.port || 6379,
             password: redisConfig?.password,
             db: redisConfig?.database || 0,
+            maxRetriesPerRequest: null,
           },
         };
       },

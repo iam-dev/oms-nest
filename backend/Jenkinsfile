@@ -1,38 +1,67 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: oms-nest-ci
+spec:
+  containers:
+    - name: node
+      image: node:22-alpine
+      command: ['sleep']
+      args: ['infinity']
+      resources:
+        requests:
+          cpu: 500m
+          memory: 512Mi
+        limits:
+          cpu: '2'
+          memory: 2Gi
+    - name: docker
+      image: docker:27-dind
+      securityContext:
+        privileged: true
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: '1'
+          memory: 1Gi
+    - name: helm
+      image: alpine/helm:3.14
+      command: ['sleep']
+      args: ['infinity']
+'''
+        }
+    }
 
     environment {
-        DOCKER_HOST = 'tcp://docker.oms-cicd.svc.cluster.local:2375'
-        NODE_VERSION = '22'
-        DOCKER_REGISTRY = 'ordermysaddle'
-        IMAGE_NAME = 'omsnext'
-        KUBECONFIG = '/var/jenkins_home/.kube/config'
-        NVM_DIR = '/var/jenkins_home/.nvm'
+        DOCKER_HOST       = 'tcp://localhost:2375'
+        REGISTRY          = 'ghcr.io'
+        IMAGE_NAME        = 'iam-dev/oms-nest-backend'
+        KUBECONFIG        = credentials('kubeconfig-oms')
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
     stages {
-        stage('Setup Node.js') {
-            steps {
-                sh '''
-                    if [ ! -d "$NVM_DIR" ]; then
-                        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-                    fi
-                    . "$NVM_DIR/nvm.sh"
-                    nvm install $NODE_VERSION
-                    nvm use $NODE_VERSION
-                    node --version
-                    npm --version
-                '''
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
-                dir('backend') {
-                    sh '''
-                        . "$NVM_DIR/nvm.sh"
-                        npm ci --production=false
-                    '''
+                container('node') {
+                    dir('backend') {
+                        sh 'npm ci --production=false'
+                    }
                 }
             }
         }
@@ -41,31 +70,28 @@ pipeline {
             parallel {
                 stage('Lint') {
                     steps {
-                        dir('backend') {
-                            sh '''
-                                . "$NVM_DIR/nvm.sh"
-                                npm run lint
-                            '''
+                        container('node') {
+                            dir('backend') {
+                                sh 'npm run lint'
+                            }
                         }
                     }
                 }
                 stage('Type Check') {
                     steps {
-                        dir('backend') {
-                            sh '''
-                                . "$NVM_DIR/nvm.sh"
-                                npx tsc --noEmit
-                            '''
+                        container('node') {
+                            dir('backend') {
+                                sh 'npx tsc --noEmit'
+                            }
                         }
                     }
                 }
                 stage('Security Audit') {
                     steps {
-                        dir('backend') {
-                            sh '''
-                                . "$NVM_DIR/nvm.sh"
-                                npm audit --production || true
-                            '''
+                        container('node') {
+                            dir('backend') {
+                                sh 'npm audit --production || true'
+                            }
                         }
                     }
                 }
@@ -74,11 +100,10 @@ pipeline {
 
         stage('Build Application') {
             steps {
-                dir('backend') {
-                    sh '''
-                        . "$NVM_DIR/nvm.sh"
-                        npm run build
-                    '''
+                container('node') {
+                    dir('backend') {
+                        sh 'npm run build'
+                    }
                 }
             }
         }
@@ -87,28 +112,32 @@ pipeline {
             parallel {
                 stage('Unit Tests') {
                     steps {
-                        dir('backend') {
-                            sh '''
-                                . "$NVM_DIR/nvm.sh"
-                                npm run test:cov
-                            '''
+                        container('node') {
+                            dir('backend') {
+                                sh 'npm run test:cov'
+                            }
                         }
                     }
                 }
                 stage('Integration Tests') {
                     steps {
-                        dir('backend') {
-                            sh '''
-                                . "$NVM_DIR/nvm.sh"
-                                docker-compose -f docker-compose.relational.test.yaml up -d
-                                npm run test:e2e
-                            '''
+                        container('docker') {
+                            dir('backend') {
+                                sh 'docker compose -f docker-compose.relational.test.yaml up -d'
+                            }
+                        }
+                        container('node') {
+                            dir('backend') {
+                                sh 'npm run test:e2e'
+                            }
                         }
                     }
                     post {
                         always {
-                            dir('backend') {
-                                sh 'docker-compose -f docker-compose.relational.test.yaml down || true'
+                            container('docker') {
+                                dir('backend') {
+                                    sh 'docker compose -f docker-compose.relational.test.yaml down || true'
+                                }
                             }
                         }
                     }
@@ -118,10 +147,11 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    env.IMAGE_TAG = "${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:nestjs-${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
-                    env.IMAGE_LATEST = "${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:nestjs-${env.BRANCH_NAME}"
-
+                container('docker') {
+                    script {
+                        env.IMAGE_TAG = "${env.REGISTRY}/${env.IMAGE_NAME}:${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+                        env.IMAGE_LATEST = "${env.REGISTRY}/${env.IMAGE_NAME}:${env.BRANCH_NAME}"
+                    }
                     dir('backend') {
                         sh "docker build -f Dockerfile.production -t ${env.IMAGE_TAG} -t ${env.IMAGE_LATEST} ."
                     }
@@ -131,13 +161,16 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker push ${IMAGE_TAG}
-                        docker push ${IMAGE_LATEST}
-                        docker logout
-                    '''
+                container('docker') {
+                    withCredentials([usernamePassword(credentialsId: 'ghcr-credentials', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN')]) {
+                        sh '''
+                            set +x
+                            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+                            docker push ${IMAGE_TAG}
+                            docker push ${IMAGE_LATEST}
+                            docker logout ghcr.io
+                        '''
+                    }
                 }
             }
         }
@@ -145,14 +178,15 @@ pipeline {
         stage('Deploy to Staging') {
             when { branch 'staging' }
             steps {
-                sh """
-                    helm upgrade --install oms-nestjs-staging ./kube/helm/oms-nest/ \\
-                        --namespace oms-staging \\
-                        -f ./kube/helm/oms-nest/values-staging.yaml \\
-                        --set backend.image.repository=${env.DOCKER_REGISTRY}/${env.IMAGE_NAME} \\
-                        --set backend.image.tag=nestjs-${env.BRANCH_NAME}-${env.BUILD_NUMBER} \\
-                        --wait --timeout=300s
-                """
+                container('helm') {
+                    sh """
+                        helm upgrade --install oms-nest-staging ./kube/helm/oms-nest/ \
+                            --namespace oms-nest-staging \
+                            -f ./kube/helm/oms-nest/values-staging.yaml \
+                            --set backend.image.tag=${env.BRANCH_NAME}-${env.BUILD_NUMBER} \
+                            --wait --timeout=300s
+                    """
+                }
             }
         }
 
@@ -162,14 +196,15 @@ pipeline {
                 timeout(time: 5, unit: 'MINUTES') {
                     input message: 'Deploy to Production?', ok: 'Deploy'
                 }
-                sh """
-                    helm upgrade --install oms-nestjs-production ./kube/helm/oms-nest/ \\
-                        --namespace oms-production \\
-                        -f ./kube/helm/oms-nest/values-production.yaml \\
-                        --set backend.image.repository=${env.DOCKER_REGISTRY}/${env.IMAGE_NAME} \\
-                        --set backend.image.tag=nestjs-${env.BRANCH_NAME}-${env.BUILD_NUMBER} \\
-                        --wait --timeout=300s
-                """
+                container('helm') {
+                    sh """
+                        helm upgrade --install oms-nest-production ./kube/helm/oms-nest/ \
+                            --namespace oms-nest-production \
+                            -f ./kube/helm/oms-nest/values-production.yaml \
+                            --set backend.image.tag=${env.BRANCH_NAME}-${env.BUILD_NUMBER} \
+                            --wait --timeout=300s
+                    """
+                }
             }
         }
 
@@ -181,12 +216,14 @@ pipeline {
                 }
             }
             steps {
-                script {
-                    def healthUrl = env.BRANCH_NAME == 'production' ?
-                        'https://api-nest-production.ordermysaddle.com/api/health' :
-                        'https://api-nest-staging.ordermysaddle.com/api/health'
+                container('helm') {
+                    script {
+                        def healthUrl = env.BRANCH_NAME == 'production' ?
+                            'https://api-nest-production.ordermysaddle.com/api/health/ready' :
+                            'https://api-nest-staging.ordermysaddle.com/api/health/ready'
 
-                    sh "curl -f ${healthUrl} || exit 1"
+                        sh "wget -q -O- ${healthUrl} || exit 1"
+                    }
                 }
             }
         }
@@ -197,14 +234,14 @@ pipeline {
             cleanWs()
         }
         success {
-            slackSend channel: '#deployments',
+            slackSend channel: '#oms-deployments',
                      color: 'good',
-                     message: ":white_check_mark: NestJS deployment successful: ${env.JOB_NAME} - ${env.BUILD_NUMBER}"
+                     message: ":white_check_mark: NestJS build successful: ${env.JOB_NAME} - ${env.BUILD_NUMBER}"
         }
         failure {
-            slackSend channel: '#deployments',
+            slackSend channel: '#oms-deployments',
                      color: 'danger',
-                     message: ":x: NestJS deployment failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}"
+                     message: ":x: NestJS build failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}"
         }
     }
 }

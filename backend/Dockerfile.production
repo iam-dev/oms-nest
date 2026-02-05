@@ -1,14 +1,18 @@
 # Multi-stage build for optimal image size
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+# Install ALL dependencies (dev deps needed for build/TypeScript compilation)
+RUN npm install
 COPY . .
 RUN npm run build
 
+# Prune dev dependencies after build
+RUN npm prune --omit=dev
+
 # Production stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
@@ -19,10 +23,13 @@ RUN adduser -S nestjs -u 1001
 
 WORKDIR /app
 
-# Copy built application
+# Copy built application and production-only node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
+
+# Create writable directories for runtime
+RUN mkdir -p /app/files /app/tmp && chown -R nestjs:nodejs /app/files /app/tmp
 
 # Switch to non-root user
 USER nestjs
@@ -32,8 +39,8 @@ EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node dist/health-check.js
+  CMD node dist/src/health-check.js || exit 1
 
 # Start application
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
