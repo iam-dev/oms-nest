@@ -318,11 +318,8 @@ jobs:
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
 
-    - name: Run database migrations
-      run: |
-        kubectl exec --namespace=${{ env.K8S_NAMESPACE }} \
-          deployment/oms-backend \
-          -- npm run migration:run
+    # Note: Migrations are run externally on the PostgreSQL database
+    # The production container doesn't have dev dependencies (env-cmd)
 
     - name: Verify deployment
       run: |

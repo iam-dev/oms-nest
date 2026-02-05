@@ -1,10 +1,13 @@
 import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
-import { UserEntity } from "../../../../users/infrastructure/persistence/relational/entities/user.entity";
 import { UserSeedService } from "./user-seed.service";
 
+/**
+ * User Seed Module
+ *
+ * Seeds test users into the credentials table for CI/E2E testing.
+ * Note: Uses DataSource directly since "user" is a VIEW over "credentials".
+ */
 @Module({
-  imports: [TypeOrmModule.forFeature([UserEntity])],
   providers: [UserSeedService],
   exports: [UserSeedService],
 })
