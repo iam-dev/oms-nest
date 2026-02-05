@@ -33,7 +33,7 @@ import { CacheInvalidationProcessor } from "./processors/cache-invalidation.proc
           connection: {
             host: redisConfig?.host || "localhost",
             port: redisConfig?.port || 6379,
-            password: redisConfig?.password || undefined,
+            password: redisConfig?.password,
             db: redisConfig?.database || 0,
             maxRetriesPerRequest: null,
           },

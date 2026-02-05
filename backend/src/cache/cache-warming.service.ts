@@ -337,11 +337,11 @@ export class CacheWarmingService implements OnApplicationBootstrap {
     return result;
   }
 
-  private async loadPopularProducts(): Promise<any[]> {
+  private loadPopularProducts(): Promise<any[]> {
     // This would be implemented with actual product analytics
     // For now, return empty array
     this.logger.debug("Popular products loading not implemented yet");
-    return await Promise.resolve([]);
+    return Promise.resolve([]);
   }
 
   private delay(ms: number): Promise<void> {

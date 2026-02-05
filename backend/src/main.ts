@@ -21,16 +21,14 @@ async function bootstrap() {
     ? ["error", "warn", "log", "debug", "verbose"]
     : ["error", "warn", "log"];
 
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+    : ["http://localhost:3000", "http://localhost:3001"];
+
   const app = await NestFactory.create(AppModule, {
     logger: logLevels,
     cors: {
-      origin: [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "https://staging-v2.ordermysaddle.com",
-        "https://staging.ordermysaddle.com",
-        "https://ordermysaddle.com",
-      ],
+      origin: corsOrigins,
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       allowedHeaders: [
