@@ -14,16 +14,19 @@ const TEST_USERS = [
     username: "admin@omsaddle.com",
     password: "AdminPass123!",
     name: "Test Admin",
+    userType: 2, // ADMIN
   },
   {
     username: "sarah.thompson@fitters.com",
     password: "FitterPass123!",
     name: "Sarah Thompson",
+    userType: 1, // FITTER
   },
   {
     username: "testuser",
     password: "TestUser123!",
     name: "Test User",
+    userType: 6, // USER
   },
 ];
 
@@ -55,10 +58,11 @@ export class UserSeedService {
 
       // Insert directly into credentials table
       // The "user" view will automatically reflect this data
+      // Include all NOT NULL columns: user_type, last_login, password_reset_hash
       await this.dataSource.query(
-        `INSERT INTO credentials (user_name, password_hash, full_name, blocked, deleted)
-         VALUES ($1, $2, $3, 0, 0)`,
-        [userData.username, hashedPassword, userData.name],
+        `INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted)
+         VALUES ($1, $2, $3, $4, 0, '', 0, 0)`,
+        [userData.username, hashedPassword, userData.name, userData.userType],
       );
 
       this.logger.log(`✅ Created user: ${userData.username}`);
