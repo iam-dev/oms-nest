@@ -112,7 +112,8 @@ test.describe('OMS Staging V2 Deployment Validation', () => {
     const apiURL = getApiUrl();
     const isLocal = apiURL.includes('localhost');
 
-    const response = await request.options(`${apiURL}/api/v1/customers`, {
+    const response = await request.fetch(`${apiURL}/api/v1/customers`, {
+      method: 'OPTIONS',
       headers: {
         'Origin': isLocal ? 'http://localhost:3000' : 'https://staging-v2.ordermysaddle.com',
         'Access-Control-Request-Method': 'GET',
@@ -150,8 +151,17 @@ test.describe('OMS Staging V2 Deployment Validation', () => {
     }
 
     // Only strictly check in production/staging environments
-    const isProduction = process.env.E2E_API_URL?.includes('ordermysaddle.com') ||
-                         process.env.API_URL?.includes('ordermysaddle.com');
+    const isProductionUrl = (url: string | undefined): boolean => {
+      if (!url) return false;
+      try {
+        const { hostname } = new URL(url);
+        return hostname === 'ordermysaddle.com' || hostname.endsWith('.ordermysaddle.com');
+      } catch {
+        return false;
+      }
+    };
+    const isProduction = isProductionUrl(process.env.E2E_API_URL) ||
+                         isProductionUrl(process.env.API_URL);
 
     if (isProduction) {
       expect(headers['x-frame-options']).toBeTruthy();
