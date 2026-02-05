@@ -121,20 +121,22 @@ spec:
                 }
                 stage('Integration Tests') {
                     steps {
+                        container('docker') {
+                            dir('backend') {
+                                sh 'docker compose -f docker-compose.relational.test.yaml up -d'
+                            }
+                        }
                         container('node') {
                             dir('backend') {
-                                sh '''
-                                    docker-compose -f docker-compose.relational.test.yaml up -d
-                                    npm run test:e2e
-                                '''
+                                sh 'npm run test:e2e'
                             }
                         }
                     }
                     post {
                         always {
-                            container('node') {
+                            container('docker') {
                                 dir('backend') {
-                                    sh 'docker-compose -f docker-compose.relational.test.yaml down || true'
+                                    sh 'docker compose -f docker-compose.relational.test.yaml down || true'
                                 }
                             }
                         }

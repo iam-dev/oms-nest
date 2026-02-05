@@ -37,6 +37,12 @@ export class UserSeedService {
   constructor(private readonly dataSource: DataSource) {}
 
   async run(): Promise<void> {
+    const nodeEnv = process.env.NODE_ENV;
+    if (nodeEnv === "production") {
+      this.logger.warn("Refusing to seed test users in production environment");
+      return;
+    }
+
     this.logger.log("🌱 Starting user seed...");
 
     for (const userData of TEST_USERS) {
