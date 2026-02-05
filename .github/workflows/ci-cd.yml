@@ -322,6 +322,31 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps
 
+      - name: 🗃️ Run database migrations
+        working-directory: backend
+        run: npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource=src/database/data-source.ts migration:run
+        env:
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          DATABASE_SYNCHRONIZE: "false"
+          NODE_ENV: test
+
+      - name: 🌱 Seed test data
+        working-directory: backend
+        run: npx ts-node -r tsconfig-paths/register ./src/database/seeds/relational/run-seed.ts
+        env:
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          NODE_ENV: test
+
       - name: 🚀 Start backend services
         working-directory: backend
         run: |

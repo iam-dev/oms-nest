@@ -1,13 +1,19 @@
 import { NestFactory } from "@nestjs/core";
 import { SeedModule } from "./seed.module";
+import { UserSeedService } from "./user/user-seed.service";
 
 /**
  * Run Seed
  *
  * This script initializes the database seeding process.
- * Production data is seeded via SQL scripts in production-data/postgres/scripts/.
  *
- * To seed the database:
+ * For CI/development: Creates test users for E2E testing.
+ * For production: Use SQL scripts in production-data/postgres/scripts/.
+ *
+ * Usage:
+ *   npm run seed:run:relational
+ *
+ * For production data:
  * 1. Start the PostgreSQL container: ./production-data/postgres/scripts/setup-postgres.sh
  * 2. Transform MySQL data (first time): ./production-data/postgres/scripts/transform-mysql-to-postgres.sh
  * 3. Import all data: ./production-data/postgres/scripts/import-data.sh
@@ -18,8 +24,14 @@ import { SeedModule } from "./seed.module";
 const runSeed = async () => {
   const app = await NestFactory.create(SeedModule);
 
-  console.log("🌱 Seed module initialized.\n");
-  console.log("📋 To seed production data, use the SQL scripts:");
+  console.log("🌱 Running database seeds...\n");
+
+  // Run user seeds (for CI/E2E testing)
+  const userSeedService = app.get(UserSeedService);
+  await userSeedService.run();
+
+  console.log("\n✅ All seeds completed successfully!");
+  console.log("\n📋 For production data, use the SQL scripts:");
   console.log(
     "   cd src/database/seeds/relational/production-data/postgres/scripts",
   );
