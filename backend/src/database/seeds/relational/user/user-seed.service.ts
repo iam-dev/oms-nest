@@ -57,7 +57,9 @@ export class UserSeedService {
       });
 
       if (existingUser) {
-        this.logger.log(`User ${userData.username} already exists, skipping...`);
+        this.logger.log(
+          `User ${userData.username} already exists, skipping...`,
+        );
         continue;
       }
 
