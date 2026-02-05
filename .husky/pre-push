@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+
+# Get repo root relative to this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo "Running pre-push checks (unit tests)..."
+
+# Backend unit tests
+echo "Running backend tests..."
+cd "$REPO_ROOT/backend" || { echo "Failed to cd to backend"; exit 1; }
+npm run test || exit 1
+
+# Frontend unit tests
+echo "Running frontend tests..."
+cd "$REPO_ROOT/frontend" || { echo "Failed to cd to frontend"; exit 1; }
+npm run test || exit 1
+
+echo "Pre-push checks passed!"
