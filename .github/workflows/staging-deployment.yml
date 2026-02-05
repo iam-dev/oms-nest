@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - staging
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    labels:
-      - deploy-staging-v2
   workflow_dispatch:
     inputs:
       environment:
