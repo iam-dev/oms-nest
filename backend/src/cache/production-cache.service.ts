@@ -77,6 +77,14 @@ export class ProductionCacheService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log("Production Cache Service initialized");
+    if (this.redisScanClient) {
+      try {
+        await this.redisScanClient.connect();
+        this.logger.log("Redis SCAN client connected");
+      } catch (error) {
+        this.logger.warn("Failed to connect Redis SCAN client", error);
+      }
+    }
     await this.warmupCriticalData();
   }
 
