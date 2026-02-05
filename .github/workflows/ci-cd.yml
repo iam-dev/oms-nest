@@ -1,4 +1,4 @@
-name: 🚀 OMS DevSecOps Pipeline (Ralph Loop Compatible)
+name: 🚀 OMS DevSecOps Pipeline
 
 on:
   push:
@@ -11,9 +11,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BASE: ${{ github.repository }}
-  # Ralph Loop automation flags
-  RALPH_LOOP_MODE: true
+  IMAGE_NAME_BACKEND: iam-dev/oms-nest-backend
+  IMAGE_NAME_FRONTEND: iam-dev/oms-nest-frontend
   SECURITY_SCAN_ENABLED: true
   E2E_TESTING_ENABLED: true
 
@@ -44,18 +43,18 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: 📊 Upload Trivy Results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: 🔎 SAST with CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: typescript, javascript
 
       - name: 🔍 CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
 
   # 🧪 Dependency and License Scanning
   dependency-scan:
@@ -68,14 +67,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
 
       - name: 📦 Backend Dependency Audit
         working-directory: backend
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
           # Generate dependency report
           npm list --all --json > dependency-report.json
 
@@ -83,13 +86,13 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
 
       - name: 📦 E2E Dependencies Audit
         working-directory: e2e
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          npm audit --audit-level=high
 
       - name: 📊 Upload Dependency Reports
         uses: actions/upload-artifact@v4
@@ -138,38 +141,80 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        working-directory: src
+        working-directory: backend
         run: npm ci
 
       - name: Run linting
-        working-directory: src
+        working-directory: backend
         run: npm run lint
 
       - name: Run unit tests
-        working-directory: src
+        working-directory: backend
         run: npm run test
         env:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
-      - name: Run integration tests
-        working-directory: src
-        run: npm run test:e2e
+      - name: Run database migrations
+        working-directory: backend
+        run: npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource=src/database/data-source.ts migration:run
         env:
-          DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
-          REDIS_URL: redis://localhost:6379
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          DATABASE_SYNCHRONIZE: "false"
           NODE_ENV: test
+
+      - name: Run integration tests
+        working-directory: backend
+        run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathPatterns='api-endpoints'
+        env:
+          NODE_ENV: test
+          E2E_DATABASE_HOST: localhost
+          E2E_DATABASE_PORT: "5432"
+          E2E_DATABASE_USERNAME: oms
+          E2E_DATABASE_PASSWORD: test_password
+          E2E_DATABASE_NAME: oms_test
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          DATABASE_SYNCHRONIZE: "false"
+          E2E_REDIS_HOST: localhost
+          E2E_REDIS_PORT: "6379"
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
+          FILE_DRIVER: local
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: "true"
+          MAIL_SECURE: "false"
+          MAIL_REQUIRE_TLS: "false"
 
       - name: Upload backend test coverage
         uses: codecov/codecov-action@v3
         with:
-          directory: src/coverage
+          directory: backend/coverage
           flags: backend
 
   # Frontend testing (Next.js)
@@ -185,7 +230,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -214,7 +259,7 @@ jobs:
   # 🎭 Comprehensive End-to-End Testing with Playwright
   test-e2e:
     runs-on: ubuntu-latest
-    name: 🎭 Comprehensive E2E Tests (Ralph Loop)
+    name: 🎭 Comprehensive E2E Tests
     needs: [test-backend, test-frontend]
 
     services:
@@ -254,8 +299,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
 
       - name: 🏗️ Install backend dependencies
         working-directory: backend
@@ -273,6 +322,31 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps
 
+      - name: 🗃️ Run database migrations
+        working-directory: backend
+        run: npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource=src/database/data-source.ts migration:run
+        env:
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          DATABASE_SYNCHRONIZE: "false"
+          NODE_ENV: test
+
+      - name: 🌱 Seed test data
+        working-directory: backend
+        run: npx ts-node -r tsconfig-paths/register ./src/database/seeds/relational/run-seed.ts
+        env:
+          DATABASE_TYPE: postgres
+          DATABASE_HOST: localhost
+          DATABASE_PORT: "5432"
+          DATABASE_USERNAME: oms
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: oms_test
+          NODE_ENV: test
+
       - name: 🚀 Start backend services
         working-directory: backend
         run: |
@@ -282,9 +356,23 @@ jobs:
         env:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
           REDIS_URL: redis://localhost:6379/1
-          JWT_SECRET: test-jwt-secret-key-for-e2e
           NODE_ENV: test
           PORT: 3001
+          FILE_DRIVER: local
+          AUTH_JWT_SECRET: ci-test-jwt-secret
+          AUTH_JWT_TOKEN_EXPIRES_IN: 15m
+          AUTH_REFRESH_SECRET: ci-test-refresh-secret
+          AUTH_REFRESH_TOKEN_EXPIRES_IN: 7d
+          AUTH_FORGOT_SECRET: ci-test-forgot-secret
+          AUTH_FORGOT_TOKEN_EXPIRES_IN: 30m
+          AUTH_CONFIRM_EMAIL_SECRET: ci-test-confirm-secret
+          AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: 1d
+          MAIL_HOST: localhost
+          MAIL_DEFAULT_EMAIL: test@example.com
+          MAIL_DEFAULT_NAME: OMS Test
+          MAIL_IGNORE_TLS: 'true'
+          MAIL_SECURE: 'false'
+          MAIL_REQUIRE_TLS: 'false'
 
       - name: 🎨 Start frontend services
         working-directory: frontend
@@ -301,7 +389,7 @@ jobs:
       - name: 🔍 Verify services are running
         run: |
           echo "🔍 Checking backend health..."
-          curl -f http://localhost:3001/health || exit 1
+          curl -f http://localhost:3001/api/health || exit 1
           echo "🔍 Checking frontend..."
           curl -f http://localhost:3000 || exit 1
 
@@ -315,7 +403,6 @@ jobs:
           E2E_API_URL: http://localhost:3001
           ENVIRONMENT: local
           CI: true
-          RALPH_LOOP_MODE: true
 
       - name: 🎭 Run smoke tests (critical path)
         if: matrix.project == 'chromium'
@@ -382,9 +469,11 @@ jobs:
           - service: backend
             context: ./backend
             dockerfile: ./backend/Dockerfile.production
+            image_name: iam-dev/oms-nest-backend
           - service: frontend
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
+            image_name: iam-dev/oms-nest-frontend
 
     steps:
       - name: Checkout code
@@ -413,7 +502,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}/${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ matrix.image_name }}
           tags: |
             type=raw,value=${{ steps.vars.outputs.image_tag }}
             type=ref,event=branch

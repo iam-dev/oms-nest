@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - staging
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    labels:
-      - deploy-staging-v2
   workflow_dispatch:
     inputs:
       environment:
@@ -123,7 +119,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./backend
-        file: ./backend/Dockerfile
+        file: ./backend/Dockerfile.production
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
@@ -227,49 +223,37 @@ jobs:
       run: |
         kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Validate required secrets are configured
+    - name: Install sealed-secrets controller
       run: |
-        # Fail fast if any required secret is missing rather than deploying
-        # with empty values. GitHub masks secret values, so we check length.
-        MISSING=""
-        check_secret() {
-          local name="$1"
-          local value="$2"
-          if [ -z "$value" ]; then
-            MISSING="${MISSING} ${name}"
+        helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets || true
+        helm repo update
+        helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
+          --namespace kube-system \
+          --set-string fullnameOverride=sealed-secrets-controller \
+          --wait --timeout 120s
+
+    - name: Apply SealedSecret from Git
+      run: |
+        kubectl apply -f kubernetes/staging-v2/sealed-secret.yaml
+
+    - name: Wait for secret to be unsealed
+      run: |
+        echo "Waiting for sealed-secrets controller to decrypt oms-app-secrets..."
+        for i in $(seq 1 30); do
+          if kubectl get secret oms-app-secrets -n ${{ env.K8S_NAMESPACE }} > /dev/null 2>&1; then
+            echo "oms-app-secrets decrypted successfully"
+            break
           fi
-        }
-        check_secret "DB_USERNAME" "${{ secrets.DB_USERNAME }}"
-        check_secret "DB_PASSWORD" "${{ secrets.DB_PASSWORD }}"
-        check_secret "DB_NAME" "${{ secrets.DB_NAME }}"
-        check_secret "DB_HOST" "${{ secrets.DB_HOST }}"
-        check_secret "JWT_SECRET_KEY" "${{ secrets.JWT_SECRET_KEY }}"
-        check_secret "ENCRYPTION_SECRET" "${{ secrets.ENCRYPTION_SECRET }}"
+          if [ "$i" -eq 30 ]; then
+            echo "::error::Timed out waiting for oms-app-secrets to be unsealed"
+            kubectl get sealedsecret -n ${{ env.K8S_NAMESPACE }} -o yaml || true
+            exit 1
+          fi
+          sleep 5
+        done
 
-        if [ -n "$MISSING" ]; then
-          echo "::error::Missing required GitHub secrets:${MISSING}"
-          echo "Configure these in Settings > Secrets and variables > Actions"
-          exit 1
-        fi
-        echo "All required secrets are configured"
-
-    - name: Create secrets from environment variables
+    - name: Create registry credentials
       run: |
-        set +x  # Disable command echoing to prevent secret leakage in logs
-
-        # Create application secrets (DB is external DigitalOcean managed database, Redis is in-cluster)
-        kubectl create secret generic oms-app-secrets \
-          --namespace=${{ env.K8S_NAMESPACE }} \
-          --from-literal=DATABASE_URL="postgresql://${{ secrets.DB_USERNAME }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}?sslmode=require" \
-          --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET_KEY }}" \
-          --from-literal=JWT_EXPIRES_IN="24h" \
-          --from-literal=REDIS_URL="redis://oms-redis-service:6379" \
-          --from-literal=ENCRYPTION_SECRET="${{ secrets.ENCRYPTION_SECRET }}" \
-          --from-literal=API_PORT="3001" \
-          --from-literal=NODE_ENV="staging" \
-          --dry-run=client -o yaml | kubectl apply -f -
-
-        # Create registry credentials
         kubectl create secret docker-registry registry-credentials \
           --namespace=${{ env.K8S_NAMESPACE }} \
           --docker-server=${{ env.REGISTRY }} \
@@ -277,14 +261,14 @@ jobs:
           --docker-password=${{ secrets.GITHUB_TOKEN }} \
           --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Verify secrets were created
+    - name: Verify secrets exist
       run: |
         echo "Verifying Kubernetes secrets exist..."
         for secret in oms-app-secrets registry-credentials; do
           if kubectl get secret "$secret" -n ${{ env.K8S_NAMESPACE }} > /dev/null 2>&1; then
             echo "  $secret [OK]"
           else
-            echo "::error::Secret $secret was not created"
+            echo "::error::Secret $secret was not found"
             exit 1
           fi
         done
@@ -314,9 +298,8 @@ jobs:
 
     - name: Wait for backend to be ready
       run: |
-        kubectl wait --namespace=${{ env.K8S_NAMESPACE }} \
-          --for=condition=ready pod \
-          --selector=app=oms-backend \
+        kubectl rollout status deployment/oms-backend \
+          --namespace=${{ env.K8S_NAMESPACE }} \
           --timeout=300s
 
     - name: Deploy frontend application
@@ -324,19 +307,15 @@ jobs:
 
     - name: Wait for frontend to be ready
       run: |
-        kubectl wait --namespace=${{ env.K8S_NAMESPACE }} \
-          --for=condition=ready pod \
-          --selector=app=oms-frontend \
+        kubectl rollout status deployment/oms-frontend \
+          --namespace=${{ env.K8S_NAMESPACE }} \
           --timeout=300s
 
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
 
-    - name: Run database migrations
-      run: |
-        kubectl exec --namespace=${{ env.K8S_NAMESPACE }} \
-          deployment/oms-backend \
-          -- npm run migration:run
+    # Note: Migrations are run externally on the PostgreSQL database
+    # The production container doesn't have dev dependencies (env-cmd)
 
     - name: Verify deployment
       run: |
@@ -350,10 +329,10 @@ jobs:
         sleep 60
 
         # Check backend health
-        curl -f https://api-staging-v2.ordermysaddle.com/health || echo "Backend health check failed"
+        curl -f https://api-staging-v2.ordermysaddle.com/api/health || echo "Backend health check failed"
 
-        # Check frontend health
-        curl -f https://staging-v2.ordermysaddle.com/api/health || echo "Frontend health check failed"
+        # Check frontend
+        curl -f https://staging-v2.ordermysaddle.com || echo "Frontend health check failed"
 
   # E2E tests against deployed staging environment
   e2e-tests:

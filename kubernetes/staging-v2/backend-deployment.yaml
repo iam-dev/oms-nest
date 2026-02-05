@@ -30,8 +30,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 1001
+        fsGroup: 1001
 
       containers:
       - name: oms-backend
@@ -44,12 +44,11 @@ spec:
           protocol: TCP
 
         env:
-        - name: NODE_ENV
-          value: "staging"
         - name: PORT
           value: "3001"
 
         # Secrets from Kubernetes secrets (NO hardcoded values)
+        # NODE_ENV is set in oms-app-secrets sealed secret
         envFrom:
         - secretRef:
             name: oms-app-secrets
@@ -68,15 +67,15 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 1001
           capabilities:
             drop:
             - ALL
 
-        # Health checks
+        # Health checks (paths include /api global prefix)
         livenessProbe:
           httpGet:
-            path: /health/live
+            path: /api/health/live
             port: 3001
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -85,7 +84,7 @@ spec:
 
         readinessProbe:
           httpGet:
-            path: /health/ready
+            path: /api/health/ready
             port: 3001
           initialDelaySeconds: 10
           periodSeconds: 5
@@ -95,7 +94,7 @@ spec:
         # Startup probe for slower initial startup
         startupProbe:
           httpGet:
-            path: /health/live
+            path: /api/health/live
             port: 3001
           initialDelaySeconds: 15
           periodSeconds: 10
@@ -115,9 +114,7 @@ spec:
       - name: cache
         emptyDir: {}
 
-      # Image pull secrets for private registry
-      imagePullSecrets:
-      - name: registry-credentials
+      # Image is public, no imagePullSecrets needed
 
       # Pod security
       automountServiceAccountToken: false

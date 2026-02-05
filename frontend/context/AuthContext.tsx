@@ -183,6 +183,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     checkAuth();
   }, []); // Empty dependency array - should only run once on mount
 
+  // Handle Jotai atomWithStorage hydration race condition:
+  // checkAuth runs before localStorage values hydrate into atoms,
+  // so token is null at that point. This effect catches the case where
+  // token hydrates after checkAuth already completed.
+  useEffect(() => {
+    if (token && !user && !isLoading) {
+      logger.log('🔄 AuthContext: Token hydrated but user missing, restoring from basic info');
+      const restoredUser = restoreUserFromBasicInfo();
+      if (restoredUser) {
+        logger.log('✅ AuthContext: User restored after hydration');
+      } else {
+        logger.log('🔄 AuthContext: No basic info, fetching user from API');
+        fetchUserData(token).catch((error) => {
+          logger.error('❌ AuthContext: Failed to restore user after hydration:', error);
+          clearAuthTokens();
+          logoutAction();
+        });
+      }
+    }
+  }, [token, user, isLoading]);
+
   // Fetch user data from the backend
   const fetchUserData = useCallback(async (token: string) => {
     try {

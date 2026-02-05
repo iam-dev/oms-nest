@@ -21,7 +21,7 @@ module.exports = {
     '^@/schemas/(.*)$': '<rootDir>/schemas/$1',
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!(jspdf|fflate|fast-png)/)',
+    '/node_modules/(?!(jspdf|fflate|fast-png|uuid|exceljs)/)',
   ],
   transform: {
     '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', {

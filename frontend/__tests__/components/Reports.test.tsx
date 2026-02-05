@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event';
 import Reports from '@/components/Reports';
 import { AuthTestProvider } from '../utils/AuthTestProvider';
 
+// Mock URL.createObjectURL / revokeObjectURL (not available in jsdom)
+global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+global.URL.revokeObjectURL = jest.fn();
+
 // Mock the API services
 jest.mock('@/services/enrichedOrders', () => ({
   fetchEnrichedOrders: jest.fn(),

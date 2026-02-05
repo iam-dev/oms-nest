@@ -3,16 +3,21 @@
 # manage-secrets.sh - Secure secret management for OMS Kubernetes deployments
 #
 # Usage:
-#   ./manage-secrets.sh seal   <namespace> <env-file>   Seal secrets from a .env file
-#   ./manage-secrets.sh create <namespace> <env-file>   Create K8s secrets directly (dev only)
-#   ./manage-secrets.sh rotate <namespace>              Rotate secrets (re-seal with new cert)
-#   ./manage-secrets.sh verify <namespace>              Verify secrets exist and are valid
-#   ./manage-secrets.sh audit  <namespace>              Audit secret access in the namespace
+#   ./manage-secrets.sh seal   <namespace> <env-file> [--name <secret-name>] [--output <dir>]
+#   ./manage-secrets.sh create <namespace> <env-file> [--name <secret-name>]
+#   ./manage-secrets.sh rotate <namespace>            [--name <secret-name>] [--output <dir>]
+#   ./manage-secrets.sh verify <namespace>            [--name <secret-name>]
+#   ./manage-secrets.sh audit  <namespace>
+#
+# Options:
+#   --name <name>    Override the Kubernetes secret name (default: oms-nest-secrets)
+#   --output <dir>   Override the output directory for sealed YAML (default: kube/helm/oms-nest)
 #
 # Examples:
 #   ./manage-secrets.sh seal   oms-nest-staging  secrets.env
 #   ./manage-secrets.sh create oms-nest-staging  secrets.env
 #   ./manage-secrets.sh verify oms-nest-production
+#   ./manage-secrets.sh seal   oms-staging-v2 kube/secrets.env --name oms-app-secrets --output kubernetes/staging-v2
 #
 set -euo pipefail
 
@@ -20,6 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="${SCRIPT_DIR}/../helm/oms-nest"
 
 SECRET_NAME="oms-nest-secrets"
+OUTPUT_DIR=""
 SEALED_SECRETS_CONTROLLER="sealed-secrets-controller"
 SEALED_SECRETS_NS="kube-system"
 
@@ -35,9 +41,30 @@ REQUIRED_KEYS=(
   ENCRYPTION_SECRET
 )
 
+# Parallel arrays for loaded env key-value pairs (Bash 3.2 compatible)
+ENV_KEYS=()
+ENV_VALUES=()
+
 log()  { echo "[INFO]  $*"; }
 warn() { echo "[WARN]  $*" >&2; }
 err()  { echo "[ERROR] $*" >&2; exit 1; }
+
+# Parse --name and --output flags from remaining arguments
+# Sets SECRET_NAME and OUTPUT_DIR as side effects
+parse_flags() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)
+        [[ $# -ge 2 ]] || err "--name requires a value"
+        SECRET_NAME="$2"; shift 2 ;;
+      --output)
+        [[ $# -ge 2 ]] || err "--output requires a value"
+        OUTPUT_DIR="$2"; shift 2 ;;
+      *)
+        err "Unknown flag: $1" ;;
+    esac
+  done
+}
 
 check_deps() {
   for cmd in kubectl; do
@@ -49,17 +76,17 @@ check_seal_deps() {
   command -v kubeseal >/dev/null 2>&1 || err "'kubeseal' is required. Install: brew install kubeseal"
 }
 
-# Load a .env file into an associative array, skipping comments and blank lines
+# Load a .env file into ENV_KEYS / ENV_VALUES parallel arrays
 load_env_file() {
   local file="$1"
   [[ -f "$file" ]] || err "Environment file not found: $file"
 
-  # Validate no obvious plaintext leaks in the file path itself
   if [[ "$file" == *".git/"* ]]; then
     err "Refusing to load secrets from inside .git directory"
   fi
 
-  local -n _map=$2
+  ENV_KEYS=()
+  ENV_VALUES=()
   while IFS='=' read -r key value; do
     # Skip comments and empty lines
     [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
@@ -71,15 +98,29 @@ load_env_file() {
     value="${value%\"}"
     value="${value#\'}"
     value="${value%\'}"
-    _map["$key"]="$value"
+    ENV_KEYS+=("$key")
+    ENV_VALUES+=("$value")
   done < "$file"
 }
 
+# Look up a value by key in ENV_KEYS/ENV_VALUES
+env_get() {
+  local needle="$1"
+  local i=0
+  while [[ $i -lt ${#ENV_KEYS[@]} ]]; do
+    if [[ "${ENV_KEYS[$i]}" == "$needle" ]]; then
+      echo "${ENV_VALUES[$i]}"
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
 validate_keys() {
-  local -n _secrets=$1
   local missing=()
   for key in "${REQUIRED_KEYS[@]}"; do
-    if [[ -z "${_secrets[$key]:-}" ]]; then
+    if ! env_get "$key" >/dev/null 2>&1; then
       missing+=("$key")
     fi
   done
@@ -91,14 +132,25 @@ validate_keys() {
   return 0
 }
 
+# Build --from-literal args from ENV_KEYS/ENV_VALUES into FROM_LITERAL_ARGS array
+build_from_literal_args() {
+  FROM_LITERAL_ARGS=()
+  local i=0
+  while [[ $i -lt ${#ENV_KEYS[@]} ]]; do
+    FROM_LITERAL_ARGS+=("--from-literal=${ENV_KEYS[$i]}=${ENV_VALUES[$i]}")
+    i=$((i + 1))
+  done
+}
+
 cmd_seal() {
   local namespace="$1"
   local env_file="$2"
+  shift 2
+  parse_flags "$@"
   check_seal_deps
 
-  declare -A secrets
-  load_env_file "$env_file" secrets
-  validate_keys secrets || err "Cannot seal: missing required keys"
+  load_env_file "$env_file"
+  validate_keys || err "Cannot seal: missing required keys"
 
   log "Fetching sealed-secrets public cert..."
   local cert_file
@@ -111,16 +163,15 @@ cmd_seal() {
     > "$cert_file"
 
   log "Creating raw secret and sealing..."
-  local from_literal_args=()
-  for key in "${!secrets[@]}"; do
-    from_literal_args+=("--from-literal=${key}=${secrets[$key]}")
-  done
+  build_from_literal_args
 
-  local output_file="${CHART_DIR}/sealed-secret-${namespace}.yaml"
+  local dest_dir="${OUTPUT_DIR:-$CHART_DIR}"
+  local output_file="${dest_dir}/sealed-secret.yaml"
+  mkdir -p "$dest_dir"
 
   kubectl create secret generic "$SECRET_NAME" \
     --namespace="$namespace" \
-    "${from_literal_args[@]}" \
+    "${FROM_LITERAL_ARGS[@]}" \
     --dry-run=client -o yaml | \
   kubeseal --cert "$cert_file" \
     --controller-name="$SEALED_SECRETS_CONTROLLER" \
@@ -137,20 +188,18 @@ cmd_seal() {
 cmd_create() {
   local namespace="$1"
   local env_file="$2"
+  shift 2
+  parse_flags "$@"
 
-  declare -A secrets
-  load_env_file "$env_file" secrets
-  validate_keys secrets || warn "Proceeding with missing keys..."
+  load_env_file "$env_file"
+  validate_keys || warn "Proceeding with missing keys..."
 
-  local from_literal_args=()
-  for key in "${!secrets[@]}"; do
-    from_literal_args+=("--from-literal=${key}=${secrets[$key]}")
-  done
+  build_from_literal_args
 
   log "Creating secret '$SECRET_NAME' in namespace '$namespace'..."
   kubectl create secret generic "$SECRET_NAME" \
     --namespace="$namespace" \
-    "${from_literal_args[@]}" \
+    "${FROM_LITERAL_ARGS[@]}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log "Secret created/updated successfully"
@@ -158,6 +207,8 @@ cmd_create() {
 
 cmd_rotate() {
   local namespace="$1"
+  shift 1
+  parse_flags "$@"
   check_seal_deps
 
   log "Fetching current secret values from cluster..."
@@ -176,7 +227,9 @@ cmd_rotate() {
     > "$cert_file"
 
   log "Re-sealing with new certificate..."
-  local output_file="${CHART_DIR}/sealed-secret-${namespace}.yaml"
+  local dest_dir="${OUTPUT_DIR:-$CHART_DIR}"
+  local output_file="${dest_dir}/sealed-secret.yaml"
+  mkdir -p "$dest_dir"
 
   echo "$raw" | \
   kubeseal --cert "$cert_file" \
@@ -191,6 +244,8 @@ cmd_rotate() {
 
 cmd_verify() {
   local namespace="$1"
+  shift 1
+  parse_flags "$@"
 
   log "Verifying secrets in namespace '$namespace'..."
 
@@ -268,27 +323,27 @@ check_deps
 
 case "${1:-help}" in
   seal)
-    [[ $# -ge 3 ]] || err "Usage: $0 seal <namespace> <env-file>"
-    cmd_seal "$2" "$3"
+    [[ $# -ge 3 ]] || err "Usage: $0 seal <namespace> <env-file> [--name <name>] [--output <dir>]"
+    cmd_seal "$2" "$3" "${@:4}"
     ;;
   create)
-    [[ $# -ge 3 ]] || err "Usage: $0 create <namespace> <env-file>"
-    cmd_create "$2" "$3"
+    [[ $# -ge 3 ]] || err "Usage: $0 create <namespace> <env-file> [--name <name>]"
+    cmd_create "$2" "$3" "${@:4}"
     ;;
   rotate)
-    [[ $# -ge 2 ]] || err "Usage: $0 rotate <namespace>"
-    cmd_rotate "$2"
+    [[ $# -ge 2 ]] || err "Usage: $0 rotate <namespace> [--name <name>] [--output <dir>]"
+    cmd_rotate "$2" "${@:3}"
     ;;
   verify)
-    [[ $# -ge 2 ]] || err "Usage: $0 verify <namespace>"
-    cmd_verify "$2"
+    [[ $# -ge 2 ]] || err "Usage: $0 verify <namespace> [--name <name>]"
+    cmd_verify "$2" "${@:3}"
     ;;
   audit)
     [[ $# -ge 2 ]] || err "Usage: $0 audit <namespace>"
     cmd_audit "$2"
     ;;
   help|--help|-h)
-    head -20 "$0" | grep '^#' | sed 's/^# \?//'
+    head -25 "$0" | grep '^#' | sed 's/^# \?//'
     ;;
   *)
     err "Unknown command: $1. Use '$0 help' for usage."
