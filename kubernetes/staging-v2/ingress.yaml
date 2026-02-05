@@ -26,7 +26,7 @@ metadata:
 
     # CORS settings
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "https://staging.ordermysaddle.com"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://staging-v2.ordermysaddle.com"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
 
@@ -47,13 +47,13 @@ spec:
 
   tls:
   - hosts:
-    - staging.ordermysaddle.com
-    - api-staging.ordermysaddle.com
+    - staging-v2.ordermysaddle.com
+    - api-staging-v2.ordermysaddle.com
     secretName: oms-staging-v2-tls-cert
 
   rules:
   # Frontend routing
-  - host: staging.ordermysaddle.com
+  - host: staging-v2.ordermysaddle.com
     http:
       paths:
       - path: /
@@ -65,7 +65,7 @@ spec:
               number: 80
 
   # Backend API routing
-  - host: api-staging.ordermysaddle.com
+  - host: api-staging-v2.ordermysaddle.com
     http:
       paths:
       - path: /
@@ -101,84 +101,6 @@ spec:
     - http01:
         ingress:
           class: nginx
-
----
-# Network Policy for ingress traffic control
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: oms-staging-v2-ingress-policy
-  namespace: oms-staging-v2
-  labels:
-    app: oms
-    environment: staging
-spec:
-  podSelector:
-    matchLabels:
-      environment: staging
-
-  policyTypes:
-  - Ingress
-  - Egress
-
-  ingress:
-  # Allow traffic from NGINX Ingress Controller
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: ingress-nginx
-    ports:
-    - protocol: TCP
-      port: 3000  # Frontend
-    - protocol: TCP
-      port: 3001  # Backend
-
-  # Allow internal cluster communication
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: oms-staging-v2
-    ports:
-    - protocol: TCP
-      port: 3000  # Frontend
-    - protocol: TCP
-      port: 3001  # Backend
-    - protocol: TCP
-      port: 5432  # PostgreSQL
-    - protocol: TCP
-      port: 6379  # Redis
-
-  egress:
-  # Allow DNS resolution
-  - to: []
-    ports:
-    - protocol: UDP
-      port: 53
-    - protocol: TCP
-      port: 53
-
-  # Allow HTTPS outbound (for external APIs, npm registries, etc.)
-  - to: []
-    ports:
-    - protocol: TCP
-      port: 443
-    - protocol: TCP
-      port: 80
-
-  # Allow internal cluster communication
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: oms-staging-v2
-    ports:
-    - protocol: TCP
-      port: 3000
-    - protocol: TCP
-      port: 3001
-    - protocol: TCP
-      port: 5432
-    - protocol: TCP
-      port: 6379
 
 ---
 # Load Balancer Service for external access (if needed)

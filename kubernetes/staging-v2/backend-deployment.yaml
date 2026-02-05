@@ -114,9 +114,7 @@ spec:
       - name: cache
         emptyDir: {}
 
-      # Image pull secrets for private registry
-      imagePullSecrets:
-      - name: registry-credentials
+      # Image is public, no imagePullSecrets needed
 
       # Pod security
       automountServiceAccountToken: false
