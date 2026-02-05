@@ -1,40 +1,29 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource } from "typeorm";
 import bcrypt from "bcryptjs";
-import { UserEntity } from "../../../../users/infrastructure/persistence/relational/entities/user.entity";
 
 /**
  * Test users that match the E2E test expectations.
  * These users are created for CI/CD testing environments.
+ *
+ * Note: The "user" entity is a VIEW over the "credentials" table.
+ * We must insert directly into "credentials" to create users.
  */
 const TEST_USERS = [
   {
     username: "admin@omsaddle.com",
-    email: "admin@omsaddle.com",
     password: "AdminPass123!",
     name: "Test Admin",
-    currency: "EUR",
-    userType: 2, // admin
-    isSupervisor: 1,
   },
   {
     username: "sarah.thompson@fitters.com",
-    email: "sarah.thompson@fitters.com",
     password: "FitterPass123!",
     name: "Sarah Thompson",
-    currency: "EUR",
-    userType: 1, // fitter
-    isSupervisor: 0,
   },
   {
     username: "testuser",
-    email: "testuser@omsaddle.com",
     password: "TestUser123!",
     name: "Test User",
-    currency: "EUR",
-    userType: 6, // regular user
-    isSupervisor: 0,
   },
 ];
 
@@ -42,21 +31,19 @@ const TEST_USERS = [
 export class UserSeedService {
   private readonly logger = new Logger(UserSeedService.name);
 
-  constructor(
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
-  ) {}
+  constructor(private readonly dataSource: DataSource) {}
 
   async run(): Promise<void> {
     this.logger.log("🌱 Starting user seed...");
 
     for (const userData of TEST_USERS) {
-      // Check if user already exists
-      const existingUser = await this.userRepository.findOne({
-        where: [{ email: userData.email }, { username: userData.username }],
-      });
+      // Check if user already exists in credentials table
+      const existingUser = await this.dataSource.query(
+        `SELECT user_id FROM credentials WHERE user_name = $1 LIMIT 1`,
+        [userData.username],
+      );
 
-      if (existingUser) {
+      if (existingUser.length > 0) {
         this.logger.log(
           `User ${userData.username} already exists, skipping...`,
         );
@@ -66,19 +53,14 @@ export class UserSeedService {
       // Hash the password
       const hashedPassword = await bcrypt.hash(userData.password, 10);
 
-      // Create the user
-      const user = this.userRepository.create({
-        username: userData.username,
-        email: userData.email,
-        password: hashedPassword,
-        name: userData.name,
-        currency: userData.currency,
-        userType: userData.userType,
-        isSupervisor: userData.isSupervisor,
-        enabled: true,
-      });
+      // Insert directly into credentials table
+      // The "user" view will automatically reflect this data
+      await this.dataSource.query(
+        `INSERT INTO credentials (user_name, password_hash, full_name, blocked, deleted)
+         VALUES ($1, $2, $3, 0, 0)`,
+        [userData.username, hashedPassword, userData.name],
+      );
 
-      await this.userRepository.save(user);
       this.logger.log(`✅ Created user: ${userData.username}`);
     }
 
