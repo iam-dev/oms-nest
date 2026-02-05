@@ -44,12 +44,11 @@ spec:
           protocol: TCP
 
         env:
-        - name: NODE_ENV
-          value: "staging"
         - name: PORT
           value: "3001"
 
         # Secrets from Kubernetes secrets (NO hardcoded values)
+        # NODE_ENV is set in oms-app-secrets sealed secret
         envFrom:
         - secretRef:
             name: oms-app-secrets
