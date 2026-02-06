@@ -13,7 +13,11 @@ async function globalSetup(config: FullConfig) {
   console.log(`🚀 Setting up E2E test environment: ${environment}`);
 
   const baseURL = config.projects[0].use.baseURL || 'http://localhost:3000';
-  const apiURL = process.env.E2E_API_URL || 'http://localhost:3001';
+  const apiURL = environment === 'staging'
+    ? (process.env.STAGING_API_URL || 'https://api-staging.ordermysaddle.com')
+    : environment === 'production'
+      ? (process.env.PRODUCTION_API_URL || 'https://api.ordermysaddle.com')
+      : (process.env.E2E_API_URL || 'http://localhost:3001');
 
   // For staging/production environments, verify services are accessible
   if (environment !== 'local') {
