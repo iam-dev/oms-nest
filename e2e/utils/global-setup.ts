@@ -49,7 +49,8 @@ async function globalSetup(config: FullConfig) {
 async function waitForServices(baseURL: string, apiURL: string): Promise<void> {
   console.log('⏳ Waiting for services to be ready...');
 
-  const maxRetries = 30;
+  const isRemote = ['staging', 'production'].includes(process.env.ENVIRONMENT || 'local');
+  const maxRetries = isRemote ? 90 : 30;
   const retryDelay = 2000;
 
   // Wait for frontend

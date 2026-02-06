@@ -200,7 +200,7 @@ jobs:
     needs: [backend-build, frontend-build]
     environment:
       name: staging
-      url: https://nest-staging.ordermysaddle.com
+      url: https://next-staging.ordermysaddle.com
 
     steps:
     - uses: actions/checkout@v4
@@ -330,16 +330,39 @@ jobs:
         kubectl get services --namespace=${{ env.K8S_NAMESPACE }}
         kubectl get ingress --namespace=${{ env.K8S_NAMESPACE }}
 
-    - name: Health check endpoints
+    - name: Wait for services to be reachable
       run: |
-        # Wait for ingress to be ready
-        sleep 60
+        echo "Waiting for ingress and TLS to be ready..."
 
-        # Check backend health
-        curl -f https://api-nest-staging.ordermysaddle.com/api/health || echo "Backend health check failed"
+        # Wait for backend API health endpoint
+        for i in $(seq 1 60); do
+          if curl -sf --max-time 5 https://api-nest-staging.ordermysaddle.com/api/health > /dev/null 2>&1; then
+            echo "✅ Backend API is reachable"
+            break
+          fi
+          if [ "$i" -eq 60 ]; then
+            echo "::error::Backend API not reachable after 5 minutes"
+            exit 1
+          fi
+          echo "⏳ Waiting for backend API (attempt $i/60)..."
+          sleep 5
+        done
 
-        # Check frontend
-        curl -f https://nest-staging.ordermysaddle.com || echo "Frontend health check failed"
+        # Wait for frontend
+        for i in $(seq 1 60); do
+          if curl -sf --max-time 5 https://next-staging.ordermysaddle.com > /dev/null 2>&1; then
+            echo "✅ Frontend is reachable"
+            break
+          fi
+          if [ "$i" -eq 60 ]; then
+            echo "::error::Frontend not reachable after 5 minutes"
+            exit 1
+          fi
+          echo "⏳ Waiting for frontend (attempt $i/60)..."
+          sleep 5
+        done
+
+        echo "✅ All services are reachable"
 
   # E2E tests against deployed staging environment
   e2e-tests:
@@ -370,7 +393,7 @@ jobs:
       run: npx playwright test
       env:
         ENVIRONMENT: staging
-        STAGING_BASE_URL: https://nest-staging.ordermysaddle.com
+        STAGING_BASE_URL: https://next-staging.ordermysaddle.com
         STAGING_API_URL: https://api-nest-staging.ordermysaddle.com
         TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}

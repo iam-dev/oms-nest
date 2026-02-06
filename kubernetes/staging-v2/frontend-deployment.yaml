@@ -51,7 +51,7 @@ spec:
         - name: NEXT_PUBLIC_API_URL
           value: "https://api-nest-staging.ordermysaddle.com"
         - name: NEXTAUTH_URL
-          value: "https://nest-staging.ordermysaddle.com"
+          value: "https://next-staging.ordermysaddle.com"
 
         # Secrets from Kubernetes secrets (NO hardcoded values)
         envFrom:

@@ -33,7 +33,7 @@ maildev:
 
 ingress:
   frontend:
-    host: nest-staging.ordermysaddle.com
+    host: next-staging.ordermysaddle.com
   backend:
     host: api-nest-staging.ordermysaddle.com
   tls:

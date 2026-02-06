@@ -110,7 +110,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
   frontend:
-    host: nest-staging.ordermysaddle.com
+    host: next-staging.ordermysaddle.com
   backend:
     host: api-nest-staging.ordermysaddle.com
   tls:
