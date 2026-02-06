@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oms-backend
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-backend
     component: api
@@ -124,7 +124,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oms-backend-service
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-backend
     component: api
@@ -145,7 +145,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: oms-backend-hpa
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-backend
     environment: staging

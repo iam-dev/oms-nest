@@ -21,6 +21,9 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     name: 🔍 Security & Secret Scanning
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,18 +46,18 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: 📊 Upload Trivy Results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: 🔎 SAST with CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: typescript, javascript
 
       - name: 🔍 CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   # 🧪 Dependency and License Scanning
   dependency-scan:
@@ -521,80 +524,3 @@ jobs:
             ${{ matrix.service == 'frontend' && format('NEXT_PUBLIC_API_URL=https://api-nest-{0}.ordermysaddle.com', github.ref == 'refs/heads/main' && 'production' || 'staging') || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # Trigger Jenkins for deployment (replaces direct K8s deploy)
-  trigger-jenkins-deploy:
-    runs-on: ubuntu-latest
-    name: 🚀 Trigger Jenkins Deploy
-    needs: build-and-push
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
-
-    steps:
-      - name: Set deployment variables
-        id: deploy-vars
-        run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
-          IMAGE_TAG="${BRANCH_NAME}-${SHORT_SHA}"
-
-          if [ "$BRANCH_NAME" = "main" ]; then
-            ENVIRONMENT="production"
-            JENKINS_JOB="oms-nest-deploy-production"
-          else
-            ENVIRONMENT="staging"
-            JENKINS_JOB="oms-nest-deploy-staging"
-          fi
-
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
-          echo "jenkins_job=${JENKINS_JOB}" >> $GITHUB_OUTPUT
-
-      - name: Validate Jenkins credentials exist
-        run: |
-          if [ -z "${{ secrets.JENKINS_USER }}" ] || [ -z "${{ secrets.JENKINS_API_TOKEN }}" ]; then
-            echo "::error::Missing JENKINS_USER or JENKINS_API_TOKEN secrets"
-            exit 1
-          fi
-
-      - name: Trigger Jenkins deployment
-        run: |
-          set +x  # Disable command echoing to prevent credential leakage
-          echo "Triggering Jenkins job: ${{ steps.deploy-vars.outputs.jenkins_job }}"
-          echo "  Environment: ${{ steps.deploy-vars.outputs.environment }}"
-          echo "  Image tag:   ${{ steps.deploy-vars.outputs.image_tag }}"
-
-          HTTP_CODE=$(curl -s -o /tmp/jenkins-response.txt -w "%{http_code}" \
-            -X POST \
-            "https://cicd.ordermysaddle.com/job/${{ steps.deploy-vars.outputs.jenkins_job }}/buildWithParameters" \
-            --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-            --data-urlencode "BACKEND_IMAGE_TAG=${{ steps.deploy-vars.outputs.image_tag }}" \
-            --data-urlencode "FRONTEND_IMAGE_TAG=${{ steps.deploy-vars.outputs.image_tag }}" \
-            --data-urlencode "ENVIRONMENT=${{ steps.deploy-vars.outputs.environment }}")
-
-          echo "Jenkins response: ${HTTP_CODE}"
-
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 400 ]; then
-            echo "::error::Failed to trigger Jenkins deployment (HTTP ${HTTP_CODE})"
-            # Do not cat response body as it may contain sensitive info
-            exit 1
-          fi
-
-          echo "Jenkins deployment triggered successfully"
-
-      - name: Notify trigger success
-        if: success()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: success
-          text: "Jenkins deploy triggered for ${{ steps.deploy-vars.outputs.environment }} with tag ${{ steps.deploy-vars.outputs.image_tag }}"
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      - name: Notify trigger failure
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: failure
-          text: "Failed to trigger Jenkins deploy for ${{ steps.deploy-vars.outputs.environment }}"
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
