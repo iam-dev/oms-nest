@@ -316,7 +316,7 @@ Push to the `staging` branch triggers automatic deployment via `staging-deployme
 
 **Staging URLs:**
 
-- Frontend: `https://nest-staging.ordermysaddle.com`
+- Frontend: `https://next-staging.ordermysaddle.com`
 - Backend API: `https://api-nest-staging.ordermysaddle.com`
 
 ### Production
