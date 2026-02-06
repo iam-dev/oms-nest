@@ -370,8 +370,9 @@ jobs:
     - name: Run E2E tests
       run: npx playwright test
       env:
-        BASE_URL: https://nest-staging.ordermysaddle.com
-        API_URL: https://api-nest-staging.ordermysaddle.com
+        ENVIRONMENT: staging
+        STAGING_BASE_URL: https://nest-staging.ordermysaddle.com
+        STAGING_API_URL: https://api-nest-staging.ordermysaddle.com
         TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
 
