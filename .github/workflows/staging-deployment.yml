@@ -223,12 +223,11 @@ jobs:
         kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Clean existing resources in namespace
+      if: ${{ github.event.inputs.force_deploy == 'true' }}
       run: |
-        # Remove any Helm releases from Jenkins-based deployments
+        # Only run on force deploy — incremental kubectl apply is preferred
         helm uninstall oms-nest-staging -n ${{ env.K8S_NAMESPACE }} || true
-        # Delete all existing resources
         kubectl delete deployments,services,statefulsets,configmaps,ingress,hpa --all -n ${{ env.K8S_NAMESPACE }} || true
-        # Wait for pods to terminate
         kubectl wait --for=delete pods --all -n ${{ env.K8S_NAMESPACE }} --timeout=120s || true
 
     - name: Install sealed-secrets controller
