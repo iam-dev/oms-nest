@@ -9,9 +9,8 @@ This documentation is organized to help developers, administrators, and stakehol
 ### 🏗️ System Components
 
 - **[Frontend (Next.js 15)](../frontend/docs/README.md)** - React-based user interface with modern tooling
-- **[Backend (NestJS)](../backend/docs/README.md)** - TypeScript API server with enterprise patterns
 - **[E2E Testing](../e2e/README.md)** - Full application testing with Playwright
-- **[Infrastructure](./infrastructure/README.md)** - Kubernetes deployment and DevOps
+- **[Staging Deployment](./staging-deployment.md)** - Kubernetes staging deployment and DevOps
 
 ### 📖 Main Documentation
 
@@ -21,10 +20,8 @@ This documentation is organized to help developers, administrators, and stakehol
 - **[Deployment Guide](./deployment.md)** - Production deployment instructions
 - **[Staging Deployment Guide](./staging-deployment.md)** - **🆕 DevSecOps staging environment deployment**
 - **[Development Workflow](./development-workflow.md)** - Team collaboration guidelines
-- **[Database Design](./database.md)** - Schema and data modeling
-- **[Security Guidelines](./security.md)** - Security policies and practices
-- **[Performance Guide](./performance.md)** - Optimization strategies
-- **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
+- **[Migration Guide](./migration-readme.md)** - Production data migration
+- **[Production Migration](./production-data-migration.md)** - Detailed migration plan
 
 ## 🚀 Quick Start
 
@@ -32,21 +29,23 @@ This documentation is organized to help developers, administrators, and stakehol
 
 ```bash
 # Clone the repository
-git clone git@github-iam-dev:Order-My-Saddle/saddle-oms.git
-cd saddle-oms
+git clone git@github-iam-dev:iam-dev/oms-nest.git
+cd oms_nest
+
+# Start infrastructure (PostgreSQL, Redis, Maildev, Adminer)
+cd backend && docker compose up -d postgres redis maildev adminer
 
 # Backend setup
 cd backend
 npm install
-cp .env.example .env
+cp .env.local .env
 npm run migration:run
 npm run seed:run:relational
 npm run start:dev
 
-# Frontend setup (new terminal)
+# Frontend setup (new terminal — .env.local already exists)
 cd frontend
 npm install
-cp .env.example .env.local
 npm run dev
 
 # E2E testing (new terminal)
@@ -58,19 +57,15 @@ npx playwright test
 ### For System Administrators
 
 ```bash
-# Deploy to Staging V2 (Automated)
-git push origin main  # Triggers GitHub Actions deployment
-
-# Deploy to Staging V2 (Manual)
-./scripts/deploy-staging-v2.sh
+# Deploy to Staging (Automated)
+git checkout staging && git merge develop && git push origin staging
 
 # Monitor staging deployment
-kubectl get pods -n oms-staging-v2
-kubectl logs -f deployment/oms-backend -n oms-staging-v2
+kubectl get pods -n oms-nest-staging
+kubectl logs -f deployment/oms-backend -n oms-nest-staging
 
-# Health checks
-curl https://api-staging-v2.ordermysaddle.com/health
-curl https://staging-v2.ordermysaddle.com/api/health
+# Health check
+curl https://api-nest-staging.ordermysaddle.com/api/health
 ```
 
 ## 🎯 Project Context
@@ -80,7 +75,7 @@ curl https://staging-v2.ordermysaddle.com/api/health
 The OMS is designed for **saddle manufacturing** with specialized features for:
 
 - **Custom saddle orders** with complex configuration options
-- **Multi-stakeholder workflows** involving customers, fitters, suppliers, and administrators
+- **Multi-stakeholder workflows** involving customers, fitters, factories, and administrators
 - **Manufacturing tracking** from order placement to delivery
 - **Quality control** processes and approval workflows
 - **Inventory management** for leather types, hardware, and accessories
@@ -110,46 +105,34 @@ The OMS is designed for **saddle manufacturing** with specialized features for:
 
 ### User Roles
 
-The system supports five distinct user roles with specific permissions:
+The system supports six distinct user roles with specific permissions:
 
 1. **USER** (Customer) - Place orders, track progress, manage profile
 2. **FITTER** - Take measurements, validate orders, update status
-3. **SUPPLIER** - Manage inventory, fulfill orders, track delivery
-4. **ADMIN** - System administration, user management, configuration
-5. **SUPERVISOR** - Oversight, approval workflows, performance monitoring
+3. **FACTORY** - Manage manufacturing, fulfill orders, track delivery
+4. **CUSTOMSADDLER** - Custom saddle specialist operations
+5. **ADMIN** - System administration, user management, configuration
+6. **SUPERVISOR** - Oversight, approval workflows, performance monitoring
 
-## 📊 System Status
+## System Components
 
-### Implementation Progress: 95% Complete
+### Backend (~47 NestJS modules)
 
-✅ **Completed Components**
-- ✅ Core backend entities (Orders, Customers, Fitters, Suppliers, Users)
-- ✅ **NEW**: All 7 product modules (Brands, Models, Leathertypes, Options, Extras, Presets, Products)
-- ✅ **SECURED**: Authentication and authorization system with JWT guards enabled
-- ✅ Frontend application with modern UI
-- ✅ Basic order management workflows
-- ✅ Database schema and migrations
-- ✅ **NEW**: Complete DevSecOps CI/CD pipeline with security scanning
-- ✅ **NEW**: Kubernetes staging deployment (oms-staging-v2)
-- ✅ **NEW**: Comprehensive E2E testing framework
+- **Core Business**: Orders, Customers, Fitters, Factories, Users, FactoryEmployees
+- **Product Catalog**: Brands, Saddles, Leathertypes, Options, OptionItems, Extras, Presets, SaddleLeathers, SaddleOptionsItems, SaddleExtras, SaddleStock, OrderProductSaddles
+- **System**: Auth (JWT + Passport), RLS, Cache (Redis), EnrichedOrders (materialized views), AuditLogging, Health, Monitoring, Comments, Statuses
 
-⚠️ **In Progress**
-- Frontend-backend integration fine-tuning
-- Performance optimization
-- Production environment setup
+### Frontend (Next.js 15 App Router)
 
-📋 **Planned**
-- Advanced reporting and analytics
-- Mobile application development
-- Third-party integrations (payment, shipping)
-- Performance optimization
+- 37 route segments, 50+ shadcn/ui components
+- Generic EntityTable pattern for all entity pages
+- Jotai state management, React Hook Form + Zod validation
 
-### Current Phase: DevSecOps Complete ✅
+### Infrastructure
 
-**✅ COMPLETED**: All missing product entity modules implemented and secured
-**✅ COMPLETED**: Authentication security enabled across all endpoints
-**✅ COMPLETED**: DevSecOps CI/CD pipeline with staging deployment ready
-**🔄 NEXT**: Frontend-backend integration and production deployment
+- DigitalOcean DOKS (Kubernetes) with staging and production namespaces
+- GitHub Actions CI/CD with security scanning (GitLeaks, Trivy, CodeQL)
+- Docker images on GHCR, Helm charts for deployment
 
 ## 🏛️ Architecture Overview
 
@@ -178,14 +161,13 @@ User Request → Frontend → API Gateway → Backend Services → Database
 ## 🔗 Related Resources
 
 ### External Links
-- **[Project Repository](https://github.com/Order-My-Saddle/saddle-oms)** - Main codebase
-- **[CI/CD Pipeline](https://github.com/Order-My-Saddle/saddle-oms/actions)** - Build status
-- **[Issue Tracker](https://github.com/Order-My-Saddle/saddle-oms/issues)** - Bug reports and features
+- **[Project Repository](https://github.com/iam-dev/oms-nest)** - Main codebase
+- **[CI/CD Pipeline](https://github.com/iam-dev/oms-nest/actions)** - Build status
+- **[Issue Tracker](https://github.com/iam-dev/oms-nest/issues)** - Bug reports and features
 
 ### Development Tools
-- **[Postman Collection](./api/postman-collection.json)** - API testing
-- **[Database Schema](./database/schema.sql)** - Current schema
-- **[Docker Compose](../docker-compose.yml)** - Local development
+- **[Swagger UI](http://localhost:3001/docs)** - Interactive API testing (local)
+- **[Docker Compose](../docker-compose.yml)** - Local development stack
 
 ### Documentation Standards
 - All code must include inline documentation
@@ -197,7 +179,7 @@ User Request → Frontend → API Gateway → Backend Services → Database
 
 ### Getting Help
 1. Check this documentation first
-2. Search [existing issues](https://github.com/Order-My-Saddle/saddle-oms/issues)
+2. Search [existing issues](https://github.com/iam-dev/oms-nest/issues)
 3. Ask in team communication channels
 4. Create a new issue with detailed information
 
@@ -215,4 +197,4 @@ User Request → Frontend → API Gateway → Backend Services → Database
 
 ---
 
-*This documentation is maintained by the development team and updated with each release. Last updated: January 2026*
+*This documentation is maintained by the development team and updated with each release. Last updated: February 2026*

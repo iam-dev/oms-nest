@@ -2,32 +2,32 @@
 
 ## Overview
 
-This guide covers deploying the Order Management System (OMS) to the **oms-staging-v2** Kubernetes namespace using automated DevSecOps pipelines. The staging environment provides a production-like environment for testing new features, integrations, and security updates.
+This guide covers deploying the Order Management System (OMS) to the **oms-nest-staging** Kubernetes namespace on DigitalOcean DOKS (AMS3 region) using automated DevSecOps pipelines. The staging environment provides a production-like environment for testing new features, integrations, and security updates.
 
 ## Quick Start
 
 ### Automated Deployment (Recommended)
 ```bash
-# Push to main branch to trigger deployment
-git push origin main
+# Merge develop into staging to trigger deployment
+git checkout staging && git merge develop && git push origin staging
 
-# Or manually trigger from GitHub Actions UI
+# Or manually trigger from GitHub Actions UI (workflow_dispatch)
 ```
 
 ### Manual Deployment
 ```bash
 # Set up environment variables
-cp .env.staging-v2.template .env.staging-v2
-# Edit .env.staging-v2 with actual values
+cp .env.staging.template .env.staging
+# Edit .env.staging with actual values
 
-# Deploy
-./scripts/deploy-staging-v2.sh
+# Deploy using kubectl apply
+kubectl apply -f kubernetes/staging-v2/
 ```
 
 ## Environment Details
 
 ### Infrastructure
-- **Namespace**: `oms-staging-v2`
+- **Namespace**: `oms-nest-staging`
 - **Cluster**: DigitalOcean Kubernetes
 - **Ingress**: NGINX with SSL termination
 - **Storage**: DigitalOcean Block Storage
@@ -36,15 +36,15 @@ cp .env.staging-v2.template .env.staging-v2
 ### Services
 - **Frontend**: Next.js 15 application
 - **Backend**: NestJS API server
-- **Database**: PostgreSQL 16 with persistent storage
+- **Database**: PostgreSQL 17 (DO Managed, external, port 25060, SSL enabled)
 - **Cache**: Redis 7 for sessions and caching
 - **Monitoring**: Prometheus metrics collection
 
 ### URLs
-- **Frontend**: https://staging-v2.ordermysaddle.com
-- **Backend API**: https://api-staging-v2.ordermysaddle.com
-- **API Docs**: https://api-staging-v2.ordermysaddle.com/docs
-- **Health Check**: https://api-staging-v2.ordermysaddle.com/health
+- **Frontend**: https://nest-staging.ordermysaddle.com
+- **Backend API**: https://api-nest-staging.ordermysaddle.com
+- **API Docs**: https://api-nest-staging.ordermysaddle.com/docs
+- **Health Check**: https://api-nest-staging.ordermysaddle.com/api/health
 
 ## Deployment Methods
 
@@ -62,14 +62,12 @@ The automated CI/CD pipeline provides comprehensive DevSecOps capabilities:
 
 #### Trigger Options
 
-**Automatic Triggers**:
-- Push to `main` branch
-- Push to `develop` branch
-- PR with `deploy-staging-v2` label
+**Automatic Trigger**:
+- Push to `staging` branch (e.g., merging `develop` into `staging`)
 
 **Manual Trigger**:
 1. Go to GitHub Actions
-2. Select "Deploy to Staging V2"
+2. Select "Deploy to Staging"
 3. Click "Run workflow"
 4. Choose environment options
 
@@ -118,7 +116,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
 #### Environment Setup
 ```bash
 # Copy and configure environment
-cp .env.staging-v2.template .env.staging-v2
+cp .env.staging.template .env.staging
 
 # Edit with your values:
 # - Database credentials
@@ -128,14 +126,14 @@ cp .env.staging-v2.template .env.staging-v2
 
 #### Execute Deployment
 ```bash
-./scripts/deploy-staging-v2.sh
+kubectl apply -f kubernetes/staging-v2/
 ```
 
 ## Architecture
 
 ### Container Images
-- **Backend**: `ghcr.io/your-org/oms-backend:staging-v2-latest`
-- **Frontend**: `ghcr.io/your-org/oms-frontend:staging-v2-latest`
+- **Backend**: `ghcr.io/iam-dev/oms-nest-backend:latest`
+- **Frontend**: `ghcr.io/iam-dev/oms-nest-frontend:latest`
 
 ### Kubernetes Resources
 
@@ -144,23 +142,23 @@ cp .env.staging-v2.template .env.staging-v2
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: oms-staging-v2
+  name: oms-nest-staging
   labels:
     environment: staging
     project: oms
 ```
 
 #### Core Services
-- **PostgreSQL StatefulSet**: Primary database with 10GB persistent storage
-- **Redis StatefulSet**: Cache and session storage with 1GB storage
-- **Backend Deployment**: NestJS API with 2 replicas
-- **Frontend Deployment**: Next.js app with 2 replicas
+- **PostgreSQL**: DO Managed database (external, port 25060, SSL enabled)
+- **Redis Deployment**: Cache and session storage (in-cluster, no persistence in staging)
+- **Backend Deployment**: NestJS API with 2 replicas (HPA: 2-6)
+- **Frontend Deployment**: Next.js app with 1 replica (HPA: 1-4)
 
 #### Security Features
 - **Network Policies**: Traffic isolation between namespaces
 - **Pod Security Contexts**: Non-root containers, read-only filesystems
 - **RBAC**: Least-privilege service accounts
-- **Secret Management**: Kubernetes secrets for sensitive data
+- **Secret Management**: Bitnami SealedSecrets (encrypted in Git, auto-decrypted by controller)
 
 #### High Availability
 - **Horizontal Pod Autoscaler**: Auto-scaling based on CPU/memory
@@ -172,44 +170,41 @@ metadata:
 
 ### Health Endpoints
 ```bash
-# Application health
-curl https://api-staging-v2.ordermysaddle.com/health
+# Application health (liveness)
+curl https://api-nest-staging.ordermysaddle.com/api/health/live
 
-# Database health
-curl https://api-staging-v2.ordermysaddle.com/health/database
+# Application health (readiness)
+curl https://api-nest-staging.ordermysaddle.com/api/health/ready
 
 # Frontend health
-curl https://staging-v2.ordermysaddle.com/api/health
+curl https://nest-staging.ordermysaddle.com/api/health
 ```
 
 ### Kubernetes Monitoring
 ```bash
 # Pod status
-kubectl get pods -n oms-staging-v2
+kubectl get pods -n oms-nest-staging
 
 # Service endpoints
-kubectl get services -n oms-staging-v2
+kubectl get services -n oms-nest-staging
 
 # Ingress configuration
-kubectl get ingress -n oms-staging-v2
+kubectl get ingress -n oms-nest-staging
 
 # Resource usage
-kubectl top pods -n oms-staging-v2
+kubectl top pods -n oms-nest-staging
 ```
 
 ### Application Logs
 ```bash
 # Backend application logs
-kubectl logs -f deployment/oms-backend -n oms-staging-v2
+kubectl logs -f deployment/oms-backend -n oms-nest-staging
 
 # Frontend application logs
-kubectl logs -f deployment/oms-frontend -n oms-staging-v2
-
-# Database logs
-kubectl logs -f statefulset/oms-postgres -n oms-staging-v2
+kubectl logs -f deployment/oms-frontend -n oms-nest-staging
 
 # Redis logs
-kubectl logs -f statefulset/oms-redis -n oms-staging-v2
+kubectl logs -f deployment/oms-redis -n oms-nest-staging
 ```
 
 ### Metrics Collection
@@ -225,7 +220,7 @@ The deployment pipeline includes comprehensive end-to-end testing:
 ```bash
 # Run tests locally against staging
 cd e2e
-npx playwright test --config=staging-v2.config.ts
+npm run test:staging
 ```
 
 #### Test Coverage
@@ -268,46 +263,43 @@ npx playwright test --config=staging-v2.config.ts
 #### Pods Not Starting
 ```bash
 # Check pod events
-kubectl describe pod <pod-name> -n oms-staging-v2
+kubectl describe pod <pod-name> -n oms-nest-staging
 
 # Check resource limits
-kubectl get pods -o wide -n oms-staging-v2
+kubectl get pods -o wide -n oms-nest-staging
 
 # Review logs
-kubectl logs <pod-name> -n oms-staging-v2
+kubectl logs <pod-name> -n oms-nest-staging
 ```
 
 #### Database Connection Issues
 ```bash
-# Test database connectivity
-kubectl exec -it deployment/oms-backend -n oms-staging-v2 -- npm run db:test
-
 # Check database secrets
-kubectl get secret oms-postgres-secrets -n oms-staging-v2 -o yaml
+kubectl get secret oms-app-secrets -n oms-nest-staging -o yaml
 
-# Access database directly
-kubectl exec -it statefulset/oms-postgres -n oms-staging-v2 -- psql -U $DB_USERNAME -d $DB_NAME
+# Test connectivity from a backend pod
+kubectl exec -it deployment/oms-backend -n oms-nest-staging -- node -e "require('pg').Pool({}).query('SELECT 1')"
 ```
 
 #### Image Pull Errors
 ```bash
 # Check registry credentials
-kubectl get secret registry-credentials -n oms-staging-v2 -o yaml
+kubectl get secret registry-credentials -n oms-nest-staging -o yaml
 
 # Verify image tags
-kubectl describe deployment/oms-backend -n oms-staging-v2
+kubectl describe deployment/oms-backend -n oms-nest-staging
 ```
 
 #### SSL/Ingress Issues
 ```bash
 # Check ingress status
-kubectl describe ingress oms-staging-v2-ingress -n oms-staging-v2
+kubectl describe ingress oms-nest-staging-ingress -n oms-nest-staging
 
 # Verify TLS certificates
-kubectl get certificate -n oms-staging-v2
+kubectl get certificate -n oms-nest-staging
 
 # Test DNS resolution
-nslookup staging-v2.ordermysaddle.com
+nslookup nest-staging.ordermysaddle.com
 ```
 
 ### Recovery Procedures
@@ -315,30 +307,28 @@ nslookup staging-v2.ordermysaddle.com
 #### Rollback Deployment
 ```bash
 # View rollout history
-kubectl rollout history deployment/oms-backend -n oms-staging-v2
+kubectl rollout history deployment/oms-backend -n oms-nest-staging
 
 # Rollback to previous version
-kubectl rollout undo deployment/oms-backend -n oms-staging-v2
-kubectl rollout undo deployment/oms-frontend -n oms-staging-v2
+kubectl rollout undo deployment/oms-backend -n oms-nest-staging
+kubectl rollout undo deployment/oms-frontend -n oms-nest-staging
 
 # Check rollback status
-kubectl rollout status deployment/oms-backend -n oms-staging-v2
+kubectl rollout status deployment/oms-backend -n oms-nest-staging
 ```
 
 #### Emergency Scale Down
 ```bash
 # Scale to zero (maintenance mode)
-kubectl scale deployment/oms-backend --replicas=0 -n oms-staging-v2
-kubectl scale deployment/oms-frontend --replicas=0 -n oms-staging-v2
+kubectl scale deployment/oms-backend --replicas=0 -n oms-nest-staging
+kubectl scale deployment/oms-frontend --replicas=0 -n oms-nest-staging
 ```
 
 #### Database Recovery
 ```bash
-# Access database for manual intervention
-kubectl exec -it statefulset/oms-postgres -n oms-staging-v2 -- bash
-
-# Run specific migration
-kubectl exec -it deployment/oms-backend -n oms-staging-v2 -- npm run migration:run
+# Connect to the DO Managed PostgreSQL directly using psql (requires credentials)
+# Or run migrations from a backend pod:
+kubectl exec -it deployment/oms-backend -n oms-nest-staging -- npm run migration:run
 ```
 
 ## Security Considerations
@@ -407,11 +397,11 @@ limits:
 
 ### Backup Procedures
 ```bash
-# Database backup
-kubectl exec statefulset/oms-postgres -n oms-staging-v2 -- pg_dump -U $DB_USERNAME $DB_NAME > backup.sql
+# Database backup (DO Managed PostgreSQL — use doctl or the DigitalOcean console for backups)
+# Managed databases have automatic daily backups
 
 # Configuration backup
-kubectl get all -n oms-staging-v2 -o yaml > k8s-backup.yaml
+kubectl get all -n oms-nest-staging -o yaml > k8s-backup.yaml
 ```
 
 ### Update Procedures
@@ -447,27 +437,27 @@ kubectl get all -n oms-staging-v2 -o yaml > k8s-backup.yaml
 
 ### Essential Commands
 ```bash
-# Deploy to staging
-git push origin main
+# Deploy to staging (merge develop → staging)
+git checkout staging && git merge develop && git push origin staging
 
 # Check deployment status
-kubectl get pods -n oms-staging-v2
+kubectl get pods -n oms-nest-staging
 
 # View application logs
-kubectl logs -f deployment/oms-backend -n oms-staging-v2
+kubectl logs -f deployment/oms-backend -n oms-nest-staging
 
 # Rollback deployment
-kubectl rollout undo deployment/oms-backend -n oms-staging-v2
+kubectl rollout undo deployment/oms-backend -n oms-nest-staging
 
 # Run E2E tests
-cd e2e && npx playwright test --config=staging-v2.config.ts
+cd e2e && npm run test:staging
 
 # Health check
-curl https://api-staging-v2.ordermysaddle.com/health
+curl https://api-nest-staging.ordermysaddle.com/api/health
 ```
 
 ### Key URLs
-- **Frontend**: https://staging-v2.ordermysaddle.com
-- **API**: https://api-staging-v2.ordermysaddle.com
-- **Docs**: https://api-staging-v2.ordermysaddle.com/docs
-- **Health**: https://api-staging-v2.ordermysaddle.com/health
+- **Frontend**: https://nest-staging.ordermysaddle.com
+- **API**: https://api-nest-staging.ordermysaddle.com
+- **Docs**: https://api-nest-staging.ordermysaddle.com/docs
+- **Health**: https://api-nest-staging.ordermysaddle.com/api/health

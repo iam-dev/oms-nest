@@ -82,13 +82,13 @@ resources:
 **1. Create Kubernetes Cluster**
 ```bash
 # Using doctl (DigitalOcean CLI)
-doctl kubernetes cluster create oms-production \
+doctl kubernetes cluster create oms-nest-production \
   --region ams3 \
   --version 1.28.2-do.0 \
   --node-pool "name=worker-pool;size=s-4vcpu-8gb;count=3;auto-scale=true;min-nodes=2;max-nodes=5"
 
 # Get cluster credentials
-doctl kubernetes cluster kubeconfig save oms-production
+doctl kubernetes cluster kubeconfig save oms-nest-production
 ```
 
 **2. Create Managed Database**
@@ -96,7 +96,7 @@ doctl kubernetes cluster kubeconfig save oms-production
 # PostgreSQL cluster
 doctl databases create oms-postgres-prod \
   --engine postgres \
-  --version 14 \
+  --version 17 \
   --region ams3 \
   --size db-s-2vcpu-4gb \
   --num-nodes 1
@@ -118,7 +118,7 @@ doctl databases connection oms-postgres-prod --format URL
 **Backend Dockerfile (Multi-stage)**
 ```dockerfile
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -134,7 +134,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 
 # Security: Create non-root user
 RUN addgroup --system --gid 1001 nestjs
@@ -152,7 +152,7 @@ USER nestjs
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3001/health || exit 1
+  CMD curl -f http://localhost:3001/api/health || exit 1
 
 EXPOSE 3001
 
@@ -161,7 +161,7 @@ CMD ["node", "dist/main.js"]
 
 **Frontend Dockerfile (Next.js)**
 ```dockerfile
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -220,12 +220,12 @@ CMD ["node", "server.js"]
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Backend
-docker build -t ghcr.io/order-my-saddle/oms-backend:latest ./backend
-docker push ghcr.io/order-my-saddle/oms-backend:latest
+docker build -t ghcr.io/iam-dev/oms-nest-backend:latest ./backend
+docker push ghcr.io/iam-dev/oms-nest-backend:latest
 
 # Frontend
-docker build -t ghcr.io/order-my-saddle/oms-frontend:latest ./frontend
-docker push ghcr.io/order-my-saddle/oms-frontend:latest
+docker build -t ghcr.io/iam-dev/oms-nest-frontend:latest ./frontend
+docker push ghcr.io/iam-dev/oms-nest-frontend:latest
 ```
 
 ## ☸️ Kubernetes Deployment
@@ -237,17 +237,17 @@ docker push ghcr.io/order-my-saddle/oms-frontend:latest
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: oms-production
+  name: oms-nest-production
   labels:
-    name: oms-production
+    name: oms-nest-production
     environment: production
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: oms-staging
+  name: oms-nest-staging
   labels:
-    name: oms-staging
+    name: oms-nest-staging
     environment: staging
 ```
 
@@ -260,15 +260,15 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: oms-config
-  namespace: oms-production
+  namespace: oms-nest-production
 data:
   NODE_ENV: "production"
-  API_URL: "https://api.ordermysaddle.com"
-  FRONTEND_URL: "https://ordermysaddle.com"
+  API_URL: "https://api-nest-production.ordermysaddle.com"
+  FRONTEND_URL: "https://nest-production.ordermysaddle.com"
   REDIS_HOST: "oms-redis-service"
   REDIS_PORT: "6379"
   LOG_LEVEL: "error"
-  CORS_ORIGIN: "https://ordermysaddle.com"
+  CORS_ORIGIN: "https://nest-production.ordermysaddle.com"
 ```
 
 **Secrets**
@@ -278,7 +278,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: oms-secrets
-  namespace: oms-production
+  namespace: oms-nest-production
 type: Opaque
 data:
   database-url: <base64-encoded-postgresql-url>
@@ -295,7 +295,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oms-backend
-  namespace: oms-production
+  namespace: oms-nest-production
   labels:
     app: oms-backend
     version: v1.0.0
@@ -325,7 +325,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: api
-        image: ghcr.io/order-my-saddle/oms-backend:latest
+        image: ghcr.io/iam-dev/oms-nest-backend:latest
         imagePullPolicy: Always
         ports:
         - name: http
@@ -366,7 +366,7 @@ spec:
             cpu: "1000m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /api/health/live
             port: http
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -374,7 +374,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /health/ready
+            path: /api/health/ready
             port: http
           initialDelaySeconds: 5
           periodSeconds: 5
@@ -382,7 +382,7 @@ spec:
           failureThreshold: 3
         startupProbe:
           httpGet:
-            path: /health
+            path: /api/health/live
             port: http
           initialDelaySeconds: 10
           periodSeconds: 10
@@ -395,7 +395,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oms-backend-service
-  namespace: oms-production
+  namespace: oms-nest-production
   labels:
     app: oms-backend
 spec:
@@ -417,7 +417,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oms-frontend
-  namespace: oms-production
+  namespace: oms-nest-production
   labels:
     app: oms-frontend
     version: v1.0.0
@@ -439,7 +439,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ghcr.io/order-my-saddle/oms-frontend:latest
+        image: ghcr.io/iam-dev/oms-nest-frontend:latest
         imagePullPolicy: Always
         ports:
         - name: http
@@ -479,7 +479,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oms-frontend-service
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   selector:
     app: oms-frontend
@@ -499,7 +499,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oms-redis
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   replicas: 1
   selector:
@@ -544,7 +544,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: redis-pvc
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   accessModes:
   - ReadWriteOnce
@@ -557,7 +557,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oms-redis-service
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   selector:
     app: oms-redis
@@ -575,7 +575,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: oms-ingress
-  namespace: oms-production
+  namespace: oms-nest-production
   annotations:
     kubernetes.io/ingress.class: "nginx"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
@@ -587,23 +587,12 @@ metadata:
 spec:
   tls:
   - hosts:
-    - ordermysaddle.com
-    - www.ordermysaddle.com
-    - api.ordermysaddle.com
+    - nest-production.ordermysaddle.com
+    - api-nest-production.ordermysaddle.com
     secretName: oms-tls
   rules:
   # Frontend
-  - host: ordermysaddle.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: oms-frontend-service
-            port:
-              number: 80
-  - host: www.ordermysaddle.com
+  - host: nest-production.ordermysaddle.com
     http:
       paths:
       - path: /
@@ -614,7 +603,7 @@ spec:
             port:
               number: 80
   # Backend API
-  - host: api.ordermysaddle.com
+  - host: api-nest-production.ordermysaddle.com
     http:
       paths:
       - path: /
@@ -628,237 +617,48 @@ spec:
 
 ## 🔄 CI/CD Pipeline
 
-### GitHub Actions Workflow
+### Actual Workflows (`.github/workflows/`)
 
-```yaml
-# .github/workflows/deploy-production.yml
-name: Deploy to Production
+There is **no dedicated `deploy-production.yml` workflow** yet. Production deployment is manual. The existing workflows are:
 
-on:
-  push:
-    branches: [main]
-  release:
-    types: [published]
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME_BACKEND: order-my-saddle/oms-backend
-  IMAGE_NAME_FRONTEND: order-my-saddle/oms-frontend
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: |
-          backend/package-lock.json
-          frontend/package-lock.json
-
-    # Backend tests
-    - name: Install backend dependencies
-      run: |
-        cd backend
-        npm ci
-
-    - name: Run backend tests
-      run: |
-        cd backend
-        npm run test:cov
-        npm run test:e2e
-
-    # Frontend tests
-    - name: Install frontend dependencies
-      run: |
-        cd frontend
-        npm ci
-
-    - name: Run frontend tests
-      run: |
-        cd frontend
-        npm run test
-        npm run build
-
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
-
-  build-and-push:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      backend-image: ${{ steps.backend-meta.outputs.tags }}
-      frontend-image: ${{ steps.frontend-meta.outputs.tags }}
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    # Backend image
-    - name: Extract backend metadata
-      id: backend-meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-
-    - name: Build and push backend image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./backend
-        push: true
-        tags: ${{ steps.backend-meta.outputs.tags }}
-        labels: ${{ steps.backend-meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-
-    # Frontend image
-    - name: Extract frontend metadata
-      id: frontend-meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-
-    - name: Build and push frontend image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./frontend
-        push: true
-        tags: ${{ steps.frontend-meta.outputs.tags }}
-        labels: ${{ steps.frontend-meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment:
-      name: production
-      url: https://ordermysaddle.com
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
-
-    - name: Configure kubectl
-      run: |
-        echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > kubeconfig
-        export KUBECONFIG=kubeconfig
-        kubectl config current-context
-
-    - name: Deploy to Kubernetes
-      run: |
-        export KUBECONFIG=kubeconfig
-
-        # Update backend image
-        kubectl set image deployment/oms-backend \
-          api=${{ needs.build-and-push.outputs.backend-image }} \
-          -n oms-production
-
-        # Update frontend image
-        kubectl set image deployment/oms-frontend \
-          frontend=${{ needs.build-and-push.outputs.frontend-image }} \
-          -n oms-production
-
-        # Wait for rollout to complete
-        kubectl rollout status deployment/oms-backend -n oms-production --timeout=300s
-        kubectl rollout status deployment/oms-frontend -n oms-production --timeout=300s
-
-    - name: Verify deployment
-      run: |
-        export KUBECONFIG=kubeconfig
-
-        # Check pod status
-        kubectl get pods -n oms-production
-
-        # Check service endpoints
-        kubectl get endpoints -n oms-production
-
-        # Basic health check
-        kubectl run curl-test --image=curlimages/curl --rm -i --restart=Never \
-          -- curl -f http://oms-backend-service.oms-production.svc.cluster.local/health
-
-    - name: Run smoke tests
-      run: |
-        # Wait for services to be ready
-        sleep 30
-
-        # Test API endpoint
-        curl -f https://api.ordermysaddle.com/health
-
-        # Test frontend
-        curl -f https://ordermysaddle.com/api/health
-
-    - name: Notify deployment status
-      uses: 8398a7/action-slack@v3
-      with:
-        status: ${{ job.status }}
-        channel: '#deployments'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      if: always()
-```
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci-cd.yml` | Push to `main`/`staging`, PRs, daily schedule | Security scans, tests, E2E (chromium/firefox/webkit), Docker build + push to GHCR |
+| `pr-checks.yml` | PRs to `main`/`staging` | Lint, type-check, coverage tests, API validation, performance checks, markdownlint |
+| `staging-deployment.yml` | Push to `staging` branch, manual `workflow_dispatch` | Build images → deploy to K8s `oms-nest-staging` → E2E tests → Slack notify |
+| `codeql.yml` | Push to `main`/`staging`, PRs, weekly | CodeQL advanced security analysis |
 
 ### Staging Deployment
 
-```yaml
-# .github/workflows/deploy-staging.yml
-name: Deploy to Staging
+Triggered by pushing to the `staging` branch (e.g., merging `develop` into `staging`):
 
-on:
-  push:
-    branches: [develop, staging]
-  pull_request:
-    branches: [main]
-
-# Similar workflow but targeting staging environment
-jobs:
-  deploy-staging:
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: https://staging.ordermysaddle.com
-
-    steps:
-    # Similar steps but with staging namespace and URLs
-    - name: Deploy to staging
-      run: |
-        kubectl set image deployment/oms-backend \
-          api=${{ needs.build-and-push.outputs.backend-image }} \
-          -n oms-staging
+```bash
+git checkout staging && git merge develop && git push origin staging
 ```
+
+Pipeline: security scan → backend build → frontend build → deploy to `oms-nest-staging` → E2E tests → Slack notification.
+
+See [Staging Deployment Guide](./staging-deployment.md) for full details.
+
+### Production Deployment
+
+Production deployment is currently manual:
+
+```bash
+# Option 1: Apply K8s manifests directly
+kubectl apply -f kubernetes/production/
+
+# Option 2: workflow_dispatch from GitHub Actions UI (when configured)
+```
+
+### Docker Images
+
+Built and pushed by CI/CD to GitHub Container Registry:
+
+- `ghcr.io/iam-dev/oms-nest-backend`
+- `ghcr.io/iam-dev/oms-nest-frontend`
+
+Tags: `{branch}-{short-sha}` (e.g., `staging-abc1234`), `staging-latest`, `latest` (default branch).
 
 ## 🔧 Database Migrations
 
@@ -868,15 +668,15 @@ jobs:
 # Create migration job
 kubectl create job migrate-$(date +%s) \
   --from=cronjob/oms-migrate \
-  -n oms-production
+  -n oms-nest-production
 
 # Monitor migration
-kubectl logs job/migrate-$(date +%s) -n oms-production -f
+kubectl logs job/migrate-$(date +%s) -n oms-nest-production -f
 
 # Rollback if needed
 kubectl create job rollback-$(date +%s) \
   --from=cronjob/oms-rollback \
-  -n oms-production
+  -n oms-nest-production
 ```
 
 **Migration CronJob**
@@ -886,7 +686,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: oms-migrate
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   schedule: "0 0 * * *"  # Daily at midnight (disabled by default)
   suspend: true  # Manually trigger only
@@ -896,7 +696,7 @@ spec:
         spec:
           containers:
           - name: migrate
-            image: ghcr.io/order-my-saddle/oms-backend:latest
+            image: ghcr.io/iam-dev/oms-nest-backend:latest
             command:
             - /bin/sh
             - -c
@@ -936,7 +736,7 @@ data:
       - role: endpoints
         namespaces:
           names:
-          - oms-production
+          - oms-nest-production
       relabel_configs:
       - source_labels: [__meta_kubernetes_service_name]
         action: keep
@@ -950,7 +750,7 @@ data:
       - role: endpoints
         namespaces:
           names:
-          - oms-production
+          - oms-nest-production
       relabel_configs:
       - source_labels: [__meta_kubernetes_service_name]
         action: keep
@@ -1034,7 +834,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: oms-backend-netpol
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   podSelector:
     matchLabels:
@@ -1105,7 +905,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: oms-db-backup
-  namespace: oms-production
+  namespace: oms-nest-production
 spec:
   schedule: "0 2 * * *"  # Daily at 2 AM
   jobTemplate:
@@ -1114,7 +914,7 @@ spec:
         spec:
           containers:
           - name: backup
-            image: postgres:14-alpine
+            image: postgres:17-alpine
             command:
             - /bin/sh
             - -c
@@ -1160,21 +960,21 @@ spec:
 ```bash
 # Restore from backup
 kubectl apply -f kubernetes/
-kubectl wait --for=condition=available --timeout=300s deployment --all -n oms-production
+kubectl wait --for=condition=available --timeout=300s deployment --all -n oms-nest-production
 
 # Restore database
-kubectl run pg-restore --image=postgres:14-alpine --rm -i --restart=Never \
+kubectl run pg-restore --image=postgres:17-alpine --rm -i --restart=Never \
   --command -- psql $DATABASE_URL -f /backup/latest.sql
 ```
 
 **2. Rolling Back Deployments**
 ```bash
 # Rollback to previous version
-kubectl rollout undo deployment/oms-backend -n oms-production
-kubectl rollout undo deployment/oms-frontend -n oms-production
+kubectl rollout undo deployment/oms-backend -n oms-nest-production
+kubectl rollout undo deployment/oms-frontend -n oms-nest-production
 
 # Check rollout status
-kubectl rollout status deployment/oms-backend -n oms-production
+kubectl rollout status deployment/oms-backend -n oms-nest-production
 ```
 
 ## 📋 Deployment Checklist
@@ -1232,36 +1032,36 @@ kubectl rollout status deployment/oms-backend -n oms-production
 **Pod Startup Failures**
 ```bash
 # Check pod status and events
-kubectl get pods -n oms-production
-kubectl describe pod <pod-name> -n oms-production
+kubectl get pods -n oms-nest-production
+kubectl describe pod <pod-name> -n oms-nest-production
 
 # Check logs
-kubectl logs <pod-name> -n oms-production
-kubectl logs <pod-name> -n oms-production --previous
+kubectl logs <pod-name> -n oms-nest-production
+kubectl logs <pod-name> -n oms-nest-production --previous
 
 # Check resource constraints
-kubectl top pods -n oms-production
+kubectl top pods -n oms-nest-production
 ```
 
 **Service Connectivity Issues**
 ```bash
 # Test service endpoints
 kubectl run debug --image=busybox --rm -i --restart=Never \
-  -- nslookup oms-backend-service.oms-production.svc.cluster.local
+  -- nslookup oms-backend-service.oms-nest-production.svc.cluster.local
 
 # Test connectivity
 kubectl run curl --image=curlimages/curl --rm -i --restart=Never \
-  -- curl -v http://oms-backend-service.oms-production.svc.cluster.local/health
+  -- curl -v http://oms-backend-service.oms-nest-production.svc.cluster.local/api/health
 ```
 
 **Database Connection Problems**
 ```bash
 # Test database connectivity
-kubectl run pg-client --image=postgres:14-alpine --rm -i --restart=Never \
+kubectl run pg-client --image=postgres:17-alpine --rm -i --restart=Never \
   -- psql $DATABASE_URL -c "SELECT 1;"
 
 # Check connection pools
-kubectl logs deployment/oms-backend -n oms-production | grep -i "database\|pool"
+kubectl logs deployment/oms-backend -n oms-nest-production | grep -i "database\|pool"
 ```
 
 ### Performance Issues
@@ -1269,20 +1069,20 @@ kubectl logs deployment/oms-backend -n oms-production | grep -i "database\|pool"
 **High CPU Usage**
 ```bash
 # Check resource usage
-kubectl top pods -n oms-production
+kubectl top pods -n oms-nest-production
 
 # Adjust resource limits
-kubectl patch deployment oms-backend -n oms-production -p \
+kubectl patch deployment oms-backend -n oms-nest-production -p \
   '{"spec":{"template":{"spec":{"containers":[{"name":"api","resources":{"limits":{"cpu":"2000m"}}}]}}}}'
 ```
 
 **Memory Leaks**
 ```bash
 # Monitor memory usage over time
-kubectl top pods -n oms-production --sort-by=memory
+kubectl top pods -n oms-nest-production --sort-by=memory
 
 # Enable heap dumps for Node.js apps
-kubectl patch deployment oms-backend -n oms-production -p \
+kubectl patch deployment oms-backend -n oms-nest-production -p \
   '{"spec":{"template":{"spec":{"containers":[{"name":"api","env":[{"name":"NODE_OPTIONS","value":"--max-old-space-size=1024 --heapdump-on-oom"}]}]}}}}'
 ```
 
@@ -1291,21 +1091,21 @@ kubectl patch deployment oms-backend -n oms-production -p \
 **Emergency Rollback**
 ```bash
 # Immediate rollback to previous version
-kubectl rollout undo deployment/oms-backend -n oms-production
-kubectl rollout undo deployment/oms-frontend -n oms-production
+kubectl rollout undo deployment/oms-backend -n oms-nest-production
+kubectl rollout undo deployment/oms-frontend -n oms-nest-production
 
 # Monitor rollback progress
-kubectl rollout status deployment/oms-backend -n oms-production
+kubectl rollout status deployment/oms-backend -n oms-nest-production
 ```
 
 **Database Rollback**
 ```bash
 # Restore from backup (if schema changes were made)
-kubectl create job db-restore-$(date +%s) --image=postgres:14-alpine \
+kubectl create job db-restore-$(date +%s) --image=postgres:17-alpine \
   -- psql $DATABASE_URL -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
 # Restore from latest backup
-kubectl run pg-restore --image=postgres:14-alpine --rm -i --restart=Never \
+kubectl run pg-restore --image=postgres:17-alpine --rm -i --restart=Never \
   -- psql $DATABASE_URL -f /backup/pre-deployment.sql
 ```
 
@@ -1313,11 +1113,9 @@ kubectl run pg-restore --image=postgres:14-alpine --rm -i --restart=Never \
 
 For operational excellence:
 
-- **[Monitoring Setup](./monitoring.md)** - Detailed monitoring configuration
-- **[Security Guidelines](./security.md)** - Production security best practices
-- **[Performance Tuning](./performance.md)** - Optimization strategies
-- **[Backup Procedures](./backup.md)** - Comprehensive backup strategies
-- **[Incident Response](./incident-response.md)** - Emergency procedures
+- **[Architecture](./architecture.md)** - System architecture overview
+- **[API Reference](./api-reference.md)** - API documentation
+- **[Staging Deployment](./staging-deployment.md)** - Staging environment guide
 
 ### Continuous Improvement
 

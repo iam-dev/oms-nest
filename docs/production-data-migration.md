@@ -1,728 +1,533 @@
-# Production Data Migration Analysis & Implementation Plan
+# Production Data Migration
 
 ## Overview
 
-This document provides a comprehensive analysis of the production database (`ordermys_new.sql`) and outlines the migration strategy to integrate production data into the current NestJS backend system.
+This document describes how production data from the legacy MySQL database (`ordermys_new.sql`) is migrated into PostgreSQL for development and staging. The data is available in both the original MySQL format and a transformed PostgreSQL format.
 
-## Production Database Analysis
+All migration tooling lives in:
+```
+backend/src/database/seeds/relational/production-data/
+```
 
-### Database Characteristics
-- **Source**: MySQL/MariaDB production database
-- **File**: `ordermys_new.sql` (355MB compressed dump)
-- **Data Volume**: ~7,570 INSERT statements across 21 tables
-- **Date Range**: Production data dating back to 2012
-- **Character Set**: utf8mb4 with timezone support
+See also the in-repo [README.md](../backend/src/database/seeds/relational/production-data/README.md) and [CLAUDE.md](../backend/src/database/seeds/relational/production-data/CLAUDE.md) for quick-reference details.
 
-### Production Tables Structure
+## Source Database
 
-#### Core Business Tables
-1. **Orders** - Central order management (main entity)
-2. **Customers** - Customer information
-3. **Fitters** - Professional fitters/installers
-4. **Brands** - Saddle manufacturers (Custom, Icon, Wolfgang)
-5. **Saddles** - Product catalog with factory assignments
-6. **LeatherTypes** - Material options
-7. **Options** - Product configuration choices
-8. **OptionsItems** - Specific option values
-9. **Presets** - Saved product configurations
-10. **PresetsItems** - Individual preset components
+- **Origin**: MySQL/MariaDB production database (`ordermys_new.sql`, ~355 MB)
+- **Records**: ~3 million rows across 21 tables
+- **Date range**: Production data dating back to 2012
+- **Character set**: utf8mb4
 
-#### Supporting Tables
-11. **Factories** - Manufacturing facilities by region
-12. **FactoryEmployees** - Factory staff management
-13. **OrdersInfo** - Detailed order line items
-14. **SaddleLeathers** - Saddle-leather combinations
-15. **SaddleOptionsItems** - Product-option relationships
-16. **Statuses** - Order status definitions
-17. **UserTypes** - User role definitions
+## Migration Architecture
 
-#### System Tables
-18. **Credentials** - User authentication (legacy)
-19. **ClientConfirmation** - Customer confirmations
-20. **DBlog** - Database operation logs
-21. **Log** - Application activity logs
+### ID Strategy
 
-## Schema Comparison: Production vs Current Backend
+Legacy tables use `SERIAL` (auto-increment integer) primary keys, matching the original MySQL schema. The NestJS backend's enriched-order views and raw SQL queries join directly on these integer IDs. Only the NestJS `User` entity introduces a dual ID system (`id` UUID + `legacyId` integer); all other legacy tables keep their original integer keys.
 
-### Major Structural Differences
+### Pipeline
 
-| Aspect | Production (MySQL) | Current (PostgreSQL) | Migration Strategy |
-|--------|-------------------|---------------------|-------------------|
-| **Database** | MySQL/MariaDB | PostgreSQL | Convert syntax and data types |
-| **ID Strategy** | Auto-increment integers | UUIDs | **Dual ID System**: Keep legacy_id + generate UUID |
-| **Naming Convention** | PascalCase (`CustomerID`) | snake_case (`customer_id`) | Transform field names |
-| **Authentication** | Separate `Credentials` table | Integrated `User` entity | Merge into existing User system |
-| **Relationships** | Integer foreign keys | UUID foreign keys | Map relationships with dual reference |
+```
+MySQL dump → transform-mysql-to-postgres.sh → PostgreSQL SQL files → import-data.sh → validate-data.sh
+```
 
-### Current Backend Entities Status
+### Naming Transformations
 
-#### ✅ Implemented Entities
-- **Users** - Modern authentication with roles
-- **Customers** - Enhanced with UUID and audit fields
-- **Orders** - Advanced order management with JSON specifications
-- **Fitters** - Professional fitter profiles
-- **Suppliers** - Supplier management (maps to Factories)
+| MySQL | PostgreSQL |
+|-------|-----------|
+| `PascalCase` table names (`Orders`) | `snake_case` (`orders`) |
+| `PascalCase` columns (`CustomerID`) | `snake_case` (`customer_id`) |
+| Backtick quoting | Double-quote quoting |
+| `AUTO_INCREMENT` | `SERIAL` |
+| `SET FOREIGN_KEY_CHECKS = 0` | `SET session_replication_role = 'replica'` |
+| `\'` (escaped quote) | `''` (doubled quote) |
 
-#### ⚠️ Missing Product Entities (High Priority)
-- **Brands** - Saddle brand management
-- **Models** - Product model catalog (maps to Saddles)
-- **LeatherTypes** - Material type definitions
-- **Options** - Product configuration options
-- **Extras** - Additional product features
-- **Presets** - Saved product configurations
-- **Products** - Master product entity (enhanced Saddles)
+<details>
+<summary>Full column mapping reference</summary>
 
-## Migration Strategy: Dual ID System
+| MySQL Column | PostgreSQL Column |
+|--------------|-------------------|
+| ID | id |
+| FitterID | fitter_id |
+| CustomerID | customer_id |
+| FactoryID | factory_id |
+| SaddleID | saddle_id |
+| LeatherID | leather_id |
+| UserID | user_id |
+| OptionID | option_id |
+| OrderID | order_id |
+| HorseName | horse_name |
+| OrderStatus | order_status |
+| OrderTime | order_time |
+| PriceSaddle | price_saddle |
+| PriceContrast1 | price_contrast1 |
+| SpecialNotes | special_notes |
+| SerialNumber | serial_number |
+| BrandName | brand_name |
+| ModelName | model_name |
+| PhoneNo | phone_no |
+| CellNo | cell_no |
+| Emailaddress | emailaddress |
+| FullName | full_name |
+| UserName | user_name |
+| PasswordHash | password_hash |
+| LastLogin | last_login |
+| UserType | user_type |
+| TypeDescription | type_description |
 
-### Core Principle
-**Preserve Legacy + Enable Modern**: Maintain full backward compatibility while enabling modern UUID-based architecture.
+</details>
 
-### Implementation Approach
+## Database Schema
 
-#### 1. Schema Enhancement
-Add `legacy_id` fields to all existing entities:
+### Tables by Category
+
+Schema files are in `postgres/schema/` and applied in numbered order:
+
+#### 01 — System Admin (`01-system-admin.sql`)
+
+| Table | Description |
+|-------|-------------|
+| `user_types` | Legacy role definitions (4 types) |
+| `role` | NestJS role table (6 roles, aligned with `RoleEnum`) |
+| `statuses` | Order status definitions (16 statuses) |
+| `credentials` | Legacy user authentication (360 users) |
+| `client_confirmation` | Customer order confirmations (23,488 records) |
+
+#### 02 — Product Catalog (`02-product-catalog.sql`)
+
+| Table | Description |
+|-------|-------------|
+| `brands` | Saddle manufacturers — Custom, Icon, Wolfgang (3 brands) |
+| `leather_types` | Material options (85 types) |
+| `options` | Product configuration categories with 7-tier pricing (52 options) |
+| `options_items` | Specific choices within option categories (887 items) |
+| `presets` | Saved product configurations (44 presets) |
+| `presets_items` | Links between presets and option items (1,471 items) |
+| `saddles` | Master product entity with factory assignments (109 saddles) |
+
+#### 03 — Core Business (`03-core-business.sql`)
+
+| Table | Description |
+|-------|-------------|
+| `factories` | Manufacturing facilities by region (7 factories) |
+| `factory_employees` | Factory staff (2 employees) |
+| `fitters` | Professional saddle fitters (282 fitters) |
+| `customers` | Customer information (27,279 customers) |
+| `orders` | Central order management (48,142 orders) |
+
+#### 04 — Relationships (`04-relationships.sql`)
+
+| Table | Description |
+|-------|-------------|
+| `saddle_leathers` | Saddle-leather combinations with pricing (4,274 records) |
+| `saddle_options_items` | Product-option relationships (21,844 records) |
+| `orders_info` | Order line items / option selections (1,099,961 records) |
+
+#### 05 — Audit Logging (`05-audit-logging.sql`)
+
+| Table | Description |
+|-------|-------------|
+| `log` | Application audit trail (~764,000 in production; partial import) |
+| `dblog` | Database query logging (~75,000 in production; partial import) |
+
+## Entity-to-NestJS Module Mapping
+
+| PostgreSQL Table | NestJS Module | Notes |
+|------------------|---------------|-------|
+| `orders` | `OrderModule` | |
+| `customers` | `CustomerModule` | |
+| `fitters` | `FitterModule` | |
+| `factories` | `FactoryModule` | Also referenced as "Suppliers" in some UI contexts |
+| `factory_employees` | `FactoryEmployeeModule` | |
+| `credentials` | `UsersModule` | Mapped to NestJS User entity |
+| `brands` | `BrandsModule` | |
+| `saddles` | `SaddlesModule` | Queried via `saddle-stock` service |
+| `leather_types` | `LeathertypesModule` | |
+| `options` | `OptionsModule` | |
+| `options_items` | `OptionsItemsModule` | |
+| `presets` | `PresetsModule` | |
+| `orders_info` | `OrderLinesModule` | 1.1M order line items |
+| `saddle_leathers` | `SaddleLeathersModule` | |
+| `saddle_options_items` | `SaddleOptionsItemsModule` | |
+| `statuses` | `StatusesModule` | |
+
+## TypeORM Migrations
+
+Migrations in `backend/src/database/migrations/` are applied with `npm run migration:run`:
+
+| Migration | Purpose |
+|-----------|---------|
+| `1736700000000-InitialSchema` | Creates all 21 legacy tables with integer PKs and indexes |
+| `1736800000000-AddRLSPrerequisites` | Row Level Security prerequisites |
+| `1736900000000-EnableRowLevelSecurity` | Enable RLS policies for data isolation |
+| `1737000000000-CreateEnrichedOrderViews` | Materialized views (`enriched_order_view`, `order_edit_view`) |
+| `1737100000000-CreateCommentTable` | Comment table |
+| `1737200000000-AddAdvancedOrderSearchIndexes` | Full-text and composite search indexes |
+| `1737900000000-AddLegacyBooleanFieldsToOrders` | Boolean fields (fitter_stock, custom_order, repair, demo, sponsored, rushed) |
+| `1738000000000-CreateRoleTable` | Role table aligned with `RoleEnum` (idempotent with `ON CONFLICT DO UPDATE`) |
+| `1738100000000-AddSeatSizesColumn` | `seat_sizes` JSONB column + GIN index + extraction functions |
+| `1738200000000-AddUserTypeToUserView` | User type in user view |
+| `1738300000000-CreateWarehouseTable` | Warehouse table |
+| `1769891167734-CreateExtrasTable` | Extras entity (UUID primary key) |
+| `1769900000000-CreateAuditLogTable` | NestJS audit log table |
+| `1770000000000-AddEntityFieldsToAuditLog` | Entity tracking fields for audit log |
+| `1770000000000-CreateSaddleExtrasTable` | Saddle-extras relationship table |
+| `1770100000000-IncreasePasswordHashLength` | Increase password hash column length |
+| `1770200000000-PopulateUserEmailFromUsername` | Populate user email from legacy username |
+
+Helper file: `user-view-sql.ts` — Shared SQL for user view creation (used by multiple migrations).
+
+## PostgreSQL Scripts
+
+All scripts are in `postgres/scripts/` and support multiple environments.
+
+### setup-postgres.sh
+
+Starts a Docker PostgreSQL 15 container for legacy data.
+
+```bash
+./setup-postgres.sh           # Start PostgreSQL (port 5433)
+./setup-postgres.sh --clean   # Remove container and start fresh
+```
+
+Connection details:
+```
+Host: 127.0.0.1 | Port: 5433 | Database: oms_legacy
+User: oms_user | Password: oms_password
+Container: oms_postgres_legacy
+```
+
+### transform-mysql-to-postgres.sh
+
+Transforms MySQL INSERT statements from `mysql-legacy/data/` into PostgreSQL format in `postgres/data/`. Run once after obtaining a new MySQL dump.
+
+```bash
+./transform-mysql-to-postgres.sh
+```
+
+### transform-orders-booleans.py
+
+Python script that converts integer boolean columns (0/1) in `orders.sql` to PostgreSQL `boolean` values (false/true). Handles columns at specific positions: `fitter_stock`, `custom_order`, `repair`, `demo`, `sponsored`, `rushed`.
+
+```bash
+python3 transform-orders-booleans.py
+```
+
+### import-data.sh
+
+Imports schema and data into PostgreSQL. Supports importing schema only, data only, or both.
+
+```bash
+./import-data.sh                    # Import all (legacy env, default)
+./import-data.sh --env local        # Import to local dev (backend-postgres-1)
+./import-data.sh --env legacy       # Import to legacy container
+./import-data.sh --schema           # Schema only
+./import-data.sh --data             # Data only (assumes schema exists)
+```
+
+Environments:
+- **local** — Docker `backend-postgres-1`, port 5432, database `oms_nest`
+- **legacy** — Docker `oms_postgres_legacy`, port 5433, database `oms_legacy`
+
+### validate-data.sh
+
+Validates imported data: record counts, referential integrity, and sample data verification.
+
+```bash
+./validate-data.sh                  # Validate legacy container (default)
+./validate-data.sh --env local      # Validate local dev
+./validate-data.sh --env legacy     # Validate legacy container
+```
+
+**Checks performed:**
+- Record counts against expected values (20 tables)
+- Referential integrity (FactoryEmployees→Factories, Orders→Fitters, Orders→Customers, Customers→Fitters, OrdersInfo→Orders, SaddleLeathers→Saddles, SaddleOptionsItems→Saddles)
+- Sample data display (brands, factories, statuses, orders, order status distribution)
+
+### extract-seat-sizes.sh
+
+Extracts seat size information and populates the `orders.seat_sizes` JSONB column from two sources:
+
+1. **PRIMARY**: `orders_info` table (option_id=1 is "Seat Size") — ~50,000 orders
+2. **FALLBACK**: `special_notes` field (regex extraction) — ~24 additional orders
+
+```bash
+./extract-seat-sizes.sh                          # Preview (local dev)
+./extract-seat-sizes.sh --apply                  # Apply (local dev)
+./extract-seat-sizes.sh --env legacy             # Preview (legacy container)
+./extract-seat-sizes.sh --env legacy --apply     # Apply (legacy container)
+./extract-seat-sizes.sh --env staging            # Preview (staging, requires PG_PASSWORD)
+./extract-seat-sizes.sh --env staging --apply    # Apply (staging)
+./extract-seat-sizes.sh --env production         # Preview (production, requires PG_PASSWORD)
+./extract-seat-sizes.sh --env production --apply # Apply (production, confirmation prompt)
+```
+
+Environments: `local`, `legacy`, `staging`, `production`. Override connection details with `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`.
+
+**Patterns recognized:**
+
+| Pattern | Example | Extracted |
+|---------|---------|-----------|
+| `seat size X.X` | "seat size 17.5" | `["17,5"]` |
+| `X.X seat` | "17.5 seat" | `["17,5"]` |
+| `X.X"` or `X.X inch` | `17.5"` | `["17,5"]` |
+| `stamped X.X` | "stamped in 17.5" | `["17,5"]` |
+
+Seat sizes are stored in European notation (comma decimal): `["17", "17,5"]`.
+
+### sync-production-data.sh
+
+Orchestrates the full sync workflow: schema + data import + seat size extraction.
+
+```bash
+./sync-production-data.sh                         # Full sync (legacy env)
+./sync-production-data.sh --env local             # Full sync (local dev)
+./sync-production-data.sh --incremental           # Sync only new/updated records
+./sync-production-data.sh --extract-seats         # Extract seat sizes only
+./sync-production-data.sh --from-dump FILE        # Import from a new MySQL dump
+```
+
+### docker-compose.yml
+
+Standalone Docker Compose file for the legacy PostgreSQL container (PostgreSQL 15, port 5433, tuned with `max_connections=200`, `shared_buffers=256MB`, `work_mem=16MB`).
+
+## MySQL Legacy Format
+
+The original MySQL data is preserved in `mysql-legacy/` for reference and as the source for PostgreSQL transformation.
+
+### MySQL Scripts (`mysql-legacy/scripts/`)
+
+| Script | Purpose |
+|--------|---------|
+| `setup-mysql.sh` | Start MySQL 8.0 Docker container (port 3307) |
+| `import-data.sh` | Import schema and all data files |
+| `validate-data.sh` | Validate record counts and referential integrity |
+| `fix-referential-integrity.sql` | SQL fixes for known data issues |
+
+### MySQL Connection
+
+```
+Host: 127.0.0.1 | Port: 3307 | Database: oms_legacy
+User: oms_user | Password: oms_password
+Container: oms_mysql_legacy
+```
+
+```bash
+docker exec -it oms_mysql_legacy mysql -u oms_user -poms_password oms_legacy
+```
+
+### MySQL Quick Start
+
+```bash
+cd backend/src/database/seeds/relational/production-data/mysql-legacy/scripts
+./setup-mysql.sh       # Start MySQL 8.0 container
+./import-data.sh       # Import all data
+./validate-data.sh     # Verify import
+```
+
+## Workflows
+
+### Initial Setup (PostgreSQL Legacy Container)
+
+```bash
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+
+# 1. Start legacy PostgreSQL container
+./setup-postgres.sh
+
+# 2. Transform MySQL data (first time only)
+./transform-mysql-to-postgres.sh
+
+# 3. Import schema and data
+./import-data.sh
+
+# 4. Validate the import
+./validate-data.sh
+
+# 5. Extract seat sizes
+./extract-seat-sizes.sh --apply
+```
+
+### Import Into Local Dev Database
+
+```bash
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+
+# Import into backend-postgres-1 (the Docker Compose database)
+./import-data.sh --env local
+
+# Validate
+./validate-data.sh --env local
+
+# Extract seat sizes
+./extract-seat-sizes.sh --apply
+```
+
+### Full Sync (After New MySQL Dump)
+
+```bash
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+
+# One command does: transform → import → extract seat sizes
+./sync-production-data.sh --from-dump /path/to/ordermys_new.sql
+```
+
+### Connect NestJS to Legacy Database
+
+Update `backend/.env`:
+```env
+DATABASE_TYPE=postgres
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=5433
+DATABASE_USERNAME=oms_user
+DATABASE_PASSWORD=oms_password
+DATABASE_NAME=oms_legacy
+```
+
+Then run TypeORM migrations:
+```bash
+cd backend && npm run migration:run
+```
+
+## Known Legacy Data Issues
+
+### Fixed Issues
+
+**FactoryEmployees Referential Integrity** — The original `FactoryID` values in the `FactoryEmployees` table referenced `Credentials.UserID` instead of `Factories.ID`. This was corrected in the data files:
 
 ```sql
--- Example: Enhanced Order entity
-ALTER TABLE orders ADD COLUMN legacy_id INTEGER;
-ALTER TABLE orders ADD INDEX idx_orders_legacy_id (legacy_id);
+-- adam: UserID 21 → Factory.ID 3 (EU factory)
+-- gary: UserID 22 → Factory.ID 4 (GB factory)
+INSERT INTO factory_employees (id, deleted, name, factory_id) VALUES
+(1, 0, 'adam', 3),
+(2, 0, 'gary', 4);
 ```
 
-#### 2. Relationship Mapping
-Maintain both legacy integer references and new UUID relationships:
+### Remaining Issues (Historical Data)
 
-```sql
--- Example: Order-Customer relationship
-orders.customer_id (UUID) -> customers.id (UUID)
-orders.legacy_customer_id (INTEGER) -> production.Customers.ID (INTEGER)
+These are expected referential integrity issues from years of production use. They are preserved for data fidelity.
+
+| Issue | Count | Details |
+|-------|-------|---------|
+| Orders → Missing Fitters | 16 | Reference fitter IDs 29 (4 orders), 46 (1), 76 (1), 89 (10) — deleted in production |
+| Customers → Missing Fitters | 3 | Same deleted fitter references |
+| OrdersInfo → Missing Orders | ~49,794 | ~3,504 orders were hard-deleted but their line items (order IDs in valid range 19–51646) remain |
+
+The NestJS application handles missing references gracefully. The `validate-data.sh` script reports these as expected warnings.
+
+## Role ID Alignment
+
+Role IDs are aligned between the legacy `user_types` table and the NestJS `RoleEnum`:
+
+| ID | Legacy (`user_types`) | NestJS (`RoleEnum`) | Description |
+|----|----------------------|---------------------|-------------|
+| 1 | fitter | `RoleEnum.fitter` | Saddle fitters (sales) |
+| 2 | admin | `RoleEnum.admin` | System administrators |
+| 3 | factory | `RoleEnum.factory` | Factory users |
+| 4 | customsaddler | `RoleEnum.customsaddler` | Custom saddle makers |
+| 5 | — | `RoleEnum.supervisor` | Supervisors (NestJS-only) |
+| 6 | — | `RoleEnum.user` | Standard users (NestJS-only) |
+
+The `role` table in `postgres/data/system-admin/roles.sql` contains all 6 roles. The migration `1738000000000-CreateRoleTable` is idempotent (`ON CONFLICT DO UPDATE`), so it's safe to run on databases that already have the role table.
+
+## Seat Size Distribution
+
+| Size | Count | Percentage |
+|------|-------|------------|
+| 17.5" | ~28,000 | 58% |
+| 17" | ~9,000 | 19% |
+| 18" | ~8,000 | 17% |
+| Other | ~3,000 | 6% |
+
+API filtering supports both dot and comma notation:
+```
+GET /api/v1/enriched_orders?seatSizes=17
+GET /api/v1/enriched_orders?seatSize=17.5
 ```
 
-#### 3. Data Transformation Process
-1. **Import with Legacy ID**: Insert data preserving original integer IDs
-2. **Generate UUIDs**: Create new primary keys for all records
-3. **Rebuild Relationships**: Map foreign keys using UUID references
-4. **Validate Integrity**: Ensure both ID systems maintain consistency
+## Technical Notes
 
-## Detailed Schema Mappings
+- **Timestamps**: Stored as Unix timestamps (10-digit integers, e.g. `order_time`)
+- **Soft deletes**: Many tables use a `deleted` column (`0` = active, `1` = deleted)
+- **Pricing**: Multi-tier pricing structure (`price1`–`price7`) for different regions/markets
+- **Boolean fields**: Orders table has boolean columns (`fitter_stock`, `custom_order`, `repair`, `demo`, `sponsored`, `rushed`) converted from MySQL integers via `transform-orders-booleans.py`
+- **Sequences**: PostgreSQL sequences auto-reset after data import
+- **Seat sizes**: JSONB column in orders table, European decimal notation (`["17,5"]`), populated via `extract-seat-sizes.sh`
+- **Character encoding**: UTF-8 (utf8mb4 for MySQL, UTF8 for PostgreSQL)
 
-### Orders Table Mapping
+## Directory Structure
 
-| Production Field | Type | Current Field | Type | Notes |
-|------------------|------|---------------|------|-------|
-| `ID` | INT | `legacy_id` | INTEGER | Preserve original ID |
-| - | - | `id` | UUID | New primary key |
-| `CustomerID` | INT | `legacy_customer_id` | INTEGER | Reference preservation |
-| - | - | `customer_id` | UUID | New foreign key |
-| `FitterID` | INT | `legacy_fitter_id` | INTEGER | Reference preservation |
-| - | - | `fitter_id` | UUID | New foreign key |
-| `SaddleID` | INT | `legacy_saddle_id` | INTEGER | Maps to Models entity |
-| `OrderTime` | UNIX timestamp | `created_at` | TIMESTAMP | Convert format |
-| `OrderData` | TEXT | `saddle_specifications` | JSON | Parse and structure |
-| `SpecialNotes` | TEXT | `special_instructions` | TEXT | Direct mapping |
-| `PriceSaddle` | DECIMAL | `total_amount` | DECIMAL | Price calculation |
-
-### Customers Table Mapping
-
-| Production Field | Type | Current Field | Type | Notes |
-|------------------|------|---------------|------|-------|
-| `ID` | INT | `legacy_id` | INTEGER | Preserve original ID |
-| - | - | `id` | UUID | New primary key |
-| `Name` | VARCHAR(255) | `name` | VARCHAR(255) | Direct mapping |
-| `Email` | VARCHAR(300) | `email` | VARCHAR(255) | Direct mapping |
-| `Address` | VARCHAR(255) | `address` | TEXT | Enhanced field |
-| `City` | VARCHAR(255) | `city` | VARCHAR(100) | Direct mapping |
-| `Country` | VARCHAR(255) | `country` | VARCHAR(100) | Direct mapping |
-| `FitterID` | INT | `legacy_fitter_id` | INTEGER | Reference preservation |
-| - | - | `fitter_id` | UUID | New foreign key |
-| `Deleted` | TINYINT | `deleted_at` | TIMESTAMP | Convert boolean to timestamp |
-
-### Fitters Table Mapping
-
-| Production Field | Type | Current Field | Type | Notes |
-|------------------|------|---------------|------|-------|
-| `ID` | INT | `legacy_id` | INTEGER | Preserve original ID |
-| - | - | `id` | UUID | New primary key |
-| `UserID` | INT | `legacy_user_id` | INTEGER | Reference preservation |
-| - | - | `user_id` | UUID | New foreign key |
-| - | - | `specializations` | JSON | New enhanced field |
-| - | - | `certifications` | JSON | New enhanced field |
-| - | - | `region` | VARCHAR(100) | Extract from address |
-
-## Missing Entity Implementation Plan
-
-### Priority 1: Product Catalog Entities
-
-#### 1. Brands Module
-```typescript
-// Based on production Brands table
-export class BrandEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column({ name: 'legacy_id', type: 'integer', unique: true })
-  legacyId: number;
-
-  @Column({ name: 'brand_name', type: 'varchar', length: 200 })
-  brandName: string;
-
-  @Column({ name: 'is_active', type: 'boolean', default: true })
-  isActive: boolean;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
-}
+```
+backend/src/database/
+├── migrations/                              # TypeORM migrations (17 numbered + 1 helper)
+│   ├── 1736700000000-InitialSchema.ts       # All 21 legacy tables
+│   ├── ...
+│   ├── 1770200000000-PopulateUserEmailFromUsername.ts
+│   └── user-view-sql.ts                     # Shared SQL helper
+└── seeds/relational/production-data/
+    ├── README.md                            # In-repo quick reference
+    ├── CLAUDE.md                            # AI assistant context
+    ├── mysql-legacy/                        # Original MySQL data (source)
+    │   ├── ordermys_new.sql                 # Raw production dump (~355 MB)
+    │   ├── schema/                          # MySQL CREATE TABLE statements
+    │   ├── data/                            # MySQL INSERT statements
+    │   │   ├── core-business/
+    │   │   ├── product-catalog/
+    │   │   ├── system-admin/
+    │   │   ├── relationships/
+    │   │   └── audit-logging/
+    │   ├── scripts/                         # MySQL setup, import, validate
+    │   │   ├── docker-compose.yml
+    │   │   ├── setup-mysql.sh
+    │   │   ├── import-data.sh
+    │   │   ├── validate-data.sh
+    │   │   └── fix-referential-integrity.sql
+    │   ├── documentation/                   # Analysis reports
+    │   └── comprehensive-data-analysis-report.md
+    └── postgres/                            # Transformed PostgreSQL data
+        ├── schema/                          # PostgreSQL CREATE TABLE statements
+        │   ├── 01-system-admin.sql
+        │   ├── 02-product-catalog.sql
+        │   ├── 03-core-business.sql
+        │   ├── 04-relationships.sql
+        │   └── 05-audit-logging.sql
+        ├── data/                            # PostgreSQL INSERT statements
+        │   ├── system-admin/               # credentials, user-types, statuses, roles
+        │   ├── product-catalog/            # brands, saddles, leather-types, options, presets
+        │   ├── core-business/              # orders, customers, fitters, factories
+        │   ├── relationships/              # orders-info (1.1M), saddle-leathers, saddle-options-items
+        │   └── audit-logging/              # log, dblog (partial import)
+        └── scripts/
+            ├── docker-compose.yml           # Legacy PostgreSQL 15 container
+            ├── setup-postgres.sh            # Start/reset PostgreSQL container
+            ├── transform-mysql-to-postgres.sh # MySQL → PostgreSQL SQL transformation
+            ├── transform-orders-booleans.py # Integer → boolean conversion for orders
+            ├── import-data.sh               # Import schema + data (multi-env)
+            ├── validate-data.sh             # Record counts + referential integrity checks
+            ├── extract-seat-sizes.sh        # Seat size extraction (multi-env)
+            └── sync-production-data.sh      # Full sync orchestration
 ```
 
-#### 2. Models Module (Maps to Saddles)
-```typescript
-// Based on production Saddles table
-export class ModelEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+## Maintenance
 
-  @Column({ name: 'legacy_id', type: 'integer', unique: true })
-  legacyId: number;
+### Updating Data from a New Production Dump
 
-  @Column({ name: 'brand_id', type: 'uuid' })
-  brandId: string;
+1. Place new `ordermys_new.sql` in `mysql-legacy/`
+2. Run transformation: `cd postgres/scripts && ./transform-mysql-to-postgres.sh`
+3. Run boolean conversion: `python3 transform-orders-booleans.py`
+4. Import: `./import-data.sh`
+5. Validate: `./validate-data.sh`
+6. Extract seat sizes: `./extract-seat-sizes.sh --apply`
 
-  @Column({ name: 'legacy_brand_id', type: 'integer' })
-  legacyBrandId: number;
-
-  @Column({ name: 'model_name', type: 'varchar', length: 255 })
-  modelName: string;
-
-  @Column({ name: 'presets', type: 'json' })
-  presets: Record<string, any>;
-
-  @Column({ name: 'factory_assignments', type: 'json' })
-  factoryAssignments: Record<string, number>;
-
-  @Column({ name: 'is_active', type: 'boolean', default: true })
-  isActive: boolean;
-}
-```
-
-## Migration Implementation
-
-### Phase 1: Schema Preparation
-
-#### Step 1.1: Enhance Existing Entities
-Add legacy_id fields to all existing entities:
-
-```sql
--- Add legacy ID fields to existing tables
-ALTER TABLE customers ADD COLUMN legacy_id INTEGER UNIQUE;
-ALTER TABLE orders ADD COLUMN legacy_id INTEGER UNIQUE;
-ALTER TABLE fitters ADD COLUMN legacy_id INTEGER UNIQUE;
-ALTER TABLE users ADD COLUMN legacy_id INTEGER UNIQUE;
-
--- Add legacy reference fields
-ALTER TABLE orders ADD COLUMN legacy_customer_id INTEGER;
-ALTER TABLE orders ADD COLUMN legacy_fitter_id INTEGER;
-ALTER TABLE orders ADD COLUMN legacy_saddle_id INTEGER;
-
--- Add indexes for performance
-CREATE INDEX idx_customers_legacy_id ON customers(legacy_id);
-CREATE INDEX idx_orders_legacy_id ON orders(legacy_id);
-CREATE INDEX idx_fitters_legacy_id ON fitters(legacy_id);
-```
-
-#### Step 1.2: Create Missing Entity Modules
-Generate the 7 missing product modules using the NestJS boilerplate pattern:
-
+Or use the single-command workflow:
 ```bash
-# Generate missing modules
-cd backend
-npm run generate:resource:relational # For each: brands, models, leathertypes, options, extras, presets, products
+./sync-production-data.sh --from-dump /path/to/ordermys_new.sql
 ```
 
-### Phase 2: Data Transformation Script
-
-#### MySQL to PostgreSQL Conversion Script
-
-```typescript
-// scripts/migrate-production-data.ts
-import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
-
-interface MigrationOptions {
-  dryRun: boolean;
-  batchSize: number;
-  sqlDumpPath: string;
-  table?: string;
-  verbose: boolean;
-}
-
-class ProductionMigrator {
-  constructor() {
-    this.pgPool = new Pool({
-      host: process.env.DATABASE_HOST,
-      port: process.env.DATABASE_PORT,
-      database: process.env.DATABASE_NAME,
-      username: process.env.DATABASE_USERNAME,
-      password: process.env.DATABASE_PASSWORD,
-    });
-
-    this.idMappings = new Map(); // legacyId -> UUID mappings
-  }
-
-  async migrateCustomers() {
-    console.log('Migrating customers...');
-
-    // Read from SQL dump (you'll parse the INSERT statements)
-    const productionCustomers = await this.parseCustomersFromDump();
-
-    for (const customer of productionCustomers) {
-      const uuid = uuidv4();
-
-      // Store mapping for relationship rebuilding
-      this.idMappings.set(`customer_${customer.ID}`, uuid);
-
-      await this.pgPool.query(`
-        INSERT INTO customers (
-          id, legacy_id, email, name, address, city, country,
-          legacy_fitter_id, status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      `, [
-        uuid,
-        customer.ID,
-        customer.Email || '',
-        customer.Name || '',
-        customer.Address || '',
-        customer.City || '',
-        customer.Country || '',
-        customer.FitterID || null,
-        customer.Deleted ? 'inactive' : 'active',
-        new Date(),
-        new Date()
-      ]);
-    }
-
-    console.log(`Migrated ${productionCustomers.length} customers`);
-  }
-
-  async migrateFitters() {
-    console.log('Migrating fitters...');
-    // Similar implementation for fitters
-  }
-
-  async migrateOrders() {
-    console.log('Migrating orders...');
-
-    const productionOrders = await this.parseOrdersFromDump();
-
-    for (const order of productionOrders) {
-      const uuid = uuidv4();
-
-      // Map relationships using stored UUIDs
-      const customerUuid = this.idMappings.get(`customer_${order.CustomerID}`);
-      const fitterUuid = this.idMappings.get(`fitter_${order.FitterID}`);
-
-      await this.pgPool.query(`
-        INSERT INTO orders (
-          id, legacy_id, customer_id, legacy_customer_id,
-          fitter_id, legacy_fitter_id, legacy_saddle_id,
-          order_number, status, total_amount, deposit_paid,
-          special_instructions, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      `, [
-        uuid,
-        order.ID,
-        customerUuid,
-        order.CustomerID,
-        fitterUuid,
-        order.FitterID,
-        order.SaddleID,
-        this.generateOrderNumber(order.ID),
-        this.mapOrderStatus(order.OrderStatus),
-        order.PriceSaddle || 0,
-        order.PriceDeposit || 0,
-        order.SpecialNotes || null,
-        this.convertUnixTimestamp(order.OrderTime),
-        new Date()
-      ]);
-    }
-  }
-
-  generateOrderNumber(legacyId) {
-    return `OMS-${String(legacyId).padStart(6, '0')}`;
-  }
-
-  mapOrderStatus(legacyStatus) {
-    const statusMap = {
-      1: 'pending',
-      7: 'completed',
-      9: 'cancelled',
-      11: 'processing'
-    };
-    return statusMap[legacyStatus] || 'pending';
-  }
-
-  convertUnixTimestamp(unixTime) {
-    return new Date(unixTime * 1000);
-  }
-}
-
-// Usage
-async function runMigration() {
-  const migrator = new ProductionMigrator();
-
-  try {
-    await migrator.migrateCustomers();
-    await migrator.migrateFitters();
-    await migrator.migrateOrders();
-    // ... migrate other entities
-
-    console.log('Migration completed successfully!');
-  } catch (error) {
-    console.error('Migration failed:', error);
-    process.exit(1);
-  }
-}
-
-runMigration();
-```
-
-### Phase 3: Local Database Setup
-
-#### Step 3.1: Prepare Local Environment
-```bash
-# Backup current development database
-pg_dump -h localhost -U your_user your_db > backup_before_migration.sql
-
-# Create fresh database for migration testing
-createdb oms_migration_test
-
-# Run current migrations to set up base schema
-cd backend
-npm run migration:run
-```
-
-#### Step 3.2: Execute Migration
-```bash
-# Parse SQL dump and run migration
-cd backend
-npm run migration:production
-
-# Verify data integrity
-npm run test:migration
-```
-
-### Phase 4: Staging Database Deployment
-
-#### Step 4.1: Digital Ocean PostgreSQL Setup
-```bash
-# Create managed PostgreSQL cluster
-doctl databases create oms-staging --engine pg --version 15 --size db-s-1vcpu-1gb --region nyc3
-
-# Get connection details
-doctl databases connection oms-staging --format ConnectionURI
-
-# Set environment variables for staging
-export DATABASE_URL="postgresql://username:password@host:port/database?sslmode=require"
-```
-
-#### Step 4.2: Deploy Schema and Data
-```bash
-# Run migrations on staging database
-DATABASE_URL=$STAGING_DB_URL npm run migration:run
-
-# Execute production data migration on staging
-DATABASE_URL=$STAGING_DB_URL npx ts-node -r tsconfig-paths/register scripts/migrate-production-data.ts
-
-# Verify deployment
-DATABASE_URL=$STAGING_DB_URL npm run test:migration
-```
-
-## Data Validation & Testing
-
-### Validation Test Suite
-
-#### Test 1: Data Integrity Verification
-```typescript
-// tests/migration/data-integrity.test.ts
-describe('Production Data Migration Validation', () => {
-  test('should preserve all customer records with legacy IDs', async () => {
-    const customers = await customerRepository.find();
-    const legacyIds = customers.map(c => c.legacyId);
-
-    expect(legacyIds).toHaveLength(expectedCustomerCount);
-    expect(legacyIds.every(id => id !== null)).toBe(true);
-    expect(new Set(legacyIds).size).toBe(legacyIds.length); // No duplicates
-  });
-
-  test('should maintain order-customer relationships correctly', async () => {
-    const orders = await orderRepository.find({ relations: ['customer'] });
-
-    for (const order of orders) {
-      if (order.legacyCustomerId) {
-        const customer = await customerRepository.findOne({
-          where: { legacyId: order.legacyCustomerId }
-        });
-
-        expect(customer).toBeTruthy();
-        expect(order.customerId).toBe(customer.id);
-      }
-    }
-  });
-
-  test('should convert timestamps correctly', async () => {
-    const orders = await orderRepository.find();
-
-    for (const order of orders) {
-      expect(order.createdAt).toBeInstanceOf(Date);
-      expect(order.createdAt.getTime()).toBeGreaterThan(new Date('2012-01-01').getTime());
-      expect(order.createdAt.getTime()).toBeLessThan(new Date().getTime());
-    }
-  });
-});
-```
-
-#### Test 2: Performance Validation
-```typescript
-// tests/migration/performance.test.ts
-describe('Migration Performance Validation', () => {
-  test('should query customers by legacy ID efficiently', async () => {
-    const start = performance.now();
-
-    const customer = await customerRepository.findOne({
-      where: { legacyId: 1 }
-    });
-
-    const duration = performance.now() - start;
-    expect(duration).toBeLessThan(100); // Should be under 100ms
-    expect(customer).toBeTruthy();
-  });
-
-  test('should handle large order queries efficiently', async () => {
-    const start = performance.now();
-
-    const orders = await orderRepository.find({
-      relations: ['customer', 'fitter'],
-      take: 100
-    });
-
-    const duration = performance.now() - start;
-    expect(duration).toBeLessThan(500); // Should be under 500ms
-    expect(orders).toHaveLength(100);
-  });
-});
-```
-
-#### Test 3: Business Logic Validation
-```typescript
-// tests/migration/business-logic.test.ts
-describe('Business Logic Validation', () => {
-  test('should calculate order totals correctly from legacy data', async () => {
-    const orders = await orderRepository.find();
-
-    for (const order of orders) {
-      expect(order.totalAmount).toBeGreaterThanOrEqual(0);
-      expect(order.depositPaid).toBeGreaterThanOrEqual(0);
-      expect(order.balanceOwing).toBe(order.totalAmount - order.depositPaid);
-    }
-  });
-
-  test('should maintain customer-fitter associations', async () => {
-    const customers = await customerRepository.find({
-      relations: ['fitter']
-    });
-
-    const customersWithFitters = customers.filter(c => c.fitterId);
-
-    for (const customer of customersWithFitters) {
-      expect(customer.fitter).toBeTruthy();
-      expect(customer.fitter.id).toBe(customer.fitterId);
-    }
-  });
-});
-```
-
-## Deployment Procedures
-
-### Local Development Deployment
-
-#### Prerequisites
-- PostgreSQL 15+ installed and running
-- Node.js 18+ with npm
-- Access to production SQL dump file
-
-#### Step-by-Step Deployment
-
-1. **Backup Current Database**
-   ```bash
-   pg_dump oms_nest_dev > backup_$(date +%Y%m%d_%H%M%S).sql
-   ```
-
-2. **Reset Development Database**
-   ```bash
-   dropdb oms_nest_dev && createdb oms_nest_dev
-   ```
-
-3. **Run Current Migrations**
-   ```bash
-   cd backend
-   npm run migration:run
-   ```
-
-4. **Execute Production Migration**
-   ```bash
-   # Place ordermys_new.sql in scripts/data/
-   node scripts/migrate-production-data.js
-   ```
-
-5. **Validate Migration**
-   ```bash
-   npm run test:migration
-   ```
-
-6. **Start Development Server**
-   ```bash
-   npm run start:dev
-   ```
-
-### Staging Environment Deployment
-
-#### Prerequisites
-- Digital Ocean managed PostgreSQL cluster
-- Environment variables configured
-- CI/CD pipeline access
-
-#### Step-by-Step Deployment
-
-1. **Create Staging Database**
-   ```bash
-   doctl databases create oms-staging-v2 \
-     --engine pg \
-     --version 15 \
-     --size db-s-2vcpu-4gb \
-     --region nyc1
-   ```
-
-2. **Configure Environment**
-   ```bash
-   # Set in staging environment
-   export DATABASE_URL="postgresql://user:pass@host:port/db?sslmode=require"
-   export NODE_ENV="staging"
-   export REDIS_URL="redis://staging-redis:6379"
-   ```
-
-3. **Deploy Schema**
-   ```bash
-   # Through CI/CD or manual deployment
-   npm run build
-   npm run migration:run
-   ```
-
-4. **Execute Production Data Migration**
-   ```bash
-   # Secure upload of production SQL dump
-   scp ordermys_new.sql staging-server:/tmp/
-
-   # Run migration on staging
-   ssh staging-server 'cd /app && node scripts/migrate-production-data.js'
-   ```
-
-5. **Validation and Testing**
-   ```bash
-   npm run test:e2e:staging
-   npm run test:migration:validate
-   ```
-
-6. **Performance Optimization**
-   ```bash
-   # Run database optimization
-   npm run db:optimize:indexes
-   npm run db:analyze:performance
-   ```
-
-## Risk Assessment & Mitigation
-
-### High-Risk Areas
-
-1. **Data Loss During Migration**
-   - **Risk**: Accidental data corruption or loss
-   - **Mitigation**: Full database backups before each step, rollback procedures
-
-2. **Relationship Mapping Errors**
-   - **Risk**: Broken foreign key relationships between entities
-   - **Mitigation**: Comprehensive validation tests, dual ID system verification
-
-3. **Performance Degradation**
-   - **Risk**: Slow queries due to large dataset
-   - **Mitigation**: Proper indexing, query optimization, pagination
-
-4. **Character Encoding Issues**
-   - **Risk**: Data corruption during MySQL→PostgreSQL conversion
-   - **Mitigation**: UTF-8 validation, character encoding tests
-
-### Low-Risk Areas
-
-1. **Timestamp Conversion**
-   - **Risk**: Minor timezone discrepancies
-   - **Mitigation**: UTC standardization, timestamp validation
-
-2. **Price Calculation Differences**
-   - **Risk**: Floating point precision variations
-   - **Mitigation**: Decimal type usage, financial calculation tests
-
-## Success Criteria
-
-### Migration Success Metrics
-
-1. **Data Completeness**: 100% of production records migrated successfully
-2. **Relationship Integrity**: All foreign key relationships maintained
-3. **Performance**: API response times <100ms for standard queries
-4. **Backward Compatibility**: Legacy ID references functional
-5. **Test Coverage**: >95% validation test coverage
-
-### Acceptance Testing
-
-- [ ] All production customers migrated with UUIDs and legacy IDs
-- [ ] All production orders migrated with correct relationships
-- [ ] All production fitters mapped to user accounts
-- [ ] New product entities created for brands, models, etc.
-- [ ] API endpoints functional with production data
-- [ ] Performance benchmarks met for large datasets
-- [ ] Rollback procedures tested and verified
-
-## Timeline & Resources
-
-### Estimated Timeline: 5-7 Days
-
-**Day 1-2: Schema Preparation**
-- Add legacy_id fields to existing entities
-- Create missing product entity modules
-- Set up migration infrastructure
-
-**Day 3-4: Data Migration Implementation**
-- Develop MySQL→PostgreSQL conversion script
-- Test migration on sample data
-- Implement validation test suite
-
-**Day 5-6: Local and Staging Deployment**
-- Execute full local migration
-- Deploy to staging environment
-- Performance optimization and testing
-
-**Day 7: Validation and Documentation**
-- Comprehensive validation testing
-- Documentation finalization
-- Rollback procedure verification
-
-### Required Resources
-
-- **Database Administrator**: PostgreSQL optimization and monitoring
-- **Backend Developer**: NestJS entity creation and API testing
-- **DevOps Engineer**: Staging environment setup and CI/CD integration
-- **QA Engineer**: Validation testing and acceptance criteria verification
-
-## Conclusion
-
-This migration plan provides a comprehensive, low-risk approach to integrating production data into the current NestJS backend system. The dual ID strategy ensures zero data loss while enabling modern UUID-based architecture. With proper execution of the outlined phases, the migration will preserve all historical data while positioning the system for scalable future growth.
-
-The plan prioritizes data integrity, performance, and backward compatibility while providing clear rollback procedures for risk mitigation. Upon completion, the system will have full production data available in a modern, maintainable architecture ready for continued development.
+### Adding New Tables
+
+1. Add MySQL schema to `mysql-legacy/schema/`
+2. Add MySQL data to the appropriate `mysql-legacy/data/` subdirectory
+3. Update `transform-mysql-to-postgres.sh` with new table/column mappings
+4. Add PostgreSQL schema to the appropriate `postgres/schema/` file
+5. Update import scripts with new file references
+6. Update `validate-data.sh` expected counts
