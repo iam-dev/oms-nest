@@ -1,0 +1,5 @@
+# Bitnami SealedSecrets - values are asymmetrically encrypted, not plaintext secrets
+# These are false positives: key names like AUTH_JWT_SECRET look sensitive but values
+# are encrypted ciphertext that can only be decrypted by the cluster's sealed-secrets controller.
+kubernetes/staging-v2/sealed-secret.yaml
+kubernetes/staging/sealed-secret.yaml
