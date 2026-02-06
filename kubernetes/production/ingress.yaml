@@ -1,0 +1,134 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oms-nest-production-ingress
+  namespace: oms-nest-production
+  labels:
+    app: oms
+    environment: production
+  annotations:
+    # NGINX Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+
+    # Rate limiting (higher for production)
+    nginx.ingress.kubernetes.io/rate-limit-connections: "50"
+    nginx.ingress.kubernetes.io/rate-limit-requests-per-minute: "600"
+
+    # CORS settings
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://nest-production.ordermysaddle.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+
+    # TLS and certificate management
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Request size limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "50m"
+
+    # Timeouts (longer for production)
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+  - hosts:
+    - nest-production.ordermysaddle.com
+    - api-nest-production.ordermysaddle.com
+    secretName: oms-nest-production-tls-cert
+
+  rules:
+  # Frontend routing
+  - host: nest-production.ordermysaddle.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: oms-frontend-service
+            port:
+              number: 80
+
+  # Backend API routing
+  - host: api-nest-production.ordermysaddle.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: oms-backend-service
+            port:
+              number: 80
+
+---
+# Certificate Issuer for Let's Encrypt (production environment)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    environment: production
+spec:
+  acme:
+    # ACME server for Let's Encrypt production
+    server: https://acme-v02.api.letsencrypt.org/directory
+
+    # Email address for important account notifications
+    email: devops@ordermysaddle.com
+
+    # Private key secret ref
+    privateKeySecretRef:
+      name: letsencrypt-prod-private-key
+
+    # ACME challenge solver
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+
+---
+# Load Balancer Service for external access (if needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: oms-nest-production-loadbalancer
+  namespace: oms-nest-production
+  labels:
+    app: oms
+    environment: production
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-enable-proxy-protocol: "true"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-check-interval-seconds: "10"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-unhealthy-threshold: "3"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+  selector:
+    app: nginx-ingress
+    component: controller

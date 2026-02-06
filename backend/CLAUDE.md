@@ -61,7 +61,7 @@ src/[entity]/
 
 ### Key Patterns
 
-- **Dual ID System**: Entities use both UUID (`id`) and legacy integer (`legacyId`) for migration compatibility
+- **ID Strategy**: Legacy entities use integer IDs (`SERIAL`), new entities (extras, files) use UUID. Only User has a dual ID (`id` UUID + `legacyId` integer)
 - **JWT Authentication**: All controllers use `@UseGuards(AuthGuard("jwt"))` with role-based access
 - **Row Level Security (RLS)**: Data isolation via PostgreSQL RLS policies
 - **Redis Caching**: 5-minute TTL with automatic invalidation
@@ -111,9 +111,9 @@ DATABASE_NAME=oms_legacy
 
 ## API
 
-- **Swagger UI**: `http://localhost:3000/docs`
-- **Health Check**: `http://localhost:3000/health`
-- **Bearer Auth**: JWT tokens required, obtain via `/api/v1/auth/email/login`
+- **Swagger UI**: `http://localhost:3001/docs`
+- **Health Check**: `http://localhost:3001/api/health`
+- **Bearer Auth**: JWT tokens required, obtain via `POST /api/v1/auth/email/login`
 
 ## Testing
 
@@ -187,7 +187,31 @@ Defined in `src/roles/roles.enum.ts`:
 
 ## Documentation
 
-- Boilerplate docs: `docs/`
-- Entity implementation guide: `docs/entity-implementation-guide.md`
-- Architecture: `docs/architecture.md`
-- Production data: `src/database/seeds/relational/production-data/README.md`
+### Project-level (root `docs/`)
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](../docs/getting-started.md) | Development environment setup |
+| [Architecture](../docs/architecture.md) | Full system architecture |
+| [API Reference](../docs/api-reference.md) | All REST endpoints |
+| [Development Workflow](../docs/development-workflow.md) | Branching, CI/CD, testing |
+| [Deployment Guide](../docs/deployment.md) | Production deployment |
+| [Staging Deployment](../docs/staging-deployment.md) | Staging environment |
+| [Migration Quick Start](../docs/migration-readme.md) | Legacy data import |
+| [Production Data Migration](../docs/production-data-migration.md) | Full migration reference |
+
+### Backend-specific (`backend/docs/`)
+
+- [Entity Implementation Guide](docs/entity-implementation-guide.md) — Step-by-step entity implementation
+- [Architecture (Boilerplate)](docs/architecture.md) — Hexagonal architecture reference
+- [Database](docs/database.md) — TypeORM migrations, seeds, schema
+- [Auth](docs/auth.md) — Authentication setup
+- [Serialization](docs/serialization.md) — Class serialization
+- [CLI](docs/cli.md) — Command line tools
+- [File Uploading](docs/file-uploading.md) — File handling
+- [Tests](docs/tests.md) — Testing patterns
+
+### In-repo references
+
+- [Production Data README](src/database/seeds/relational/production-data/README.md)
+- [Production Data CLAUDE.md](src/database/seeds/relational/production-data/CLAUDE.md)

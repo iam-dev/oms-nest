@@ -3,11 +3,11 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: oms-redis
-  namespace: oms-nest-staging
+  namespace: oms-nest-production
   labels:
     app: oms-redis
     component: cache
-    environment: staging
+    environment: production
 spec:
   serviceName: oms-redis-service
   replicas: 1
@@ -19,7 +19,7 @@ spec:
       labels:
         app: oms-redis
         component: cache
-        environment: staging
+        environment: production
     spec:
       securityContext:
         runAsNonRoot: true
@@ -36,13 +36,13 @@ spec:
         - containerPort: 6379
           name: redis
 
-        # Resource limits
+        # Resource limits for production
         resources:
           requests:
-            memory: "64Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
 
         # Security context
@@ -103,18 +103,18 @@ spec:
       storageClassName: do-block-storage
       resources:
         requests:
-          storage: 1Gi
+          storage: 2Gi
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: oms-redis-service
-  namespace: oms-nest-staging
+  namespace: oms-nest-production
   labels:
     app: oms-redis
     component: cache
-    environment: staging
+    environment: production
 spec:
   type: ClusterIP
   ports:
@@ -130,13 +130,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: oms-redis-config
-  namespace: oms-nest-staging
+  namespace: oms-nest-production
   labels:
     app: oms-redis
-    environment: staging
+    environment: production
 data:
   redis.conf: |
-    # Redis configuration for staging environment
+    # Redis configuration for production environment
 
     # Basic settings
     bind 0.0.0.0
@@ -144,15 +144,15 @@ data:
     timeout 300
 
     # Memory management
-    maxmemory 200mb
+    maxmemory 500mb
     maxmemory-policy allkeys-lru
 
-    # Persistence (disabled for staging cache)
-    save ""
-    appendonly no
+    # Persistence (enabled for production)
+    save "900 1"
+    appendonly yes
 
-    # Security settings (disabled: Redis is internal-only within K8s cluster)
-    protected-mode no
+    # Security settings
+    protected-mode yes
 
     # Logging
     loglevel notice

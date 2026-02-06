@@ -1,371 +1,253 @@
 # Getting Started
 
-This guide will help you set up the complete OMS development environment and get both the backend and frontend applications running locally.
+This guide covers setting up the OMS development environment and running the backend and frontend locally.
 
-## 📋 Prerequisites
+## Prerequisites
 
-### System Requirements
+- **Node.js 20+** and **npm 8+**
+- **Docker Desktop** (required for PostgreSQL, Redis, and other services)
+- **Git 2.30+**
 
-**Required Software**
-- **Node.js 18+** - JavaScript runtime for both frontend and backend
-- **npm 8+** - Package manager (or yarn 1.22+)
-- **Git 2.30+** - Version control
-- **PostgreSQL 14+** - Database server
-- **Redis 6+** - Cache and session storage
+Optional but recommended:
 
-**Recommended Tools**
-- **Docker Desktop** - Container runtime for isolated development
-- **VSCode** - IDE with excellent TypeScript support
-- **Postman/Insomnia** - API testing
-- **pgAdmin/DBeaver** - Database management
+- **VSCode** with TypeScript, ESLint, and Prettier extensions
+- **Postman** or **Insomnia** for API testing
 
-### Development Environment Setup
+## Repository Structure
 
-**macOS (Homebrew)**
-```bash
-# Install core dependencies
-brew install node postgresql@14 redis git
-
-# Start services
-brew services start postgresql@14
-brew services start redis
-
-# Optional: Install Docker Desktop from https://docker.com
+```
+oms_nest/
+├── backend/               # NestJS 11 API (port 3001)
+├── frontend/              # Next.js 15 UI (port 3000)
+├── e2e/                   # Playwright E2E tests
+├── kubernetes/            # K8s manifests (staging, production)
+├── kube/                  # Helm charts
+├── docs/                  # Documentation
+├── docker-compose.yml     # Full-stack Docker Compose
+└── .husky/                # Git hooks (pre-commit, pre-push)
 ```
 
-**Ubuntu/Debian**
-```bash
-# Install Node.js
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
+## Quick Start
 
-# Install PostgreSQL
-sudo apt-get install postgresql postgresql-contrib
+### Option A: Services via Docker, Code Locally (Recommended)
 
-# Install Redis
-sudo apt-get install redis-server
-
-# Install Git
-sudo apt-get install git
-```
-
-**Windows (via WSL2 recommended)**
-```powershell
-# Install WSL2 with Ubuntu
-wsl --install -d Ubuntu
-
-# Then follow Ubuntu instructions above
-```
-
-## 🚀 Quick Setup
-
-### 1. Repository Setup
+Run infrastructure in Docker, run backend and frontend natively for hot reload.
 
 ```bash
-# Clone the repository
-git clone git@github-iam-dev:Order-My-Saddle/saddle-oms.git
-cd saddle-oms
+# 1. Clone the repository
+git clone git@github-iam-dev:iam-dev/oms-nest.git
+cd oms_nest
 
-# Verify repository structure
-ls -la
-# Should show: backend/ frontend/ e2e/ docs/ kubernetes/ etc.
-```
-
-### 2. Database Setup
-
-**Option A: Local PostgreSQL**
-```bash
-# Create database and user
-sudo -u postgres psql
-CREATE DATABASE oms_development;
-CREATE USER oms_user WITH PASSWORD 'oms_password';
-GRANT ALL PRIVILEGES ON DATABASE oms_development TO oms_user;
-\q
-```
-
-**Option B: Docker PostgreSQL**
-```bash
-# Start PostgreSQL in Docker
-docker run --name oms-postgres \
-  -e POSTGRES_DB=oms_development \
-  -e POSTGRES_USER=oms_user \
-  -e POSTGRES_PASSWORD=oms_password \
-  -p 5432:5432 \
-  -d postgres:14-alpine
-```
-
-### 3. Backend Setup
-
-```bash
+# 2. Start infrastructure services
 cd backend
+docker compose up -d postgres redis maildev adminer
 
-# Install dependencies
+# 3. Install backend dependencies and initialize database
 npm install
+cp .env.local .env          # Local dev config (already configured for Docker services)
+npm run migration:run       # Apply database migrations
+npm run seed:run:relational # Seed test users (non-production only)
 
-# Setup environment variables
-cp .env.example .env
-
-# Edit .env file with your database connection
-# DATABASE_URL=postgresql://oms_user:oms_password@localhost:5432/oms_development
-
-# Run database migrations
-npm run migration:run
-
-# Seed the database with sample data
-npm run seed:run:relational
-
-# Start the development server
+# 4. Start the backend (port 3001)
 npm run start:dev
-```
 
-**Verify backend is running:**
-- Backend API: http://localhost:3001
-- Swagger documentation: http://localhost:3001/docs
-- Health check: http://localhost:3001/health
-
-### 4. Frontend Setup
-
-```bash
-# Open new terminal
+# 5. In a new terminal, start the frontend (port 3000)
 cd frontend
-
-# Install dependencies
 npm install
-
-# Setup environment variables
-cp .env.example .env.local
-
-# Edit .env.local
-# NEXT_PUBLIC_API_URL=http://localhost:3001
-
-# Start the development server
 npm run dev
 ```
 
-**Verify frontend is running:**
-- Frontend application: http://localhost:3000
-- Should redirect to login page
+### Option B: Full Stack in Docker
 
-### 5. Test the Complete Setup
+Run everything (backend, frontend, and services) in Docker.
 
 ```bash
-# Run backend tests
-cd backend
-npm run test
+cd oms_nest
 
-# Run frontend tests
-cd ../frontend
-npm run test
+# Start the full stack
+docker compose up -d
 
-# Run E2E tests (optional)
-cd ../e2e
-npm install
-npx playwright install
-npx playwright test
+# The override file (docker-compose.override.yml) automatically:
+# - Runs migrations
+# - Seeds test users
+# - Starts backend in watch mode
 ```
 
-## 🔐 Initial Login
+## Docker Services
 
-### Default Users
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| PostgreSQL 17 | 5432 | — | Database (`oms_nest`, user: `oms`) |
+| Redis 7 | 6379 | — | Cache and sessions |
+| Maildev | 1080 / 1025 | http://localhost:1080 | Email testing UI |
+| Adminer | 8080 | http://localhost:8080 | Database admin UI |
+| Backend | 3001 | http://localhost:3001 | NestJS API |
+| Frontend | 3000 | http://localhost:3000 | Next.js UI |
 
-The seeded database includes these test users:
+## Environment Configuration
 
-| Username | Password | Role | Description |
-|----------|----------|------|-------------|
-| `admin` | `admin123` | ADMIN | System administrator |
-| `supervisor` | `super123` | SUPERVISOR | Operations supervisor |
-| `fitter1` | `fitter123` | FITTER | Saddle fitter |
-| `supplier1` | `supplier123` | SUPPLIER | Product supplier |
-| `customer1` | `customer123` | USER | End customer |
+### Backend (`backend/.env`)
 
-### First Login Steps
-
-1. Navigate to http://localhost:3000
-2. Login with admin credentials: `admin` / `admin123`
-3. Verify the dashboard loads with sample data
-4. Navigate through different sections (Orders, Customers, etc.)
-
-## 🛠️ Development Workflow
-
-### Code Organization
-
-```
-saddle-oms/
-├── backend/           # NestJS API server
-│   ├── src/           # Source code
-│   ├── test/          # Unit tests
-│   └── docs/          # Backend-specific docs
-├── frontend/          # Next.js application
-│   ├── app/           # App router pages
-│   ├── components/    # React components
-│   └── docs/          # Frontend-specific docs
-├── e2e/               # End-to-end tests
-├── kubernetes/        # K8s deployment files
-├── docs/              # Main documentation
-└── docker-compose.yml # Local development stack
-```
-
-### Development Scripts
-
-**Backend (from `/backend` directory)**
-```bash
-npm run start:dev      # Start with hot reload
-npm run build          # Build for production
-npm run test           # Run unit tests
-npm run test:e2e       # Run integration tests
-npm run lint           # Check code style
-npm run migration:generate  # Create DB migration
-```
-
-**Frontend (from `/frontend` directory)**
-```bash
-npm run dev            # Start with hot reload
-npm run build          # Build for production
-npm run test           # Run unit tests
-npm run lint           # Check code style
-npm run type-check     # TypeScript validation
-```
-
-**E2E Testing (from `/e2e` directory)**
-```bash
-npx playwright test           # Run all E2E tests
-npx playwright test --ui      # Run with UI mode
-npx playwright test --debug   # Debug mode
-```
-
-### Git Workflow
+Copy from the provided template:
 
 ```bash
-# Create feature branch
-git checkout -b feature/add-product-catalog
-
-# Make changes and commit
-git add .
-git commit -m "feat: add product catalog API endpoints
-
-- Implement brands, models, and leathertypes modules
-- Add CRUD operations with validation
-- Include comprehensive tests
-
-🤖 Generated with Claude Code"
-
-# Push and create PR
-git push -u origin feature/add-product-catalog
-gh pr create --title "Add Product Catalog" --body "Implements missing product entities"
+cp backend/.env.local backend/.env
 ```
 
-## 🐳 Docker Development
+Key variables (defaults match Docker Compose):
 
-### Full Stack with Docker Compose
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_PORT` | `3001` | Backend HTTP port |
+| `DATABASE_HOST` | `localhost` | PostgreSQL host |
+| `DATABASE_PORT` | `5432` | PostgreSQL port |
+| `DATABASE_USERNAME` | `oms` | PostgreSQL user |
+| `DATABASE_PASSWORD` | `oms_password` | PostgreSQL password |
+| `DATABASE_NAME` | `oms_nest` | PostgreSQL database |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `AUTH_JWT_SECRET` | `secret` | JWT signing key |
+| `MAIL_HOST` | `localhost` | SMTP host (Maildev) |
+| `MAIL_PORT` | `1025` | SMTP port |
+
+### Frontend (`frontend/.env.local`)
+
+Already configured for local development:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_DEBUG_LOG=true
+```
+
+## Verify the Setup
+
+### Backend
+
+- **Swagger UI**: http://localhost:3001/docs
+- **Health check**: http://localhost:3001/api/health (checks DB, Redis, memory, disk)
+- **Readiness probe**: http://localhost:3001/api/health/ready
+- **Liveness probe**: http://localhost:3001/api/health/live
+
+### Frontend
+
+- **Application**: http://localhost:3000 (redirects to login page)
+
+## Seeded Test Users
+
+The seed script (`npm run seed:run:relational`) creates these users in the `credentials` table. These are only created in non-production environments.
+
+| Username | Password | Role |
+|----------|----------|------|
+| `admin@omsaddle.com` | `AdminPass123!` | ADMIN (2) |
+| `sarah.thompson@fitters.com` | `FitterPass123!` | FITTER (1) |
+| `testuser` | `TestUser123!` | USER (6) |
+
+Login via the frontend at http://localhost:3000 or via the API:
 
 ```bash
-# Start entire stack
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop stack
-docker-compose down
-
-# Reset with fresh data
-docker-compose down -v
-docker-compose up -d
+curl -X POST http://localhost:3001/api/v1/auth/email/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@omsaddle.com", "password": "AdminPass123!"}'
 ```
 
-### Individual Services
+The response includes a JWT `token` and `refreshToken`. Use the token as a Bearer header for authenticated requests.
 
-```bash
-# Backend only
-docker-compose up backend postgres redis
+## Development Commands
 
-# Frontend only (requires backend running)
-docker-compose up frontend
+### Backend (`cd backend`)
 
-# Database only
-docker-compose up postgres redis
-```
+| Command | Purpose |
+|---------|---------|
+| `npm run start:dev` | Dev server with hot reload |
+| `npm run start:debug` | Debug mode (attach Chrome DevTools via `chrome://inspect`) |
+| `npm run build` | Production build to `dist/` |
+| `npm run lint` | ESLint |
+| `npm run format` | Prettier |
+| `npm run test` | Unit tests (Jest) |
+| `npm run test:watch` | Watch mode |
+| `npm run test:cov` | Coverage report |
+| `npm run test:unit` | Unit tests only (`test/unit/`) |
+| `npm run test:e2e` | E2E API tests with database |
+| `npm run migration:generate -- src/database/migrations/Name` | Generate migration from entity changes |
+| `npm run migration:run` | Apply pending migrations |
+| `npm run migration:revert` | Rollback last migration |
+| `npm run seed:run:relational` | Seed test users |
+| `npm run generate:resource:relational` | Scaffold a new entity module (Hygen) |
 
-## 🧪 Testing Strategy
+### Frontend (`cd frontend`)
 
-### Test Pyramid
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Dev server with Turbopack (port 3000) |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm run type-check` | TypeScript validation (`tsc --noEmit`) |
+| `npm test` | Component tests (Jest + React Testing Library) |
 
-```
-E2E Tests (Playwright)     → Complete user workflows
-Integration Tests (Jest)   → API + Database interactions
-Unit Tests (Jest)          → Individual functions/classes
-Static Analysis (ESLint)   → Code quality
-```
+### E2E Tests (`cd e2e`)
 
-### Running Tests
+| Command | Purpose |
+|---------|---------|
+| `npx playwright test` | Run all tests |
+| `npx playwright test --headed` | Visible browser |
+| `npx playwright test --ui` | Interactive UI mode |
+| `npm run test:staging` | Run against staging environment |
+| `npm run test:smoke` | Smoke tests only (`@smoke` tag) |
 
-```bash
-# Unit tests only
-npm run test:unit
+## Git Hooks (Husky)
 
-# Integration tests
-npm run test:integration
+Git hooks run automatically and enforce code quality:
 
-# All backend tests
-npm run test
+### Pre-commit
 
-# E2E tests
-npm run test:e2e
+Runs on every `git commit`:
 
-# Watch mode for development
-npm run test:watch
+1. **Gitleaks** secret scanning (if installed: `brew install gitleaks`)
+2. **Backend**: `npm run lint` + `tsc --noEmit`
+3. **Frontend**: `npm run lint` + `npm run type-check`
 
-# Generate coverage report
-npm run test:coverage
-```
+### Pre-push
 
-### Test Data Management
+Runs before every `git push`:
 
-```bash
-# Reset test database
-npm run test:db:reset
+1. **Backend**: `npm run test`
+2. **Frontend**: `npm run test`
 
-# Seed test data
-npm run test:db:seed
+## Common Development Tasks
 
-# Run migrations on test DB
-npm run migration:run:test
-```
-
-## 🔧 Common Development Tasks
-
-### Adding New API Endpoint
+### Add a New Backend Entity
 
 ```bash
 cd backend
 
-# Generate new resource
+# 1. Scaffold the entity module (interactive prompts)
 npm run generate:resource:relational
-# Follow prompts for entity name, properties, etc.
 
-# Generate migration
-npm run migration:generate -- src/database/migrations/AddNewEntity
+# 2. Review generated files in src/<entity>/
 
-# Run migration
+# 3. Generate a database migration
+npm run migration:generate -- src/database/migrations/AddEntityName
+
+# 4. Apply the migration
 npm run migration:run
 
-# Start development server
+# 5. Start dev server and test via Swagger UI
 npm run start:dev
 ```
 
-### Adding New Frontend Page
+### Add a New Frontend Page
 
 ```bash
 cd frontend
 
-# Create new page
+# 1. Create the route directory
 mkdir -p app/new-feature
-touch app/new-feature/page.tsx
 
-# Add to navigation (if needed)
-# Edit components/layout/Sidebar.tsx
+# 2. Create page.tsx following existing patterns (e.g., app/orders/page.tsx)
 
-# Start development server
+# 3. Add navigation entry in the sidebar component
+
+# 4. Start dev server
 npm run dev
 ```
 
@@ -374,171 +256,117 @@ npm run dev
 ```bash
 cd backend
 
-# View current schema
-npm run schema:log
-
 # Generate migration from entity changes
-npm run migration:generate -- src/database/migrations/DescribeMigration
+npm run migration:generate -- src/database/migrations/DescribeChange
 
-# Run pending migrations
+# Apply pending migrations
 npm run migration:run
 
-# Revert last migration
+# Rollback the last migration
 npm run migration:revert
 
-# Drop schema and recreate
+# Drop all tables and recreate (destructive!)
 npm run schema:drop
 npm run migration:run
 npm run seed:run:relational
 ```
 
-## 🚨 Troubleshooting
+### Import Production Data
 
-### Common Issues
+To work with real production data locally, see [Production Data Migration](./production-data-migration.md).
 
-**Port Already in Use**
+Quick summary:
+
 ```bash
-# Kill processes on specific ports
-npx kill-port 3000  # Frontend
-npx kill-port 3001  # Backend
-npx kill-port 5432  # PostgreSQL
-npx kill-port 6379  # Redis
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+./setup-postgres.sh              # PostgreSQL 15 container (port 5433)
+./transform-mysql-to-postgres.sh # First time only
+./import-data.sh                 # Import ~3M records
+./validate-data.sh               # Verify import
 ```
 
-**Database Connection Issues**
+## Troubleshooting
+
+### Port Already in Use
+
 ```bash
-# Check PostgreSQL status
-pg_isready -h localhost -p 5432
+# Find what's using a port
+lsof -i :3001  # Backend
+lsof -i :3000  # Frontend
+lsof -i :5432  # PostgreSQL
+lsof -i :6379  # Redis
 
-# Test connection
-psql -h localhost -U oms_user -d oms_development
-
-# Restart PostgreSQL (macOS)
-brew services restart postgresql@14
-
-# Restart PostgreSQL (Ubuntu)
-sudo systemctl restart postgresql
+# Kill a specific port
+npx kill-port 3001
 ```
 
-**Node Version Issues**
-```bash
-# Check current version
-node --version
+### Docker Services Not Starting
 
-# Install/use correct version with nvm
-nvm install 18
-nvm use 18
-nvm alias default 18
+```bash
+# Check service logs
+docker compose -f backend/docker-compose.yaml logs postgres
+docker compose -f backend/docker-compose.yaml logs redis
+
+# Restart services
+docker compose -f backend/docker-compose.yaml down
+docker compose -f backend/docker-compose.yaml up -d postgres redis maildev adminer
 ```
 
-**Permission Issues (Linux/macOS)**
-```bash
-# Fix npm permissions
-sudo chown -R $(whoami) ~/.npm
+### Database Connection Refused
 
-# Use Node Version Manager instead
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+```bash
+# Verify PostgreSQL is running
+docker compose -f backend/docker-compose.yaml ps
+
+# Test connection manually
+psql -h localhost -U oms -d oms_nest
+
+# Ensure .env matches Docker Compose settings:
+# DATABASE_HOST=localhost, DATABASE_PORT=5432, DATABASE_USERNAME=oms
 ```
 
-**Cache Issues**
-```bash
-# Clear npm cache
-npm cache clean --force
+### Migration Errors
 
-# Clear Next.js cache
+```bash
+cd backend
+
+# Check current migration state
+npm run typeorm -- --dataSource=src/database/data-source.ts migration:show
+
+# If stuck, revert and re-run
+npm run migration:revert
+npm run migration:run
+```
+
+### Node Version Issues
+
+```bash
+node --version  # Should be 20+
+
+# Use nvm to manage versions
+nvm install 20
+nvm use 20
+nvm alias default 20
+```
+
+### Cache / Build Issues
+
+```bash
+# Clear Next.js build cache
 rm -rf frontend/.next
 
-# Clear TypeORM cache
+# Clear backend build cache
 rm -rf backend/dist
 
-# Reinstall all dependencies
-rm -rf node_modules package-lock.json
-npm install
+# Reinstall dependencies
+cd backend && rm -rf node_modules && npm install
+cd frontend && rm -rf node_modules && npm install
 ```
 
-### Debug Mode
+## Next Steps
 
-**Backend Debugging**
-```bash
-# Start with debugging enabled
-npm run start:debug
-
-# Connect debugger in VSCode or Chrome DevTools
-# URL: chrome://inspect
-```
-
-**Frontend Debugging**
-```bash
-# Enable verbose logging
-NODE_ENV=development npm run dev
-
-# View detailed build information
-npm run build -- --debug
-```
-
-### Environment Variables Debugging
-
-```bash
-# Check environment variables
-npm run env:check
-
-# Print all env vars (be careful with secrets!)
-printenv | grep -E "(DATABASE|NEXT_PUBLIC|JWT)"
-```
-
-## 📈 Performance Tips
-
-### Development Performance
-
-```bash
-# Use faster package manager
-npm install -g pnpm
-pnpm install  # Instead of npm install
-
-# Enable TypeScript incremental compilation
-# Add to tsconfig.json: "incremental": true
-
-# Use Next.js Turbopack (experimental)
-npm run dev -- --turbo
-```
-
-### Database Performance
-
-```bash
-# Monitor slow queries
-# Add to .env: LOG_LEVEL=debug
-
-# Analyze query performance
-EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'pending';
-
-# Create indexes for frequently queried columns
-# Add migrations for performance-critical indexes
-```
-
-## ⚡ Next Steps
-
-Once you have the basic setup running:
-
-1. **[System Architecture](./architecture.md)** - Understand the overall system design
-2. **[API Reference](./api-reference.md)** - Learn about available endpoints
-3. **[Development Workflow](./development-workflow.md)** - Team collaboration practices
-4. **[Frontend Documentation](../frontend/docs/README.md)** - Frontend-specific guides
-5. **[Backend Documentation](../backend/docs/README.md)** - Backend-specific guides
-
-### Learning Resources
-
-- **[TypeScript Documentation](https://www.typescriptlang.org/docs/)** - Language fundamentals
-- **[NestJS Documentation](https://docs.nestjs.com/)** - Backend framework
-- **[Next.js Documentation](https://nextjs.org/docs)** - Frontend framework
-- **[PostgreSQL Tutorial](https://www.postgresql.org/docs/current/tutorial.html)** - Database
-
-### Team Onboarding
-
-For new team members:
-1. Complete this getting started guide
-2. Review the [development workflow](./development-workflow.md)
-3. Read the business domain overview in [project README](./README.md)
-4. Pair with a senior developer for first few tasks
-5. Set up IDE with recommended extensions and settings
-
-Need help? Check the [troubleshooting guide](./troubleshooting.md) or reach out to the team!
+- [System Architecture](./architecture.md) — Backend, frontend, and infrastructure design
+- [API Reference](./api-reference.md) — Endpoint documentation
+- [Development Workflow](./development-workflow.md) — Branching, CI/CD, and collaboration
+- [Production Data Migration](./production-data-migration.md) — Working with legacy MySQL data
+- [Staging Deployment](./staging-deployment.md) — Deploy to the staging environment
