@@ -41,7 +41,7 @@ kubectl apply -f kubernetes/staging-v2/
 - **Monitoring**: Prometheus metrics collection
 
 ### URLs
-- **Frontend**: https://nest-staging.ordermysaddle.com
+- **Frontend**: https://next-staging.ordermysaddle.com
 - **Backend API**: https://api-nest-staging.ordermysaddle.com
 - **API Docs**: https://api-nest-staging.ordermysaddle.com/docs
 - **Health Check**: https://api-nest-staging.ordermysaddle.com/api/health
@@ -177,7 +177,7 @@ curl https://api-nest-staging.ordermysaddle.com/api/health/live
 curl https://api-nest-staging.ordermysaddle.com/api/health/ready
 
 # Frontend health
-curl https://nest-staging.ordermysaddle.com/api/health
+curl https://next-staging.ordermysaddle.com/api/health
 ```
 
 ### Kubernetes Monitoring
@@ -299,7 +299,7 @@ kubectl describe ingress oms-nest-staging-ingress -n oms-nest-staging
 kubectl get certificate -n oms-nest-staging
 
 # Test DNS resolution
-nslookup nest-staging.ordermysaddle.com
+nslookup next-staging.ordermysaddle.com
 ```
 
 ### Recovery Procedures
@@ -457,7 +457,7 @@ curl https://api-nest-staging.ordermysaddle.com/api/health
 ```
 
 ### Key URLs
-- **Frontend**: https://nest-staging.ordermysaddle.com
+- **Frontend**: https://next-staging.ordermysaddle.com
 - **API**: https://api-nest-staging.ordermysaddle.com
 - **Docs**: https://api-nest-staging.ordermysaddle.com/docs
 - **Health**: https://api-nest-staging.ordermysaddle.com/api/health
