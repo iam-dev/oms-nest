@@ -170,7 +170,7 @@ docker-compose up -d postgres redis  # Just DB + cache
 | | Staging | Production |
 |---|---------|------------|
 | Namespace | `oms-nest-staging` | `oms-nest-production` |
-| Frontend URL | `nest-staging.ordermysaddle.com` | `nest-production.ordermysaddle.com` |
+| Frontend URL | `next-staging.ordermysaddle.com` | `nest-production.ordermysaddle.com` |
 | Backend URL | `api-nest-staging.ordermysaddle.com` | `api-nest-production.ordermysaddle.com` |
 | Backend replicas | 2 (HPA: 2-6) | 3 (HPA: 3-10) |
 | Frontend replicas | 1 (HPA: 1-4) | 2 (HPA: 2-6) |
