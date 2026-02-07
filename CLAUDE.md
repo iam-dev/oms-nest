@@ -14,6 +14,7 @@ Order Management System (OMS) for saddle manufacturing (equestrian industry). Mo
 
 - Author name: `iam-dev`
 - Author email: `affiliaps@gmail.com`
+- **Default PR target branch: `staging`** (NOT `main`). The `staging` branch triggers auto-deployment via GitHub Actions. Only merge `staging` → `main` for production releases.
 
 ## Quick Start
 
