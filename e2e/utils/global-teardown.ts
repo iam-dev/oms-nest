@@ -61,10 +61,7 @@ async function cleanupStagingEnvironment(apiURL: string): Promise<void> {
   console.log('🔄 Cleaning up staging test environment...');
 
   try {
-    // Clean up test data created during staging tests
-    await cleanupTestUsers(apiURL);
-    await cleanupTestCustomers(apiURL);
-    await cleanupTestOrders(apiURL);
+    console.log('No E2E cleanup needed — test data is managed by backend seeds');
 
     console.log('✅ Staging environment cleanup complete');
   } catch (error) {
@@ -97,8 +94,8 @@ async function cleanupTestData(apiURL: string): Promise<void> {
   const environment = process.env.ENVIRONMENT || 'local';
 
   // Only clean up test data in local and staging environments
-  if (environment === 'production') {
-    console.log('⚠️  Skipping test data cleanup in production environment');
+  if (['staging', 'production'].includes(environment)) {
+    console.log('⚠️  Skipping test data cleanup in ' + environment + ' environment');
     return;
   }
 
@@ -120,76 +117,21 @@ async function cleanupTestData(apiURL: string): Promise<void> {
  * Clean up test users
  */
 async function cleanupTestUsers(apiURL: string): Promise<void> {
-  const testEmails = [
-    'admin.test@ordermysaddle.com',
-    'fitter.test@ordermysaddle.com',
-    'customer.test@ordermysaddle.com'
-  ];
-
-  for (const email of testEmails) {
-    try {
-      // Note: In a real implementation, you'd need an admin endpoint to clean up users
-      // For now, we'll just log what we would do
-      console.log(`🗑️  Would clean up test user: ${email}`);
-
-      // Example implementation:
-      // await axios.delete(`${apiURL}/admin/users`, {
-      //   data: { email },
-      //   headers: { 'Authorization': `Bearer ${adminToken}` }
-      // });
-
-    } catch (error) {
-      console.warn(`⚠️  Failed to cleanup test user ${email}:`, error.message);
-    }
-  }
+  console.log('No E2E cleanup needed — test data is managed by backend seeds');
 }
 
 /**
  * Clean up test customers
  */
 async function cleanupTestCustomers(apiURL: string): Promise<void> {
-  try {
-    // Implementation would depend on your API structure
-    console.log('🗑️  Would clean up test customers');
-
-    // Example implementation:
-    // const response = await axios.get(`${apiURL}/customers?filter=test`, {
-    //   headers: { 'Authorization': `Bearer ${adminToken}` }
-    // });
-    //
-    // for (const customer of response.data) {
-    //   if (customer.email.includes('.test@')) {
-    //     await axios.delete(`${apiURL}/customers/${customer.id}`);
-    //   }
-    // }
-
-  } catch (error) {
-    console.warn('⚠️  Failed to cleanup test customers:', error.message);
-  }
+  console.log('No E2E cleanup needed — test data is managed by backend seeds');
 }
 
 /**
  * Clean up test orders
  */
 async function cleanupTestOrders(apiURL: string): Promise<void> {
-  try {
-    // Implementation would depend on your API structure
-    console.log('🗑️  Would clean up test orders');
-
-    // Example implementation:
-    // const response = await axios.get(`${apiURL}/orders?status=test`, {
-    //   headers: { 'Authorization': `Bearer ${adminToken}` }
-    // });
-    //
-    // for (const order of response.data) {
-    //   if (order.notes?.includes('E2E_TEST')) {
-    //     await axios.delete(`${apiURL}/orders/${order.id}`);
-    //   }
-    // }
-
-  } catch (error) {
-    console.warn('⚠️  Failed to cleanup test orders:', error.message);
-  }
+  console.log('No E2E cleanup needed — test data is managed by backend seeds');
 }
 
 /**

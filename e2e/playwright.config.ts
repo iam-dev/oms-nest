@@ -24,6 +24,11 @@ const environmentConfig = {
 
 const config = environmentConfig[ENVIRONMENT];
 
+// For staging/production, only run smoke/readonly tests
+const grepFilter = ['staging', 'production'].includes(ENVIRONMENT)
+  ? /@smoke|@readonly/
+  : undefined;
+
 /**
  * 🚀 Enhanced Playwright configuration for OMS E2E testing
  * 🔄 Fully automated DevSecOps pipeline compatible
@@ -33,6 +38,7 @@ const config = environmentConfig[ENVIRONMENT];
 export default defineConfig({
   testDir: './tests',
   outputDir: './test-output',
+  grep: grepFilter,
 
   /* Run tests in files in parallel for faster execution */
   fullyParallel: true,
@@ -203,17 +209,9 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 120 * 1000,
       env: {
+        ...process.env,
         NODE_ENV: 'test',
-        DATABASE_HOST: 'localhost',
-        DATABASE_PORT: '5433',
-        DATABASE_USERNAME: 'postgres',
-        DATABASE_PASSWORD: 'postgres',
-        DATABASE_NAME: 'oms_nest',
-        JWT_ACCESS_TOKEN_SECRET: 'test-jwt-secret-key-for-e2e',
-        JWT_REFRESH_TOKEN_SECRET: 'test-jwt-refresh-secret-for-e2e',
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: '6379',
-        PORT: '3001'
+        PORT: '3001',
       },
       stdout: 'pipe',
       stderr: 'pipe',
@@ -224,10 +222,11 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 120 * 1000,
       env: {
+        ...process.env,
         NODE_ENV: 'test',
         NEXT_PUBLIC_API_URL: config.apiURL,
         NEXTAUTH_URL: config.baseURL,
-        PORT: '3000'
+        PORT: '3000',
       },
       stdout: 'pipe',
       stderr: 'pipe',

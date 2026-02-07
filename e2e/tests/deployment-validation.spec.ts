@@ -16,7 +16,7 @@ const getApiUrl = () => {
   return 'http://localhost:3001';
 };
 
-test.describe('OMS Staging V2 Deployment Validation', () => {
+test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
   test('Frontend application loads successfully', async ({ page }) => {
     // Set up console error listener BEFORE navigation
     const logs: string[] = [];

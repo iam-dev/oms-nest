@@ -146,8 +146,12 @@ async function createTestData(apiURL: string): Promise<void> {
   const environment = process.env.ENVIRONMENT || 'local';
 
   // Only create test data in local and staging environments
-  if (environment === 'production') {
-    console.log('⚠️  Skipping test data creation in production environment');
+  if (['staging', 'production'].includes(environment)) {
+    console.log('⚠️  Skipping test data creation in ' + environment + ' environment');
+    if (environment === 'staging') {
+      console.log('STAGING MODE: Write protection active — using existing data');
+    }
+    console.log('Test data provided by backend seeds (npm run seed:run:relational)');
     return;
   }
 
@@ -157,11 +161,8 @@ async function createTestData(apiURL: string): Promise<void> {
     // Skip user creation - users are seeded by the backend
     console.log('ℹ️  Using seeded test users from backend database');
 
-    // Create test customers
-    await createTestCustomers(apiURL);
-
-    // Create test orders
-    await createTestOrders(apiURL);
+    // Test data provided by backend seeds
+    console.log('Test data provided by backend seeds (npm run seed:run:relational)');
 
     console.log('✅ Test data creation complete');
   } catch (error) {
@@ -213,16 +214,14 @@ async function createTestUsers(apiURL: string): Promise<void> {
  * Create test customers
  */
 async function createTestCustomers(apiURL: string): Promise<void> {
-  // Implementation would depend on your API structure
-  console.log('📋 Test customers will be created during test execution');
+  console.log('Test data provided by backend seeds (npm run seed:run:relational)');
 }
 
 /**
  * Create test orders
  */
 async function createTestOrders(apiURL: string): Promise<void> {
-  // Implementation would depend on your API structure
-  console.log('🛍️  Test orders will be created during test execution');
+  console.log('Test data provided by backend seeds (npm run seed:run:relational)');
 }
 
 export default globalSetup;

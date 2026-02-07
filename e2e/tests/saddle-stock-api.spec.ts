@@ -18,7 +18,7 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
-test.describe('Saddle Stock API @api @saddle-stock', () => {
+test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   let adminContext: any;
   let fitterContext: any;
   let adminToken: string;

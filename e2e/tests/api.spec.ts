@@ -18,7 +18,7 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
-test.describe('API Endpoints @api @critical', () => {
+test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   let apiContext: any;
   let authToken: string;
 

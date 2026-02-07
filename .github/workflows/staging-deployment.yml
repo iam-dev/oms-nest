@@ -390,6 +390,7 @@ jobs:
       run: npx playwright install --with-deps
 
     - name: Run E2E tests
+      # NOTE: Staging E2E tests are smoke/readonly only (enforced by playwright.config.ts grep filter)
       run: npx playwright test
       env:
         ENVIRONMENT: staging
