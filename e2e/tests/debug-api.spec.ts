@@ -1,5 +1,17 @@
 import { test, expect, request } from '@playwright/test';
 
+const getApiUrl = () => {
+  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
+    return process.env.STAGING_API_URL;
+  }
+  if (process.env.E2E_API_URL) {
+    return process.env.E2E_API_URL.replace(/\/api$/, '');
+  }
+  return 'http://localhost:3001';
+};
+
+const API_URL = getApiUrl();
+
 test.describe('Debug API Tests', () => {
 
   test('should authenticate with absolute URLs', async ({ playwright }) => {
@@ -14,12 +26,12 @@ test.describe('Debug API Tests', () => {
 
     // Test health endpoint with absolute URL
     console.log('Testing health endpoint...');
-    const healthResponse = await apiContext.get('http://localhost:3001/api/health');
+    const healthResponse = await apiContext.get(`${API_URL}/api/health`);
     console.log('Health status:', healthResponse.status());
 
     // Test login with absolute URL
     console.log('Testing login...');
-    const loginResponse = await apiContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'admin@omsaddle.com',
         password: 'AdminPass123!'

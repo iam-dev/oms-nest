@@ -14,7 +14,7 @@ async function globalSetup(config: FullConfig) {
 
   const baseURL = config.projects[0].use.baseURL || 'http://localhost:3000';
   const apiURL = environment === 'staging'
-    ? (process.env.STAGING_API_URL || 'https://api-staging.ordermysaddle.com')
+    ? (process.env.STAGING_API_URL || 'https://api-nest-staging.ordermysaddle.com')
     : environment === 'production'
       ? (process.env.PRODUCTION_API_URL || 'https://api.ordermysaddle.com')
       : (process.env.E2E_API_URL || 'http://localhost:3001');

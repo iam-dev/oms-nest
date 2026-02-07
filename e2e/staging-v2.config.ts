@@ -17,8 +17,8 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.BASE_URL || 'https://staging-v2.ordermysaddle.com',
-    apiURL: process.env.API_URL || 'https://api-staging-v2.ordermysaddle.com',
+    baseURL: process.env.BASE_URL || 'https://next-staging.ordermysaddle.com',
+    apiURL: process.env.API_URL || 'https://api-nest-staging.ordermysaddle.com',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
