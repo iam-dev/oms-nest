@@ -37,8 +37,8 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     // Login as admin
     const adminLoginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
-        email: 'admin@omsaddle.com',
-        password: 'AdminPass123!'
+        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
       }
     });
 
@@ -49,8 +49,8 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     // Login as fitter
     const fitterLoginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
-        email: 'sarah.thompson@fitters.com',
-        password: 'FitterPass123!'
+        email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
+        password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!'
       }
     });
 
