@@ -3,6 +3,9 @@ import { test, expect } from '@playwright/test';
 // Get the correct API URL based on environment
 // In CI (local mode), use localhost; otherwise use staging URL
 const getApiUrl = () => {
+  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
+    return process.env.STAGING_API_URL;
+  }
   if (process.env.E2E_API_URL) {
     // Remove /api suffix if present - we add it per endpoint
     return process.env.E2E_API_URL.replace(/\/api$/, '');
@@ -10,11 +13,10 @@ const getApiUrl = () => {
   if (process.env.API_URL) {
     return process.env.API_URL;
   }
-  // Default to staging if nothing else specified
-  return 'https://api-staging-v2.ordermysaddle.com';
+  return 'http://localhost:3001';
 };
 
-test.describe('OMS Staging V2 Deployment Validation', () => {
+test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
   test('Frontend application loads successfully', async ({ page }) => {
     // Set up console error listener BEFORE navigation
     const logs: string[] = [];
@@ -115,7 +117,7 @@ test.describe('OMS Staging V2 Deployment Validation', () => {
     const response = await request.fetch(`${apiURL}/api/v1/customers`, {
       method: 'OPTIONS',
       headers: {
-        'Origin': isLocal ? 'http://localhost:3000' : 'https://staging-v2.ordermysaddle.com',
+        'Origin': isLocal ? 'http://localhost:3000' : 'https://next-staging.ordermysaddle.com',
         'Access-Control-Request-Method': 'GET',
         'Access-Control-Request-Headers': 'Authorization'
       }
