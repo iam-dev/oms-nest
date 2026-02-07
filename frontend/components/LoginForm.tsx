@@ -53,19 +53,11 @@ export function LoginForm() {
 
         logger.log('🔄 LoginForm: Auth state should be stable, attempting redirect to:', redirect);
 
-        // Always use window.location for reliable navigation in staging/production
-        // This ensures a complete page reload and bypasses any Next.js navigation timing issues
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-        if (isLocalhost) {
-          // Use Next.js router for local development
-          logger.log('🔄 LoginForm: Local environment - using router.replace');
-          router.replace(redirect);
-        } else {
-          // Use full page navigation for staging/production to avoid navigation conflicts
-          logger.log('🔄 LoginForm: Production environment - using window.location.replace for reliable navigation');
-          window.location.replace(redirect);
-        }
+        // Use Next.js client-side navigation to preserve in-memory auth state.
+        // window.location.replace causes a full reload which resets the Jotai store,
+        // triggering a redirect loop (dashboard → login → dashboard).
+        logger.log('🔄 LoginForm: Using router.replace for client-side navigation');
+        router.replace(redirect);
 
         // Add a small delay to verify redirect
         setTimeout(() => {
