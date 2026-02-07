@@ -6,7 +6,19 @@ import { test, expect, request } from '@playwright/test';
  * Validates Hydra-compliant response format
  */
 
-test.describe('Saddle Stock API @api @saddle-stock', () => {
+const getApiUrl = () => {
+  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
+    return process.env.STAGING_API_URL;
+  }
+  if (process.env.E2E_API_URL) {
+    return process.env.E2E_API_URL.replace(/\/api$/, '');
+  }
+  return 'http://localhost:3001';
+};
+
+const API_URL = getApiUrl();
+
+test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   let adminContext: any;
   let fitterContext: any;
   let adminToken: string;
@@ -23,7 +35,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
     });
 
     // Login as admin
-    const adminLoginResponse = await baseContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const adminLoginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'admin@omsaddle.com',
         password: 'AdminPass123!'
@@ -35,7 +47,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
     adminToken = adminData.token;
 
     // Login as fitter
-    const fitterLoginResponse = await baseContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const fitterLoginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'sarah.thompson@fitters.com',
         password: 'FitterPass123!'
@@ -79,7 +91,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   // ==================== Admin Access (type=all) ====================
 
   test('should return all saddle stock for admin @admin @api', async () => {
-    const response = await adminContext.get('http://localhost:3001/api/v1/saddle-stock?type=all&page=1&limit=10');
+    const response = await adminContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10`);
     const status = response.status();
 
     // Accept 200, 401/403 (auth/role issues in CI), or 500 (DB not fully seeded)
@@ -110,7 +122,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   });
 
   test('should validate Hydra pagination for admin @admin @api', async () => {
-    const response = await adminContext.get('http://localhost:3001/api/v1/saddle-stock?type=all&page=1&limit=5');
+    const response = await adminContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=5`);
     const status = response.status();
 
     // Accept 200, 401/403 (auth/role issues in CI), or 500 (DB not fully seeded)
@@ -138,7 +150,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   // ==================== Fitter Access (type=my) ====================
 
   test('should return fitter own stock @fitter @api', async () => {
-    const response = await fitterContext.get('http://localhost:3001/api/v1/saddle-stock?type=my&page=1&limit=10');
+    const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock?type=my&page=1&limit=10`);
     const status = response.status();
 
     // Accept 200, 401/403 (auth/role issues in CI), or 500 (DB not fully seeded)
@@ -161,7 +173,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   });
 
   test('should return available stock for fitter @fitter @api', async () => {
-    const response = await fitterContext.get('http://localhost:3001/api/v1/saddle-stock?type=available&page=1&limit=10');
+    const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock?type=available&page=1&limit=10`);
     const status = response.status();
 
     // Accept 200, 401/403 (auth/role issues in CI), or 500 (DB not fully seeded)
@@ -185,7 +197,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   // ==================== Access Control ====================
 
   test('should restrict type=all for fitters @security @api', async () => {
-    const response = await fitterContext.get('http://localhost:3001/api/v1/saddle-stock?type=all&page=1&limit=10');
+    const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10`);
 
     // Fitters should not be able to access type=all (admin/supervisor only)
     expect([403, 401].includes(response.status())).toBeTruthy();
@@ -198,7 +210,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
       },
     });
 
-    const response = await unauthContext.get('http://localhost:3001/api/v1/saddle-stock?type=all&page=1&limit=10');
+    const response = await unauthContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10`);
     expect(response.status()).toBe(401);
 
     await unauthContext.dispose();
@@ -207,7 +219,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   // ==================== Search ====================
 
   test('should support search parameter @search @api', async () => {
-    const response = await adminContext.get('http://localhost:3001/api/v1/saddle-stock?type=all&page=1&limit=10&search=test');
+    const response = await adminContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10&search=test`);
     const status = response.status();
 
     // Accept 200, 401/403 (auth/role issues in CI), or 500 (DB not fully seeded)
@@ -229,7 +241,7 @@ test.describe('Saddle Stock API @api @saddle-stock', () => {
   // ==================== Default Parameters ====================
 
   test('should use default type=my when no type specified @api', async () => {
-    const response = await fitterContext.get('http://localhost:3001/api/v1/saddle-stock');
+    const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock`);
     const status = response.status();
 
     // Accept 200, 401/403 (auth/role issues in CI), or 500 (DB not fully seeded)

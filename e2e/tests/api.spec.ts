@@ -6,7 +6,19 @@ import { test, expect, request } from '@playwright/test';
  * Direct API validation without UI layer
  */
 
-test.describe('API Endpoints @api @critical', () => {
+const getApiUrl = () => {
+  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
+    return process.env.STAGING_API_URL;
+  }
+  if (process.env.E2E_API_URL) {
+    return process.env.E2E_API_URL.replace(/\/api$/, '');
+  }
+  return 'http://localhost:3001';
+};
+
+const API_URL = getApiUrl();
+
+test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   let apiContext: any;
   let authToken: string;
 
@@ -24,7 +36,7 @@ test.describe('API Endpoints @api @critical', () => {
 
   test.beforeEach(async ({ playwright }) => {
     // Authenticate and get token for protected endpoints using absolute URL
-    const loginResponse = await apiContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'admin@omsaddle.com',
         password: 'AdminPass123!'
@@ -59,7 +71,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Health & Auth ====================
 
   test('should have healthy API endpoints @smoke @api', async () => {
-    const healthResponse = await apiContext.get('http://localhost:3001/api/health');
+    const healthResponse = await apiContext.get(`${API_URL}/api/health`);
 
     // Health endpoint might return 503 due to Redis being down, but it should still respond
     expect(healthResponse.status()).toBeGreaterThan(0);
@@ -71,7 +83,7 @@ test.describe('API Endpoints @api @critical', () => {
 
   test('should handle authentication correctly @critical @api', async () => {
     // Test successful login
-    const validLoginResponse = await apiContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const validLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'admin@omsaddle.com',
         password: 'AdminPass123!'
@@ -85,7 +97,7 @@ test.describe('API Endpoints @api @critical', () => {
     expect(loginData.user.email).toBe('admin@omsaddle.com');
 
     // Test invalid credentials
-    const invalidLoginResponse = await apiContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const invalidLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'invalid@test.com',
         password: 'wrongpassword'
@@ -98,11 +110,11 @@ test.describe('API Endpoints @api @critical', () => {
   test('should protect endpoints with authentication @security @api', async () => {
     // Create context without authentication
     const unauthenticatedContext = await request.newContext({
-      baseURL: process.env.E2E_API_URL || 'http://localhost:3001',
+      baseURL: process.env.E2E_API_URL || API_URL,
     });
 
     // Try to access protected endpoint
-    const protectedResponse = await unauthenticatedContext.get('http://localhost:3001/api/v1/customers');
+    const protectedResponse = await unauthenticatedContext.get(`${API_URL}/api/v1/customers`);
     expect(protectedResponse.status()).toBe(401);
 
     await unauthenticatedContext.dispose();
@@ -111,7 +123,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Customers ====================
 
   test('should handle customers API @api', async () => {
-    const customersResponse = await apiContext.get('http://localhost:3001/api/v1/customers');
+    const customersResponse = await apiContext.get(`${API_URL}/api/v1/customers`);
 
     if (!customersResponse.ok()) {
       console.log(`Customers API returned status: ${customersResponse.status()}`);
@@ -137,7 +149,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle customers without-fitter endpoint @api', async () => {
-    const response = await apiContext.get('http://localhost:3001/api/v1/customers/without-fitter');
+    const response = await apiContext.get(`${API_URL}/api/v1/customers/without-fitter`);
     expect(response.ok()).toBeTruthy();
 
     const data = await response.json();
@@ -147,7 +159,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle customers by-fitter endpoint @api', async () => {
-    const response = await apiContext.get('http://localhost:3001/api/v1/customers/fitter/1');
+    const response = await apiContext.get(`${API_URL}/api/v1/customers/fitter/1`);
     expect(response.ok()).toBeTruthy();
 
     const data = await response.json();
@@ -159,7 +171,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Fitters ====================
 
   test('should handle fitters API @api', async () => {
-    const fittersResponse = await apiContext.get('http://localhost:3001/api/v1/fitters');
+    const fittersResponse = await apiContext.get(`${API_URL}/api/v1/fitters`);
 
     if (!fittersResponse.ok()) {
       console.log(`Fitters API returned status: ${fittersResponse.status()}`);
@@ -187,7 +199,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle fitters active endpoint @api', async () => {
-    const activeResponse = await apiContext.get('http://localhost:3001/api/v1/fitters/active');
+    const activeResponse = await apiContext.get(`${API_URL}/api/v1/fitters/active`);
     expect(activeResponse.ok()).toBeTruthy();
 
     const activeData = await activeResponse.json();
@@ -198,12 +210,12 @@ test.describe('API Endpoints @api @critical', () => {
 
   test('should handle fitters by country endpoint @api', async () => {
     // First get fitters to find a country
-    const fittersResponse = await apiContext.get('http://localhost:3001/api/v1/fitters');
+    const fittersResponse = await apiContext.get(`${API_URL}/api/v1/fitters`);
     const fitters = await fittersResponse.json();
 
     if (fitters.length > 0 && fitters[0].country) {
       const country = fitters[0].country;
-      const countryResponse = await apiContext.get(`http://localhost:3001/api/v1/fitters/country/${encodeURIComponent(country)}`);
+      const countryResponse = await apiContext.get(`${API_URL}/api/v1/fitters/country/${encodeURIComponent(country)}`);
       expect(countryResponse.ok()).toBeTruthy();
 
       const countryData = await countryResponse.json();
@@ -216,7 +228,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Factories ====================
 
   test('should handle factories API @api', async () => {
-    const factoriesResponse = await apiContext.get('http://localhost:3001/api/v1/factories');
+    const factoriesResponse = await apiContext.get(`${API_URL}/api/v1/factories`);
 
     if (!factoriesResponse.ok()) {
       console.log(`Factories API returned status: ${factoriesResponse.status()}`);
@@ -244,7 +256,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle factories active endpoint @api', async () => {
-    const activeResponse = await apiContext.get('http://localhost:3001/api/v1/factories/active');
+    const activeResponse = await apiContext.get(`${API_URL}/api/v1/factories/active`);
     expect(activeResponse.ok()).toBeTruthy();
 
     const activeData = await activeResponse.json();
@@ -252,7 +264,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle factories stats endpoint @api', async () => {
-    const statsResponse = await apiContext.get('http://localhost:3001/api/v1/factories/stats/active/count');
+    const statsResponse = await apiContext.get(`${API_URL}/api/v1/factories/stats/active/count`);
     expect(statsResponse.ok()).toBeTruthy();
 
     const statsData = await statsResponse.json();
@@ -263,7 +275,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Brands ====================
 
   test('should handle brands API @api', async () => {
-    const brandsResponse = await apiContext.get('http://localhost:3001/api/v1/brands');
+    const brandsResponse = await apiContext.get(`${API_URL}/api/v1/brands`);
     expect(brandsResponse.ok()).toBeTruthy();
 
     const brandsData = await brandsResponse.json();
@@ -278,7 +290,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle brands active endpoint @api', async () => {
-    const activeResponse = await apiContext.get('http://localhost:3001/api/v1/brands/active');
+    const activeResponse = await apiContext.get(`${API_URL}/api/v1/brands/active`);
     expect(activeResponse.ok()).toBeTruthy();
 
     const activeData = await activeResponse.json();
@@ -288,7 +300,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Options ====================
 
   test('should handle options API @api', async () => {
-    const optionsResponse = await apiContext.get('http://localhost:3001/api/v1/options');
+    const optionsResponse = await apiContext.get(`${API_URL}/api/v1/options`);
     expect(optionsResponse.ok()).toBeTruthy();
 
     const optionsData = await optionsResponse.json();
@@ -304,7 +316,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Extras ====================
 
   test('should handle extras API @api', async () => {
-    const extrasResponse = await apiContext.get('http://localhost:3001/api/v1/extras');
+    const extrasResponse = await apiContext.get(`${API_URL}/api/v1/extras`);
     expect(extrasResponse.ok()).toBeTruthy();
 
     const extrasData = await extrasResponse.json();
@@ -318,7 +330,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle extras active endpoint @api', async () => {
-    const activeResponse = await apiContext.get('http://localhost:3001/api/v1/extras/active');
+    const activeResponse = await apiContext.get(`${API_URL}/api/v1/extras/active`);
     expect(activeResponse.ok()).toBeTruthy();
 
     const activeData = await activeResponse.json();
@@ -330,7 +342,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Leathertypes ====================
 
   test('should handle leathertypes API @api', async () => {
-    const leathertypesResponse = await apiContext.get('http://localhost:3001/api/v1/leathertypes');
+    const leathertypesResponse = await apiContext.get(`${API_URL}/api/v1/leathertypes`);
     expect(leathertypesResponse.ok()).toBeTruthy();
 
     const leathertypesData = await leathertypesResponse.json();
@@ -346,7 +358,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Presets ====================
 
   test('should handle presets API @api', async () => {
-    const presetsResponse = await apiContext.get('http://localhost:3001/api/v1/presets');
+    const presetsResponse = await apiContext.get(`${API_URL}/api/v1/presets`);
     expect(presetsResponse.ok()).toBeTruthy();
 
     const presetsData = await presetsResponse.json();
@@ -362,7 +374,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Users ====================
 
   test('should handle users API @api', async () => {
-    const usersResponse = await apiContext.get('http://localhost:3001/api/v1/users');
+    const usersResponse = await apiContext.get(`${API_URL}/api/v1/users`);
     expect(usersResponse.ok()).toBeTruthy();
 
     const usersData = await usersResponse.json();
@@ -382,7 +394,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Warehouses ====================
 
   test('should handle warehouses API @api', async () => {
-    const warehousesResponse = await apiContext.get('http://localhost:3001/api/v1/warehouses');
+    const warehousesResponse = await apiContext.get(`${API_URL}/api/v1/warehouses`);
     expect(warehousesResponse.ok()).toBeTruthy();
 
     const warehousesData = await warehousesResponse.json();
@@ -404,7 +416,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Saddle Stock ====================
 
   test('should handle saddle-stock API @api', async () => {
-    const saddleStockResponse = await apiContext.get('http://localhost:3001/api/v1/saddle-stock?type=all&page=1&limit=10');
+    const saddleStockResponse = await apiContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10`);
     // Note: type=all requires admin role - check response status
     const status = saddleStockResponse.status();
 
@@ -430,7 +442,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Orders ====================
 
   test('should handle orders API @api', async () => {
-    const ordersResponse = await apiContext.get('http://localhost:3001/api/v1/orders?page=1&limit=10');
+    const ordersResponse = await apiContext.get(`${API_URL}/api/v1/orders?page=1&limit=10`);
 
     // Accept 200 or 500 (database may not be fully seeded in CI)
     const status = ordersResponse.status();
@@ -459,7 +471,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders urgent endpoint @api', async () => {
-    const urgentResponse = await apiContext.get('http://localhost:3001/api/v1/orders/urgent');
+    const urgentResponse = await apiContext.get(`${API_URL}/api/v1/orders/urgent`);
     const status = urgentResponse.status();
 
     if (!urgentResponse.ok()) {
@@ -476,7 +488,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders overdue endpoint @api', async () => {
-    const overdueResponse = await apiContext.get('http://localhost:3001/api/v1/orders/overdue');
+    const overdueResponse = await apiContext.get(`${API_URL}/api/v1/orders/overdue`);
     const status = overdueResponse.status();
 
     if (!overdueResponse.ok()) {
@@ -493,7 +505,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders production endpoint @api', async () => {
-    const productionResponse = await apiContext.get('http://localhost:3001/api/v1/orders/production');
+    const productionResponse = await apiContext.get(`${API_URL}/api/v1/orders/production`);
     const status = productionResponse.status();
 
     if (!productionResponse.ok()) {
@@ -510,7 +522,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders stats endpoint @api', async () => {
-    const statsResponse = await apiContext.get('http://localhost:3001/api/v1/orders/stats');
+    const statsResponse = await apiContext.get(`${API_URL}/api/v1/orders/stats`);
     expect(statsResponse.ok()).toBeTruthy();
 
     const statsData = await statsResponse.json();
@@ -524,7 +536,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders search endpoint @api', async () => {
-    const searchResponse = await apiContext.get('http://localhost:3001/api/v1/orders/search?page=1&limit=10');
+    const searchResponse = await apiContext.get(`${API_URL}/api/v1/orders/search?page=1&limit=10`);
     const status = searchResponse.status();
 
     if (!searchResponse.ok()) {
@@ -547,7 +559,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders search with filters @api', async () => {
-    const searchResponse = await apiContext.get('http://localhost:3001/api/v1/orders/search?page=1&limit=10&isUrgent=true');
+    const searchResponse = await apiContext.get(`${API_URL}/api/v1/orders/search?page=1&limit=10&isUrgent=true`);
     const status = searchResponse.status();
 
     if (!searchResponse.ok()) {
@@ -565,7 +577,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders search stats endpoint @api', async () => {
-    const statsResponse = await apiContext.get('http://localhost:3001/api/v1/orders/search/stats?page=1&limit=10');
+    const statsResponse = await apiContext.get(`${API_URL}/api/v1/orders/search/stats?page=1&limit=10`);
     const status = statsResponse.status();
 
     if (!statsResponse.ok()) {
@@ -582,7 +594,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle orders search suggestions endpoint @api', async () => {
-    const suggestionsResponse = await apiContext.get('http://localhost:3001/api/v1/orders/search/suggestions?type=customer&query=test&limit=5');
+    const suggestionsResponse = await apiContext.get(`${API_URL}/api/v1/orders/search/suggestions?type=customer&query=test&limit=5`);
     const status = suggestionsResponse.status();
 
     if (!suggestionsResponse.ok()) {
@@ -606,7 +618,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Saddles (Models) ====================
 
   test('should handle saddles API (models) @api', async () => {
-    const saddlesResponse = await apiContext.get('http://localhost:3001/api/v1/saddles?page=1&limit=10');
+    const saddlesResponse = await apiContext.get(`${API_URL}/api/v1/saddles?page=1&limit=10`);
     expect(saddlesResponse.ok()).toBeTruthy();
 
     const saddlesData = await saddlesResponse.json();
@@ -628,7 +640,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle saddles active endpoint @api', async () => {
-    const activeResponse = await apiContext.get('http://localhost:3001/api/v1/saddles/active');
+    const activeResponse = await apiContext.get(`${API_URL}/api/v1/saddles/active`);
     expect(activeResponse.ok()).toBeTruthy();
 
     const activeData = await activeResponse.json();
@@ -642,7 +654,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle saddles brands endpoint @api', async () => {
-    const brandsResponse = await apiContext.get('http://localhost:3001/api/v1/saddles/brands');
+    const brandsResponse = await apiContext.get(`${API_URL}/api/v1/saddles/brands`);
     expect(brandsResponse.ok()).toBeTruthy();
 
     const brandsData = await brandsResponse.json();
@@ -652,12 +664,12 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle saddles search by brand @api', async () => {
-    const brandsResponse = await apiContext.get('http://localhost:3001/api/v1/saddles/brands');
+    const brandsResponse = await apiContext.get(`${API_URL}/api/v1/saddles/brands`);
     const brands = await brandsResponse.json();
 
     if (brands.length > 0) {
       const brandName = brands[0];
-      const saddlesResponse = await apiContext.get(`http://localhost:3001/api/v1/saddles?page=1&limit=10&brand=${encodeURIComponent(brandName)}`);
+      const saddlesResponse = await apiContext.get(`${API_URL}/api/v1/saddles?page=1&limit=10&brand=${encodeURIComponent(brandName)}`);
       expect(saddlesResponse.ok()).toBeTruthy();
 
       const saddlesData = await saddlesResponse.json();
@@ -671,7 +683,7 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Enriched Orders ====================
 
   test('should handle enriched-orders API @api', async () => {
-    const enrichedResponse = await apiContext.get('http://localhost:3001/api/v1/enriched_orders?page=1&limit=10');
+    const enrichedResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=10`);
     expect(enrichedResponse.ok()).toBeTruthy();
 
     const enrichedData = await enrichedResponse.json();
@@ -694,7 +706,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle enriched-orders with search filter @api', async () => {
-    const enrichedResponse = await apiContext.get('http://localhost:3001/api/v1/enriched_orders?page=1&limit=10&searchTerm=test');
+    const enrichedResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=10&searchTerm=test`);
     expect(enrichedResponse.ok()).toBeTruthy();
 
     const enrichedData = await enrichedResponse.json();
@@ -707,7 +719,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle enriched-orders with fitter filter @api', async () => {
-    const enrichedResponse = await apiContext.get('http://localhost:3001/api/v1/enriched_orders?page=1&limit=10&fitterId=1');
+    const enrichedResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=10&fitterId=1`);
     expect(enrichedResponse.ok()).toBeTruthy();
 
     const enrichedData = await enrichedResponse.json();
@@ -720,7 +732,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle enriched-orders with urgency filter @api', async () => {
-    const enrichedResponse = await apiContext.get('http://localhost:3001/api/v1/enriched_orders?page=1&limit=10&urgent=true');
+    const enrichedResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=10&urgent=true`);
     expect(enrichedResponse.ok()).toBeTruthy();
 
     const enrichedData = await enrichedResponse.json();
@@ -733,7 +745,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle enriched-orders health endpoint @api', async () => {
-    const healthResponse = await apiContext.get('http://localhost:3001/api/v1/enriched_orders/health');
+    const healthResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders/health`);
     expect(healthResponse.ok()).toBeTruthy();
 
     const healthData = await healthResponse.json();
@@ -746,7 +758,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle enriched-orders pagination @api', async () => {
-    const page1Response = await apiContext.get('http://localhost:3001/api/v1/enriched_orders?page=1&limit=5');
+    const page1Response = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=5`);
     expect(page1Response.ok()).toBeTruthy();
 
     const page1Data = await page1Response.json();
@@ -766,7 +778,7 @@ test.describe('API Endpoints @api @critical', () => {
   });
 
   test('should handle enriched-orders edit-options endpoint @api', async () => {
-    const editOptionsResponse = await apiContext.get('http://localhost:3001/api/v1/enriched_orders/edit-options');
+    const editOptionsResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders/edit-options`);
     const status = editOptionsResponse.status();
 
     // Accept 200 or 500 (edit-options queries multiple legacy tables that may not exist in CI)
@@ -784,13 +796,13 @@ test.describe('API Endpoints @api @critical', () => {
   // ==================== Error Handling ====================
 
   test('should handle error responses gracefully @api', async () => {
-    const notFoundResponse = await apiContext.get('http://localhost:3001/api/v1/non-existent-endpoint');
+    const notFoundResponse = await apiContext.get(`${API_URL}/api/v1/non-existent-endpoint`);
     expect(notFoundResponse.status()).toBe(404);
   });
 
   test('should handle rate limiting @security @api', async () => {
     const rapidRequests = Array.from({ length: 100 }, (_, i) =>
-      apiContext.get('http://localhost:3001/api/health').catch(() => ({ status: () => 429 }))
+      apiContext.get(`${API_URL}/api/health`).catch(() => ({ status: () => 429 }))
     );
 
     const responses = await Promise.all(rapidRequests);
@@ -804,7 +816,7 @@ test.describe('API Endpoints @api @critical', () => {
 
   test('should handle concurrent requests @performance @api', async () => {
     const concurrentRequests = Array.from({ length: 10 }, () =>
-      apiContext.get('http://localhost:3001/api/v1/factories')
+      apiContext.get(`${API_URL}/api/v1/factories`)
     );
 
     const responses = await Promise.all(concurrentRequests);
@@ -829,7 +841,7 @@ test.describe('API Endpoints @api @critical', () => {
 
   test('should enforce role-based access control @security @api', async () => {
     // Login as fitter user
-    const fitterLoginResponse = await apiContext.post('http://localhost:3001/api/v1/auth/email/login', {
+    const fitterLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: 'sarah.thompson@fitters.com',
         password: 'FitterPass123!'
@@ -841,7 +853,7 @@ test.describe('API Endpoints @api @critical', () => {
     const fitterToken = fitterData.token;
 
     const fitterContext = await request.newContext({
-      baseURL: process.env.E2E_API_URL || 'http://localhost:3001',
+      baseURL: process.env.E2E_API_URL || API_URL,
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${fitterToken}`
@@ -849,11 +861,11 @@ test.describe('API Endpoints @api @critical', () => {
     });
 
     // Fitter should not access admin-only endpoints
-    const adminResponse = await fitterContext.get('http://localhost:3001/api/v1/users');
+    const adminResponse = await fitterContext.get(`${API_URL}/api/v1/users`);
     expect([403, 401].includes(adminResponse.status())).toBeTruthy();
 
     // Fitter should access allowed endpoints
-    const customersResponse = await fitterContext.get('http://localhost:3001/api/v1/customers');
+    const customersResponse = await fitterContext.get(`${API_URL}/api/v1/customers`);
     expect(customersResponse.ok()).toBeTruthy();
 
     await fitterContext.dispose();
