@@ -15,16 +15,10 @@ export default function LoginPage() {
       logger.log('🔄 LoginPage: User already authenticated, redirecting to dashboard');
       logger.log('🔄 LoginPage: User details:', { id: user.id, username: user.username, role: user.role });
 
-      // Use window.location.replace for more reliable navigation in staging/production
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-      if (isLocalhost) {
-        router.replace('/dashboard');
-      } else {
-        // For production/staging, use window.location.replace to ensure navigation works
-        logger.log('🔄 LoginPage: Using window.location.replace for reliable navigation');
-        window.location.replace('/dashboard');
-      }
+      // Use Next.js client-side navigation to preserve in-memory auth state.
+      // window.location.replace causes a full reload which resets the Jotai store,
+      // triggering a redirect loop (dashboard → login → dashboard).
+      router.replace('/dashboard');
     }
   }, [isLoaded, isAuthenticated, user, router]);
 
