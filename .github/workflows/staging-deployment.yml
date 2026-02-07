@@ -389,6 +389,49 @@ jobs:
     - name: Install Playwright browsers
       run: npx playwright install --with-deps
 
+    # kubectl access for creating/deleting test users in the staging database
+    - name: Configure kubectl for DigitalOcean
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+    - name: Setup Kubernetes context
+      run: doctl kubernetes cluster kubeconfig save k8s-1-28-6-do-0-ams3-1713552913551
+      working-directory: .
+
+    - name: Create E2E test users on staging
+      working-directory: .
+      run: |
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend -o jsonpath='{.items[0].metadata.name}')
+        echo "Using backend pod: $POD"
+        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
+          const bcrypt = require('bcryptjs');
+          const { Client } = require('pg');
+          const c = new Client({
+            host: process.env.DATABASE_HOST,
+            port: parseInt(process.env.DATABASE_PORT || '5432'),
+            user: process.env.DATABASE_USERNAME,
+            password: process.env.DATABASE_PASSWORD,
+            database: process.env.DATABASE_NAME,
+            ssl: { rejectUnauthorized: false }
+          });
+          (async () => {
+            await c.connect();
+            const adminHash = await bcrypt.hash('E2eAdminPass123!', 10);
+            const fitterHash = await bcrypt.hash('E2eFitterPass123!', 10);
+            await c.query(
+              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT DO NOTHING',
+              ['e2e-admin@test.com', adminHash, 'E2E Admin', 2]
+            );
+            await c.query(
+              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT DO NOTHING',
+              ['e2e-fitter@test.com', fitterHash, 'E2E Fitter', 1]
+            );
+            await c.end();
+            console.log('E2E test users created successfully');
+          })().catch(e => { console.error('Failed to create test users:', e.message); process.exit(1); });
+        "
+
     - name: Run E2E tests
       # NOTE: Staging E2E tests are smoke/readonly only (enforced by playwright.config.ts grep filter)
       run: npx playwright test
@@ -396,8 +439,41 @@ jobs:
         ENVIRONMENT: staging
         STAGING_BASE_URL: https://next-staging.ordermysaddle.com
         STAGING_API_URL: https://api-nest-staging.ordermysaddle.com
-        TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
-        TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        TEST_ADMIN_EMAIL: e2e-admin@test.com
+        TEST_ADMIN_PASSWORD: E2eAdminPass123!
+        TEST_FITTER_EMAIL: e2e-fitter@test.com
+        TEST_FITTER_PASSWORD: E2eFitterPass123!
+
+    - name: Delete E2E test users from staging
+      if: always()
+      working-directory: .
+      run: |
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        if [ -z "$POD" ]; then
+          echo "No backend pod found, skipping cleanup"
+          exit 0
+        fi
+        echo "Cleaning up test users from pod: $POD"
+        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
+          const { Client } = require('pg');
+          const c = new Client({
+            host: process.env.DATABASE_HOST,
+            port: parseInt(process.env.DATABASE_PORT || '5432'),
+            user: process.env.DATABASE_USERNAME,
+            password: process.env.DATABASE_PASSWORD,
+            database: process.env.DATABASE_NAME,
+            ssl: { rejectUnauthorized: false }
+          });
+          (async () => {
+            await c.connect();
+            const result = await c.query(
+              'DELETE FROM credentials WHERE user_name IN (\$1, \$2)',
+              ['e2e-admin@test.com', 'e2e-fitter@test.com']
+            );
+            console.log('Deleted', result.rowCount, 'E2E test users');
+            await c.end();
+          })().catch(e => { console.error('Failed to delete test users:', e.message); process.exit(1); });
+        " || echo "Warning: test user cleanup failed (non-fatal)"
 
     - name: Upload E2E test results
       uses: actions/upload-artifact@v4

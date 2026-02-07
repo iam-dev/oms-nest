@@ -17,3 +17,11 @@ cd "$REPO_ROOT/frontend" || { echo "Failed to cd to frontend"; exit 1; }
 npm run test || exit 1
 
 echo "Pre-push checks passed!"
+
+# E2E tests for develop and main branches (skip with SKIP_E2E=1 git push)
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$SKIP_E2E" != "1" ] && { [ "$CURRENT_BRANCH" = "develop" ] || [ "$CURRENT_BRANCH" = "main" ]; }; then
+  echo ""
+  echo "Running E2E tests (branch: $CURRENT_BRANCH)..."
+  "$REPO_ROOT/scripts/run-e2e-local.sh" || exit 1
+fi

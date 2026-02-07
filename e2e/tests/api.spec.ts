@@ -38,8 +38,8 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     // Authenticate and get token for protected endpoints using absolute URL
     const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
-        email: 'admin@omsaddle.com',
-        password: 'AdminPass123!'
+        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
       }
     });
 
@@ -85,8 +85,8 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     // Test successful login
     const validLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
-        email: 'admin@omsaddle.com',
-        password: 'AdminPass123!'
+        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
       }
     });
 
@@ -94,7 +94,7 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     const loginData = await validLoginResponse.json();
     expect(loginData).toHaveProperty('token');
     expect(loginData).toHaveProperty('user');
-    expect(loginData.user.email).toBe('admin@omsaddle.com');
+    expect(loginData.user.email).toBe(process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
 
     // Test invalid credentials
     const invalidLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
@@ -843,8 +843,8 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     // Login as fitter user
     const fitterLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
-        email: 'sarah.thompson@fitters.com',
-        password: 'FitterPass123!'
+        email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
+        password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!'
       }
     });
 

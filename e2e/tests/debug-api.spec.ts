@@ -33,8 +33,8 @@ test.describe('Debug API Tests @smoke @readonly', () => {
     console.log('Testing login...');
     const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
-        email: 'admin@omsaddle.com',
-        password: 'AdminPass123!'
+        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
       }
     });
 
