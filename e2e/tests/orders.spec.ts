@@ -18,8 +18,8 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
 
     // Login as admin user before each test using actual login form
     await page.goto('/login');
-    await page.fill('input[placeholder="Gebruikersnaam"]', 'admin@omsaddle.com');
-    await page.fill('input[placeholder="Wachtwoord"]', 'AdminPass123!');
+    await page.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+    await page.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
     await page.click('button[type="submit"]');
 
     // Wait for login to complete
@@ -172,7 +172,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
         for (const uSel of usernameSelectors) {
           try {
             if (await testPage.locator(uSel).isVisible({ timeout: 3000 })) {
-              await testPage.fill(uSel, 'admin@omsaddle.com');
+              await testPage.fill(uSel, process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
               loginFilled = true;
               break;
             }
@@ -182,7 +182,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
         for (const pSel of passwordSelectors) {
           try {
             if (await testPage.locator(pSel).isVisible({ timeout: 3000 })) {
-              await testPage.fill(pSel, 'AdminPass123!');
+              await testPage.fill(pSel, process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
               break;
             }
           } catch { continue; }
