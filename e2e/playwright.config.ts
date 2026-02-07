@@ -13,8 +13,8 @@ const environmentConfig = {
     apiURL: process.env.E2E_API_URL || 'http://localhost:3001/api',
   },
   staging: {
-    baseURL: process.env.STAGING_BASE_URL || 'https://staging.ordermysaddle.com',
-    apiURL: process.env.STAGING_API_URL || 'https://api-staging.ordermysaddle.com',
+    baseURL: process.env.STAGING_BASE_URL || 'https://next-staging.ordermysaddle.com',
+    apiURL: process.env.STAGING_API_URL || 'https://api-nest-staging.ordermysaddle.com',
   },
   production: {
     baseURL: process.env.PRODUCTION_BASE_URL || 'https://ordermysaddle.com',
