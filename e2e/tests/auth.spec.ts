@@ -11,7 +11,7 @@ import { test, expect, Page } from '@playwright/test';
  * are marked as aspirational integration test stubs.
  */
 
-test.describe('Authentication Flow @critical @smoke', () => {
+test.describe('Authentication Flow @critical @smoke @readonly', () => {
   let page: Page;
 
   test.beforeEach(async ({ page: testPage }) => {

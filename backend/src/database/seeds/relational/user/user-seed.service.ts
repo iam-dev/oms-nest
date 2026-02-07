@@ -30,6 +30,67 @@ const TEST_USERS = [
   },
 ];
 
+/**
+ * FK placeholder users required by factory and fitter seed data.
+ * These are inserted with explicit user_ids so foreign keys resolve correctly.
+ */
+const FK_USERS = [
+  {
+    userId: 15,
+    username: "factory-us@test.com",
+    userType: 3,
+    name: "US Factory User",
+  },
+  {
+    userId: 20,
+    username: "factory-gb@test.com",
+    userType: 3,
+    name: "GB Factory User",
+  },
+  {
+    userId: 21,
+    username: "factory-eu@test.com",
+    userType: 3,
+    name: "EU Factory User",
+  },
+  {
+    userId: 22,
+    username: "factory-ca@test.com",
+    userType: 3,
+    name: "CA Factory User",
+  },
+  {
+    userId: 24,
+    username: "fitter-nl@test.com",
+    userType: 1,
+    name: "NL Fitter User",
+  },
+  {
+    userId: 28,
+    username: "fitter-gb@test.com",
+    userType: 1,
+    name: "GB Fitter User",
+  },
+  {
+    userId: 29,
+    username: "fitter-us@test.com",
+    userType: 1,
+    name: "US Fitter User",
+  },
+  {
+    userId: 30,
+    username: "fitter-ca@test.com",
+    userType: 1,
+    name: "CA Fitter User",
+  },
+  {
+    userId: 31,
+    username: "fitter-au@test.com",
+    userType: 1,
+    name: "AU Fitter User",
+  },
+];
+
 @Injectable()
 export class UserSeedService {
   private readonly logger = new Logger(UserSeedService.name);
@@ -72,6 +133,26 @@ export class UserSeedService {
       );
 
       this.logger.log(`✅ Created user: ${userData.username}`);
+    }
+
+    // Insert FK placeholder users with explicit user_ids
+    const defaultPassword = await bcrypt.hash("FkUser123!", 10);
+    for (const fkUser of FK_USERS) {
+      await this.dataSource.query(
+        `INSERT INTO credentials (user_id, user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted)
+         VALUES ($1, $2, $3, $4, $5, 0, '', 0, 0)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [
+          fkUser.userId,
+          fkUser.username,
+          defaultPassword,
+          fkUser.name,
+          fkUser.userType,
+        ],
+      );
+      this.logger.log(
+        `✅ Ensured FK user: ${fkUser.username} (id=${fkUser.userId})`,
+      );
     }
 
     this.logger.log("🌱 User seed completed!");

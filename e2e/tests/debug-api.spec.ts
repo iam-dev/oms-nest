@@ -12,7 +12,7 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
-test.describe('Debug API Tests', () => {
+test.describe('Debug API Tests @smoke @readonly', () => {
 
   test('should authenticate with absolute URLs', async ({ playwright }) => {
     // Create API request context with no baseURL

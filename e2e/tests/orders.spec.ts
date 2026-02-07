@@ -10,7 +10,7 @@ import { test, expect, Page } from '@playwright/test';
  * what is available. The login flow uses actual frontend selectors.
  */
 
-test.describe('Order Management Flow @critical', () => {
+test.describe('Order Management Flow @critical @smoke @readonly', () => {
   let page: Page;
 
   test.beforeEach(async ({ page: testPage }) => {
