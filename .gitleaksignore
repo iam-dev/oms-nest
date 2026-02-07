@@ -1,0 +1,18 @@
+# Bitnami SealedSecrets - values are asymmetrically encrypted, not plaintext secrets
+# These are false positives: key names like AUTH_JWT_SECRET look sensitive but values
+# are encrypted ciphertext that can only be decrypted by the cluster's sealed-secrets controller.
+kubernetes/staging-v2/sealed-secret.yaml:generic-api-key:5
+kubernetes/staging/sealed-secret.yaml:generic-api-key:5
+kubernetes/staging-v2/sealed-secret.yaml:generic-api-key:21
+kubernetes/staging/sealed-secret.yaml:generic-api-key:21
+
+# Production secrets-template.yaml - contains $(PLACEHOLDER) variables, not real secrets
+kubernetes/production/secrets-template.yaml:database-url:8
+kubernetes/production/secrets-template.yaml:database-url:22
+kubernetes/production/secrets-template.yaml:database-password:51
+kubernetes/production/secrets-template.yaml:database-password:66
+
+# User seed service - test-only passwords for CI/dev seeding (not used in production)
+8835b801b5a40f81300ebe1b8722b8046f7630fd:backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:15
+8835b801b5a40f81300ebe1b8722b8046f7630fd:backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:24
+8835b801b5a40f81300ebe1b8722b8046f7630fd:backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:33

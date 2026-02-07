@@ -1,22 +1,17 @@
-name: Deploy to Staging V2
+name: Deploy to Staging
 
 on:
   push:
     branches:
       - staging
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    labels:
-      - deploy-staging-v2
   workflow_dispatch:
     inputs:
       environment:
         description: 'Target environment'
         required: true
-        default: 'staging-v2'
+        default: 'staging'
         type: choice
         options:
-        - staging-v2
         - staging
       force_deploy:
         description: 'Force deployment even if tests fail'
@@ -35,7 +30,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
   IMAGE_NAME_FRONTEND: ${{ github.repository }}-frontend
-  K8S_NAMESPACE: oms-staging-v2
+  K8S_NAMESPACE: oms-nest-staging
 
 jobs:
   # Security scanning and linting
@@ -54,7 +49,7 @@ jobs:
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
@@ -117,7 +112,7 @@ jobs:
           type=ref,event=branch
           type=ref,event=pr
           type=sha,prefix=sha-
-          type=raw,value=staging-v2-latest
+          type=raw,value=staging-latest
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -165,7 +160,7 @@ jobs:
     - name: Build application
       run: npm run build
       env:
-        NEXT_PUBLIC_API_URL: https://api-staging-v2.ordermysaddle.com
+        NEXT_PUBLIC_API_URL: https://api-nest-staging.ordermysaddle.com
         NODE_ENV: staging
 
     - name: Log in to Container Registry
@@ -184,7 +179,7 @@ jobs:
           type=ref,event=branch
           type=ref,event=pr
           type=sha,prefix=sha-
-          type=raw,value=staging-v2-latest
+          type=raw,value=staging-latest
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -196,16 +191,16 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           NODE_ENV=staging
-          NEXT_PUBLIC_API_URL=https://api-staging-v2.ordermysaddle.com
+          NEXT_PUBLIC_API_URL=https://api-nest-staging.ordermysaddle.com
 
-  # Deploy to Kubernetes staging-v2 namespace
+  # Deploy to Kubernetes oms-nest-staging namespace
   deploy-staging:
-    name: Deploy to Staging V2
+    name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [backend-build, frontend-build]
     environment:
-      name: staging-v2
-      url: https://staging-v2.ordermysaddle.com
+      name: staging
+      url: https://next-staging.ordermysaddle.com
 
     steps:
     - uses: actions/checkout@v4
@@ -226,6 +221,14 @@ jobs:
     - name: Create namespace if not exists
       run: |
         kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Clean existing resources in namespace
+      if: ${{ github.event.inputs.force_deploy == 'true' }}
+      run: |
+        # Only run on force deploy — incremental kubectl apply is preferred
+        helm uninstall oms-nest-staging -n ${{ env.K8S_NAMESPACE }} || true
+        kubectl delete deployments,services,statefulsets,configmaps,ingress,hpa --all -n ${{ env.K8S_NAMESPACE }} || true
+        kubectl wait --for=delete pods --all -n ${{ env.K8S_NAMESPACE }} --timeout=120s || true
 
     - name: Install sealed-secrets controller
       run: |
@@ -282,10 +285,10 @@ jobs:
         cd kubernetes/staging-v2
 
         # Update backend image tag
-        sed -i "s|ghcr.io/YOUR_ORG/oms-backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-v2-latest|g" backend-deployment.yaml
+        sed -i "s|ghcr.io/YOUR_ORG/oms-backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-latest|g" backend-deployment.yaml
 
         # Update frontend image tag
-        sed -i "s|ghcr.io/YOUR_ORG/oms-frontend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-v2-latest|g" frontend-deployment.yaml
+        sed -i "s|ghcr.io/YOUR_ORG/oms-frontend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-latest|g" frontend-deployment.yaml
 
     - name: Deploy Redis cache
       run: kubectl apply -f kubernetes/staging-v2/database-deployment.yaml
@@ -318,11 +321,8 @@ jobs:
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
 
-    - name: Run database migrations
-      run: |
-        kubectl exec --namespace=${{ env.K8S_NAMESPACE }} \
-          deployment/oms-backend \
-          -- npm run migration:run
+    # Note: Migrations are run externally on the PostgreSQL database
+    # The production container doesn't have dev dependencies (env-cmd)
 
     - name: Verify deployment
       run: |
@@ -330,16 +330,39 @@ jobs:
         kubectl get services --namespace=${{ env.K8S_NAMESPACE }}
         kubectl get ingress --namespace=${{ env.K8S_NAMESPACE }}
 
-    - name: Health check endpoints
+    - name: Wait for services to be reachable
       run: |
-        # Wait for ingress to be ready
-        sleep 60
+        echo "Waiting for ingress and TLS to be ready..."
 
-        # Check backend health
-        curl -f https://api-staging-v2.ordermysaddle.com/api/health || echo "Backend health check failed"
+        # Wait for backend API health endpoint
+        for i in $(seq 1 60); do
+          if curl -sf --max-time 5 https://api-nest-staging.ordermysaddle.com/api/health > /dev/null 2>&1; then
+            echo "✅ Backend API is reachable"
+            break
+          fi
+          if [ "$i" -eq 60 ]; then
+            echo "::error::Backend API not reachable after 5 minutes"
+            exit 1
+          fi
+          echo "⏳ Waiting for backend API (attempt $i/60)..."
+          sleep 5
+        done
 
-        # Check frontend
-        curl -f https://staging-v2.ordermysaddle.com || echo "Frontend health check failed"
+        # Wait for frontend
+        for i in $(seq 1 60); do
+          if curl -sf --max-time 5 https://next-staging.ordermysaddle.com > /dev/null 2>&1; then
+            echo "✅ Frontend is reachable"
+            break
+          fi
+          if [ "$i" -eq 60 ]; then
+            echo "::error::Frontend not reachable after 5 minutes"
+            exit 1
+          fi
+          echo "⏳ Waiting for frontend (attempt $i/60)..."
+          sleep 5
+        done
+
+        echo "✅ All services are reachable"
 
   # E2E tests against deployed staging environment
   e2e-tests:
@@ -366,13 +389,91 @@ jobs:
     - name: Install Playwright browsers
       run: npx playwright install --with-deps
 
+    # kubectl access for creating/deleting test users in the staging database
+    - name: Configure kubectl for DigitalOcean
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+    - name: Setup Kubernetes context
+      run: doctl kubernetes cluster kubeconfig save k8s-1-28-6-do-0-ams3-1713552913551
+      working-directory: .
+
+    - name: Create E2E test users on staging
+      working-directory: .
+      run: |
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend -o jsonpath='{.items[0].metadata.name}')
+        echo "Using backend pod: $POD"
+        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
+          const bcrypt = require('bcryptjs');
+          const { Client } = require('pg');
+          const c = new Client({
+            host: process.env.DATABASE_HOST,
+            port: parseInt(process.env.DATABASE_PORT || '5432'),
+            user: process.env.DATABASE_USERNAME,
+            password: process.env.DATABASE_PASSWORD,
+            database: process.env.DATABASE_NAME,
+            ssl: { rejectUnauthorized: false }
+          });
+          (async () => {
+            await c.connect();
+            const adminHash = await bcrypt.hash('E2eAdminPass123!', 10);
+            const fitterHash = await bcrypt.hash('E2eFitterPass123!', 10);
+            await c.query(
+              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT DO NOTHING',
+              ['e2e-admin@test.com', adminHash, 'E2E Admin', 2]
+            );
+            await c.query(
+              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT DO NOTHING',
+              ['e2e-fitter@test.com', fitterHash, 'E2E Fitter', 1]
+            );
+            await c.end();
+            console.log('E2E test users created successfully');
+          })().catch(e => { console.error('Failed to create test users:', e.message); process.exit(1); });
+        "
+
     - name: Run E2E tests
+      # NOTE: Staging E2E tests are smoke/readonly only (enforced by playwright.config.ts grep filter)
       run: npx playwright test
       env:
-        BASE_URL: https://staging-v2.ordermysaddle.com
-        API_URL: https://api-staging-v2.ordermysaddle.com
-        TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
-        TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        ENVIRONMENT: staging
+        STAGING_BASE_URL: https://next-staging.ordermysaddle.com
+        STAGING_API_URL: https://api-nest-staging.ordermysaddle.com
+        TEST_ADMIN_EMAIL: e2e-admin@test.com
+        TEST_ADMIN_PASSWORD: E2eAdminPass123!
+        TEST_FITTER_EMAIL: e2e-fitter@test.com
+        TEST_FITTER_PASSWORD: E2eFitterPass123!
+
+    - name: Delete E2E test users from staging
+      if: always()
+      working-directory: .
+      run: |
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        if [ -z "$POD" ]; then
+          echo "No backend pod found, skipping cleanup"
+          exit 0
+        fi
+        echo "Cleaning up test users from pod: $POD"
+        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
+          const { Client } = require('pg');
+          const c = new Client({
+            host: process.env.DATABASE_HOST,
+            port: parseInt(process.env.DATABASE_PORT || '5432'),
+            user: process.env.DATABASE_USERNAME,
+            password: process.env.DATABASE_PASSWORD,
+            database: process.env.DATABASE_NAME,
+            ssl: { rejectUnauthorized: false }
+          });
+          (async () => {
+            await c.connect();
+            const result = await c.query(
+              'DELETE FROM credentials WHERE user_name IN (\$1, \$2)',
+              ['e2e-admin@test.com', 'e2e-fitter@test.com']
+            );
+            console.log('Deleted', result.rowCount, 'E2E test users');
+            await c.end();
+          })().catch(e => { console.error('Failed to delete test users:', e.message); process.exit(1); });
+        " || echo "Warning: test user cleanup failed (non-fatal)"
 
     - name: Upload E2E test results
       uses: actions/upload-artifact@v4
@@ -395,7 +496,7 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: success
-        text: '🚀 OMS Staging V2 deployment successful! All E2E tests passed.'
+        text: '🚀 OMS Staging deployment successful! All E2E tests passed.'
         webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     - name: Notify Slack on failure
@@ -403,5 +504,5 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: failure
-        text: '❌ OMS Staging V2 deployment failed! Check logs for details.'
+        text: '❌ OMS Staging deployment failed! Check logs for details.'
         webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -1,0 +1,16 @@
+services:
+  backend:
+    command: >
+      sh -c "
+        sed -i 's/DATABASE_HOST=.*/DATABASE_HOST=postgres/' /usr/src/app/.env &&
+        sed -i 's/DATABASE_PORT=.*/DATABASE_PORT=5432/' /usr/src/app/.env &&
+        sed -i 's/DATABASE_USERNAME=.*/DATABASE_USERNAME=oms/' /usr/src/app/.env &&
+        sed -i 's/DATABASE_PASSWORD=.*/DATABASE_PASSWORD=oms_password/' /usr/src/app/.env &&
+        sed -i 's/DATABASE_NAME=.*/DATABASE_NAME=oms_nest/' /usr/src/app/.env &&
+        sed -i 's/MAIL_HOST=.*/MAIL_HOST=maildev/' /usr/src/app/.env &&
+        sed -i 's|WORKER_HOST=.*|WORKER_HOST=redis://redis:6379/1|' /usr/src/app/.env &&
+        /opt/wait-for-it.sh postgres:5432 &&
+        npm run migration:run &&
+        npm run seed:run:relational &&
+        npm run start:dev
+      "

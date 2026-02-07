@@ -1,0 +1,180 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oms-frontend
+  namespace: oms-nest-production
+  labels:
+    app: oms-frontend
+    component: web
+    environment: production
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: oms-frontend
+  template:
+    metadata:
+      labels:
+        app: oms-frontend
+        component: web
+        environment: production
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      containers:
+      - name: oms-frontend
+        image: ghcr.io/iam-dev/oms-nest-frontend:latest
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        - name: NEXT_PUBLIC_API_URL
+          value: "https://api-nest-production.ordermysaddle.com"
+        - name: NEXTAUTH_URL
+          value: "https://nest-production.ordermysaddle.com"
+
+        # Secrets from Kubernetes secrets (NO hardcoded values)
+        envFrom:
+        - secretRef:
+            name: oms-app-secrets
+
+        # Resource limits for production stability
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        # Startup probe for slower initial startup
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+
+        # Temporary filesystem mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: next-cache
+          mountPath: /app/.next/cache
+        - name: uploads
+          mountPath: /app/public/uploads
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: next-cache
+        emptyDir: {}
+      - name: uploads
+        emptyDir: {}
+
+      # Image is public, no imagePullSecrets needed
+
+      # Pod security
+      automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oms-frontend-service
+  namespace: oms-nest-production
+  labels:
+    app: oms-frontend
+    component: web
+    environment: production
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: oms-frontend
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: oms-frontend-hpa
+  namespace: oms-nest-production
+  labels:
+    app: oms-frontend
+    environment: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: oms-frontend
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

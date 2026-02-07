@@ -87,4 +87,6 @@ paths = [
     '''.git/.*''',
     '''docs/.*''',
     '''README.*''',
+    '''.*sealed-secret.*\.yaml$''',
+    '''kubernetes/.*/sealed-secret\.yaml''',
 ]

@@ -1,0 +1,57 @@
+# =============================================================================
+# E2E Testing Docker Compose (Playwright + Backend + Frontend)
+# =============================================================================
+# Isolated postgres + redis for full E2E tests run via scripts/run-e2e-local.sh
+# Ports are separate from dev (5432/6379) and backend e2e-api (5434/6380):
+#   - PostgreSQL: 5433 (host) -> 5432 (container)
+#   - Redis:      6380 (host) -> 6379 (container)
+#
+# Usage:
+#   docker compose -f docker-compose.e2e.yml up -d
+#   docker compose -f docker-compose.e2e.yml down -v
+# =============================================================================
+
+services:
+  postgres-e2e:
+    image: postgres:17.6-alpine
+    container_name: oms_e2e_postgres
+    restart: "no"
+    environment:
+      POSTGRES_DB: oms_e2e
+      POSTGRES_USER: oms
+      POSTGRES_PASSWORD: oms_e2e_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_e2e_data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "log_statement=none"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oms -d oms_e2e"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis-e2e:
+    image: redis:7-alpine
+    container_name: oms_e2e_redis
+    restart: "no"
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_e2e_data:

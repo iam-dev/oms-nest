@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+
+# Get repo root relative to this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo "Running pre-commit checks..."
+echo "Repo root: $REPO_ROOT"
+
+# Gitleaks secret detection on staged files
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "Scanning for secrets with gitleaks..."
+  cd "$REPO_ROOT" || exit 1
+  gitleaks protect --staged --config="$REPO_ROOT/.gitleaks.toml" || exit 1
+else
+  echo "⚠ gitleaks not installed, skipping secret scan (install: brew install gitleaks)"
+fi
+
+# Backend lint and type check
+echo "Checking backend..."
+cd "$REPO_ROOT/backend" || { echo "Failed to cd to backend"; exit 1; }
+npm run lint || exit 1
+npx tsc --noEmit || exit 1
+
+# Frontend lint and type check
+echo "Checking frontend..."
+cd "$REPO_ROOT/frontend" || { echo "Failed to cd to frontend"; exit 1; }
+npm run lint || exit 1
+npm run type-check || exit 1
+
+echo "Pre-commit checks passed!"

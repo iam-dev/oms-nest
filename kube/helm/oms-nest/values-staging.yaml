@@ -1,10 +1,11 @@
 # Staging environment overrides
 
 global:
-  # NestJS only accepts: development, production, test
-  environment: production
+  environment: staging
 
 backend:
+  image:
+    pullPolicy: Always
   replicas: 2
   hpa:
     minReplicas: 2
@@ -32,7 +33,7 @@ maildev:
 
 ingress:
   frontend:
-    host: nest-staging.ordermysaddle.com
+    host: next-staging.ordermysaddle.com
   backend:
     host: api-nest-staging.ordermysaddle.com
   tls:

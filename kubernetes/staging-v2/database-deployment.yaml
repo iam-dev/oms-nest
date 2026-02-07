@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: oms-redis
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-redis
     component: cache
@@ -110,7 +110,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oms-redis-service
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-redis
     component: cache
@@ -130,7 +130,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: oms-redis-config
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-redis
     environment: staging
@@ -151,8 +151,8 @@ data:
     save ""
     appendonly no
 
-    # Security settings
-    protected-mode yes
+    # Security settings (disabled: Redis is internal-only within K8s cluster)
+    protected-mode no
 
     # Logging
     loglevel notice

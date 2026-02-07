@@ -11,7 +11,7 @@ import { test, expect, Page } from '@playwright/test';
  * are marked as aspirational integration test stubs.
  */
 
-test.describe('Authentication Flow @critical @smoke', () => {
+test.describe('Authentication Flow @critical @smoke @readonly', () => {
   let page: Page;
 
   test.beforeEach(async ({ page: testPage }) => {
@@ -68,8 +68,8 @@ test.describe('Authentication Flow @critical @smoke', () => {
     await page.goto('/login');
 
     // Use test credentials matching seeded data
-    await page.fill('input[placeholder="Gebruikersnaam"]', 'admin@omsaddle.com');
-    await page.fill('input[placeholder="Wachtwoord"]', 'AdminPass123!');
+    await page.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+    await page.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
 
     // Submit login form
     await page.click('button[type="submit"]');
@@ -92,8 +92,8 @@ test.describe('Authentication Flow @critical @smoke', () => {
   test('should handle role-based access correctly @critical', async () => {
     // Login as fitter
     await page.goto('/login');
-    await page.fill('input[placeholder="Gebruikersnaam"]', 'sarah.thompson@fitters.com');
-    await page.fill('input[placeholder="Wachtwoord"]', 'FitterPass123!');
+    await page.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com');
+    await page.fill('input[placeholder="Wachtwoord"]', process.env.TEST_FITTER_PASSWORD || 'FitterPass123!');
     await page.click('button[type="submit"]');
 
     await page.waitForTimeout(3000);
@@ -116,8 +116,8 @@ test.describe('Authentication Flow @critical @smoke', () => {
   test('should handle session expiration @critical', async () => {
     // Login first
     await page.goto('/login');
-    await page.fill('input[placeholder="Gebruikersnaam"]', 'admin@omsaddle.com');
-    await page.fill('input[placeholder="Wachtwoord"]', 'AdminPass123!');
+    await page.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+    await page.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
     await page.click('button[type="submit"]');
 
     await page.waitForTimeout(3000);
@@ -142,8 +142,8 @@ test.describe('Authentication Flow @critical @smoke', () => {
   test('should successfully logout @smoke', async () => {
     // Login first
     await page.goto('/login');
-    await page.fill('input[placeholder="Gebruikersnaam"]', 'admin@omsaddle.com');
-    await page.fill('input[placeholder="Wachtwoord"]', 'AdminPass123!');
+    await page.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+    await page.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
     await page.click('button[type="submit"]');
 
     await page.waitForTimeout(3000);
@@ -185,15 +185,15 @@ test.describe('Authentication Flow @critical @smoke', () => {
     try {
       // Login in first session
       await page1.goto('/login');
-      await page1.fill('input[placeholder="Gebruikersnaam"]', 'admin@omsaddle.com');
-      await page1.fill('input[placeholder="Wachtwoord"]', 'AdminPass123!');
+      await page1.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+      await page1.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
       await page1.click('button[type="submit"]');
       await page1.waitForTimeout(3000);
 
       // Login in second session with same user
       await page2.goto('/login');
-      await page2.fill('input[placeholder="Gebruikersnaam"]', 'admin@omsaddle.com');
-      await page2.fill('input[placeholder="Wachtwoord"]', 'AdminPass123!');
+      await page2.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+      await page2.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
       await page2.click('button[type="submit"]');
       await page2.waitForTimeout(3000);
 

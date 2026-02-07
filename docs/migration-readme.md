@@ -1,178 +1,176 @@
-# Production Data Migration - Quick Start Guide
+# Production Data Migration — Quick Start
 
 ## Overview
-This guide provides step-by-step instructions for migrating production MySQL data (`ordermys_new.sql`) to the current PostgreSQL backend system using the dual ID approach.
+
+This guide covers how to import ~3 million records from the legacy MySQL production database (`ordermys_new.sql`) into a local or staging PostgreSQL database. The migration preserves legacy integer primary keys and uses shell scripts for transformation, import, and validation.
+
+For the full technical reference, see [Production Data Migration](./production-data-migration.md).
 
 ## Prerequisites
-- [x] PostgreSQL 15+ running locally or on staging
-- [x] Node.js 18+ with npm installed
-- [x] Access to `ordermys_new.sql` production dump file
-- [x] Current NestJS backend migrations completed
 
-## Files Overview
-- `docs/production-data-migration.md` - Complete technical documentation
-- `scripts/migrate-production-data.ts` - Main migration script (TypeScript)
-- `scripts/schema-enhancements.sql` - Database schema preparation
-- `backend/test/migration/data-integrity.test.ts` - Validation tests
+- Docker installed and running
+- Access to `ordermys_new.sql` production dump file (place in `mysql-legacy/data/`)
+- Node.js 20+ with npm (for running TypeORM migrations)
 
-## Quick Migration Steps
+## Scripts Location
 
-### 1. Prepare Database Schema
+All scripts are in:
+```
+backend/src/database/seeds/relational/production-data/postgres/scripts/
+```
+
+## Quick Start (Legacy Container)
+
+The fastest path to a working legacy database:
+
 ```bash
-# Add legacy_id fields and indexes
-psql -d your_database -f scripts/schema-enhancements.sql
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+
+# 1. Start a PostgreSQL 15 container (port 5433)
+./setup-postgres.sh
+
+# 2. Transform MySQL data to PostgreSQL format (first time only)
+./transform-mysql-to-postgres.sh
+
+# 3. Import schema and data
+./import-data.sh
+
+# 4. Validate the import
+./validate-data.sh
+
+# 5. Extract seat sizes into orders.seat_sizes JSONB column
+./extract-seat-sizes.sh --apply
 ```
 
-### 2. Place Production Data
+Connection details after setup:
+```
+Host: 127.0.0.1  Port: 5433  Database: oms_legacy
+User: oms_user   Password: oms_password
+Container: oms_postgres_legacy
+```
+
+## Quick Start (Local Dev Database)
+
+Import production data into the backend's Docker Compose PostgreSQL (port 5432):
+
 ```bash
-# Copy SQL dump to expected location
-cp /path/to/ordermys_new.sql /Users/in615bac/Desktop/
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+
+# Import into backend-postgres-1
+./import-data.sh --env local
+
+# Validate
+./validate-data.sh --env local
+
+# Extract seat sizes
+./extract-seat-sizes.sh --apply
 ```
 
-### 3. Run Migration (Dry Run First)
+## Full Sync (New MySQL Dump)
+
+When you receive a new production dump, run the full pipeline:
+
 ```bash
-# Test migration without writing data (recommended first)
-cd backend
-npm run migration:production:dry-run
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
 
-# Execute actual migration
-npm run migration:production
-
-# Alternative: Direct TypeScript execution
-npx ts-node -r tsconfig-paths/register ../scripts/migrate-production-data.ts --dry-run
-npx ts-node -r tsconfig-paths/register ../scripts/migrate-production-data.ts
+./sync-production-data.sh --from-dump /path/to/ordermys_new.sql
 ```
 
-### 4. Validate Migration
-```bash
-# Run comprehensive validation tests
-cd backend
-npm run test:migration
+This runs: transform → import → extract seat sizes in one command.
 
-# Alternative: Run specific migration test
-npm run test -- test/migration/data-integrity.test.ts
+## Connect NestJS to Legacy Data
+
+Update `backend/.env`:
+```env
+DATABASE_TYPE=postgres
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=5433
+DATABASE_USERNAME=oms_user
+DATABASE_PASSWORD=oms_password
+DATABASE_NAME=oms_legacy
 ```
 
-### 5. Check Results
-```sql
--- View migration statistics
-SELECT * FROM migration_statistics;
-
--- Check relationship validation
-SELECT * FROM migration_relationship_validation WHERE validation_status = 'INVALID';
-```
-
-## Key Features
-
-### Dual ID System
-- ✅ **Preserves Legacy IDs**: Original integer IDs kept in `legacy_id` fields
-- ✅ **Generates UUIDs**: New primary keys for modern system
-- ✅ **Maintains Relationships**: Both old and new foreign key references
-- ✅ **Full Traceability**: Can always trace back to production data
-
-### Data Transformation
-- MySQL → PostgreSQL syntax conversion
-- UNIX timestamps → ISO datetime
-- Price cents → decimal amounts
-- Boolean flags → proper boolean types
-- JSON data preservation and enhancement
-
-### Validation & Testing
-- Comprehensive test suite with 20+ validation scenarios
-- Performance benchmarks for production data volume
-- Relationship integrity verification
-- Business logic validation
-
-## Migration Scope
-
-### ✅ Migrated Entities
-| Production Table | Backend Entity | Records | Status |
-|------------------|----------------|---------|---------|
-| Customers | customers | ~3000 | ✅ Ready |
-| Orders | orders | ~7500 | ✅ Ready |
-| Fitters | fitters | ~150 | ✅ Ready |
-| Brands | brands | ~3 | ⚠️ Module needed |
-| Saddles | models | ~50 | ⚠️ Module needed |
-| LeatherTypes | leathertypes | ~10 | ⚠️ Module needed |
-
-### ⚠️ Required Entity Modules
-Before migration, create these missing modules:
+Then run TypeORM migrations (creates enriched views, indexes, etc.):
 ```bash
 cd backend
-npm run generate:resource:relational # For each: brands, models, leathertypes, options, extras, presets
+npm run migration:run
 ```
+
+## Data Summary
+
+| Category | Tables | Key Counts |
+|----------|--------|------------|
+| Core Business | orders, customers, fitters, factories, factory_employees | 48,142 orders · 27,279 customers · 282 fitters · 7 factories |
+| Product Catalog | brands, saddles, leather_types, options, options_items, presets, presets_items | 3 brands · 109 saddles · 85 leather types · 52 options · 887 option items |
+| Relationships | orders_info, saddle_leathers, saddle_options_items | 1,099,961 order line items |
+| System Admin | credentials, user_types, statuses, role, client_confirmation | 360 users · 6 roles · 16 statuses |
+| Audit Logging | log, dblog | Partial import |
+
+## Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `setup-postgres.sh` | Start/reset PostgreSQL 15 Docker container (port 5433) |
+| `transform-mysql-to-postgres.sh` | Transform MySQL INSERTs to PostgreSQL format (run once per dump) |
+| `transform-orders-booleans.py` | Convert integer booleans (0/1) to PostgreSQL booleans in orders.sql |
+| `import-data.sh` | Import schema + data (`--env local` or `--env legacy`, `--schema` or `--data`) |
+| `validate-data.sh` | Check record counts and referential integrity (`--env local` or `--env legacy`) |
+| `extract-seat-sizes.sh` | Extract seat sizes from orders_info + special_notes (`--env local/legacy/staging/production`, `--apply`) |
+| `sync-production-data.sh` | Full sync orchestration (`--from-dump FILE`, `--incremental`, `--extract-seats`) |
+| `docker-compose.yml` | Standalone Docker Compose for legacy PostgreSQL container |
+
+## Validation
+
+The `validate-data.sh` script checks:
+
+- **Record counts** — All 20 tables against expected values
+- **Referential integrity** — 7 relationship checks (orders→fitters, orders→customers, customers→fitters, factory_employees→factories, orders_info→orders, saddle_leathers→saddles, saddle_options_items→saddles)
+- **Sample data** — Displays brands, factories, statuses, recent orders, order status distribution
+
+## Known Legacy Data Issues
+
+These are expected from years of production use and are preserved:
+
+| Issue | Count | Details |
+|-------|-------|---------|
+| Orders → Missing Fitters | 16 | Reference 4 deleted fitters (IDs: 29, 46, 76, 89) |
+| Customers → Missing Fitters | 3 | Same deleted fitter references |
+| OrdersInfo → Missing Orders | ~49,794 | ~3,504 orders were hard-deleted but line items remain |
+
+The NestJS application handles missing references gracefully. The validation script reports these as expected warnings.
 
 ## Troubleshooting
 
-### Common Issues
-
-**Issue**: `Table 'brands' does not exist`
-**Solution**: Create missing entity modules first or run schema-enhancements.sql
-
-**Issue**: `SQL parsing error`
-**Solution**: Verify ordermys_new.sql file is complete and accessible
-
-**Issue**: `Foreign key constraint violation`
-**Solution**: Check relationship mappings in migration log table
-
-**Issue**: `Performance issues with large dataset`
-**Solution**: Use --batch-size parameter to process smaller chunks
-
-### Migration Recovery
-
-**Rollback Migration**:
-```sql
--- Remove all migrated records
-DELETE FROM orders WHERE legacy_id IS NOT NULL;
-DELETE FROM customers WHERE legacy_id IS NOT NULL;
-DELETE FROM fitters WHERE legacy_id IS NOT NULL;
-```
-
-**Partial Re-migration**:
+**Port 5433 already in use:**
 ```bash
-# Migrate specific table only
-cd backend
-npm run migration:production -- --table=customers
-
-# Or directly with TypeScript
-npx ts-node -r tsconfig-paths/register ../scripts/migrate-production-data.ts --table=customers
+lsof -i :5433
+# Remove existing container and restart
+docker rm -f oms_postgres_legacy && ./setup-postgres.sh
 ```
 
-## Production Deployment
+**Container not running:**
+```bash
+docker logs oms_postgres_legacy
+# For local dev:
+cd backend && docker-compose up -d postgres
+```
 
-### Local Environment
-1. Run schema enhancements
-2. Execute migration script
-3. Validate with test suite
-4. Start development server
+**Scripts not executable:**
+```bash
+chmod +x postgres/scripts/*.sh
+```
 
-### Staging Environment
-1. Create Digital Ocean PostgreSQL cluster
-2. Deploy current backend migrations
-3. Run schema enhancements on staging DB
-4. Upload SQL dump securely
-5. Execute migration with staging DB URL
-6. Run validation tests
-7. Performance optimization
+**Import fails on large files (orders_info — 1.1M rows):**
+The import can take several minutes for the `orders_info` and `audit-logging` tables. This is normal.
 
-## Support
+**Reset and reimport:**
+```bash
+./setup-postgres.sh --clean   # Removes container + volume, starts fresh
+./import-data.sh              # Reimport everything
+```
 
-### Getting Help
-- Review complete documentation: `docs/production-data-migration.md`
-- Check migration logs: `SELECT * FROM migration_log WHERE status = 'error'`
-- Validate data integrity: `npm run test -- test/migration/`
-- Monitor performance: `SELECT * FROM migration_summary`
+## Related Documentation
 
-### Success Criteria
-- [x] 100% data completeness (all production records migrated)
-- [x] Relationship integrity maintained (foreign keys valid)
-- [x] Performance targets met (<100ms for standard queries)
-- [x] Backward compatibility (legacy ID references functional)
-- [x] Test coverage >95% (validation tests passing)
-
-## Next Steps After Migration
-1. **Enable Authentication Guards**: Remove TODO comments from controllers
-2. **Create Missing Product Modules**: Implement brands, models, etc.
-3. **Frontend Integration**: Test API endpoints with production data
-4. **Performance Optimization**: Monitor and optimize queries
-5. **Production Deployment**: Deploy to Digital Ocean with production data
+- [Production Data Migration](./production-data-migration.md) — Full technical reference (schema, migrations, directory structure)
+- [Getting Started](./getting-started.md) — Project setup guide
+- [Staging Deployment](./staging-deployment.md) — Staging environment guide

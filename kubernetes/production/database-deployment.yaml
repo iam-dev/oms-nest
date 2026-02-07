@@ -1,0 +1,163 @@
+# Redis StatefulSet for caching and sessions
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: oms-redis
+  namespace: oms-nest-production
+  labels:
+    app: oms-redis
+    component: cache
+    environment: production
+spec:
+  serviceName: oms-redis-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oms-redis
+  template:
+    metadata:
+      labels:
+        app: oms-redis
+        component: cache
+        environment: production
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 6379
+          name: redis
+
+        # Resource limits for production
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
+
+        # Health checks
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        # Configuration and storage
+        volumeMounts:
+        - name: redis-config
+          mountPath: /usr/local/etc/redis/redis.conf
+          subPath: redis.conf
+          readOnly: true
+        - name: redis-data
+          mountPath: /data
+
+        command:
+        - redis-server
+        - /usr/local/etc/redis/redis.conf
+
+      volumes:
+      - name: redis-config
+        configMap:
+          name: oms-redis-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+      labels:
+        app: oms-redis
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: do-block-storage
+      resources:
+        requests:
+          storage: 2Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oms-redis-service
+  namespace: oms-nest-production
+  labels:
+    app: oms-redis
+    component: cache
+    environment: production
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: oms-redis
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oms-redis-config
+  namespace: oms-nest-production
+  labels:
+    app: oms-redis
+    environment: production
+data:
+  redis.conf: |
+    # Redis configuration for production environment
+
+    # Basic settings
+    bind 0.0.0.0
+    port 6379
+    timeout 300
+
+    # Memory management
+    maxmemory 500mb
+    maxmemory-policy allkeys-lru
+
+    # Persistence (enabled for production)
+    save "900 1"
+    appendonly yes
+
+    # Security settings
+    protected-mode yes
+
+    # Logging
+    loglevel notice
+    logfile ""
+
+    # Performance tuning
+    tcp-keepalive 300
+    tcp-backlog 511

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oms-backend
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-backend
     component: api
@@ -30,8 +30,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 1001
+        fsGroup: 1001
 
       containers:
       - name: oms-backend
@@ -44,12 +44,11 @@ spec:
           protocol: TCP
 
         env:
-        - name: NODE_ENV
-          value: "staging"
         - name: PORT
           value: "3001"
 
         # Secrets from Kubernetes secrets (NO hardcoded values)
+        # NODE_ENV is set in oms-app-secrets sealed secret
         envFrom:
         - secretRef:
             name: oms-app-secrets
@@ -68,7 +67,7 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 1001
           capabilities:
             drop:
             - ALL
@@ -115,9 +114,7 @@ spec:
       - name: cache
         emptyDir: {}
 
-      # Image pull secrets for private registry
-      imagePullSecrets:
-      - name: registry-credentials
+      # Image is public, no imagePullSecrets needed
 
       # Pod security
       automountServiceAccountToken: false
@@ -127,7 +124,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oms-backend-service
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-backend
     component: api
@@ -148,7 +145,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: oms-backend-hpa
-  namespace: oms-staging-v2
+  namespace: oms-nest-staging
   labels:
     app: oms-backend
     environment: staging

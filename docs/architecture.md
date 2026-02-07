@@ -1,788 +1,475 @@
 # System Architecture
 
-This document provides a comprehensive overview of the OMS system architecture, including high-level design, component interactions, data flow, and architectural decisions.
+This document describes the architecture of the OMS (Order Management System), a monorepo for saddle manufacturing order management in the equestrian industry.
 
-## 🏗️ High-Level Architecture
-
-### System Overview
-
-The OMS follows a modern, microservices-inspired architecture with clear separation of concerns:
+## High-Level Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                          Client Layer                          │
-├─────────────────────────────────────────────────────────────────┤
-│  Web Browser  │  Mobile App   │  API Clients  │  Admin Tools    │
-│  (Next.js)    │  (Future)     │  (Postman)    │  (K8s Dashboard)│
-└─────────────┬───────────────┬─────────────────┬─────────────────┘
-              │               │                 │
-              ▼               ▼                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      API Gateway Layer                         │
-├─────────────────────────────────────────────────────────────────┤
-│          Nginx Ingress Controller / Load Balancer              │
-│     ├── SSL Termination  ├── Rate Limiting  ├── CORS          │
-│     ├── Authentication   ├── Compression    ├── Monitoring     │
-└─────────────┬───────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Application Layer                           │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐    ┌─────────────────┐                    │
-│  │   Frontend      │    │   Backend API   │                    │
-│  │   (Next.js)     │    │   (NestJS)      │                    │
-│  │   - SSR/SSG     │◄──►│   - REST APIs   │                    │
-│  │   - CSR Pages   │    │   - GraphQL     │                    │
-│  │   - Static      │    │   - WebSockets  │                    │
-│  │   Port: 3000    │    │   Port: 3001    │                    │
-│  └─────────────────┘    └─────────────────┘                    │
-└─────────────┬───────────────┬───────────────────────────────────┘
-              │               │
-              ▼               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Service Layer                              │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
-│  │   Orders    │ │ Customers   │ │  Products   │ │   Users   │ │
-│  │   Service   │ │   Service   │ │   Service   │ │  Service  │ │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
-│  │  Fitters    │ │ Suppliers   │ │    Auth     │ │   Mail    │ │
-│  │   Service   │ │   Service   │ │   Service   │ │  Service  │ │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
-└─────────────┬───────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Data Layer                                │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
-│  │ PostgreSQL  │ │   Redis     │ │   Object    │ │   Logs    │ │
-│  │  (Primary)  │ │  (Cache)    │ │  Storage    │ │  (Files)  │ │
-│  │             │ │             │ │  (Future)   │ │           │ │
-│  │ Port: 5432  │ │ Port: 6379  │ │             │ │           │ │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                       Client Layer                          │
+├─────────────────────────────────────────────────────────────┤
+│  Web Browser (Next.js)  │  API Clients (Postman/Swagger)   │
+└────────────┬────────────┴──────────────┬────────────────────┘
+             │                           │
+             ▼                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              NGINX Ingress Controller                       │
+│    SSL Termination · cert-manager (Let's Encrypt)           │
+└────────────┬────────────┬──────────────────────────────────-┘
+             │            │
+             ▼            ▼
+┌────────────────┐  ┌────────────────┐
+│   Frontend     │  │   Backend API  │
+│   Next.js 15   │  │   NestJS 11    │
+│   Port: 3000   │  │   Port: 3001   │
+└────────────────┘  └───────┬────────┘
+                            │
+                    ┌───────┴────────┐
+                    │                │
+                    ▼                ▼
+             ┌────────────┐  ┌────────────┐
+             │ PostgreSQL  │  │   Redis    │
+             │     17      │  │     7      │
+             │ Port: 5432  │  │ Port: 6379 │
+             └────────────┘  └────────────┘
 ```
 
-### Technology Stack
+## Technology Stack
 
-**Frontend Stack**
-```
-Next.js 15 (App Router)
-├── React 19 (UI Components)
-├── TypeScript (Type Safety)
-├── Tailwind CSS (Styling)
-├── Shadcn/ui (Component Library)
-├── Jotai (State Management)
-├── React Hook Form (Forms)
-├── Zod (Validation)
-└── Playwright (E2E Testing)
-```
+### Backend
 
-**Backend Stack**
 ```
-NestJS (Node.js Framework)
-├── TypeScript (Language)
-├── TypeORM (Database ORM)
-├── PostgreSQL (Primary Database)
-├── Redis (Cache & Sessions)
-├── Passport.js (Authentication)
-├── JWT (Token Management)
-├── Class Validator (Input Validation)
-├── Swagger/OpenAPI (Documentation)
-├── Jest (Testing)
-└── Docker (Containerization)
+NestJS 11 (Node.js)
+├── TypeScript
+├── TypeORM (PostgreSQL ORM)
+├── Passport.js + JWT (Authentication)
+├── class-validator / class-transformer (DTOs)
+├── @nestjs/terminus (Health checks)
+├── Redis (ioredis) — Cache + sessions
+├── Swagger/OpenAPI — API docs at /docs
+├── Jest — Unit + integration tests
+└── Docker — Containerization
 ```
 
-**Infrastructure Stack**
+### Frontend
+
 ```
-Kubernetes (Orchestration)
-├── Docker (Containerization)
-├── Nginx Ingress (Load Balancing)
-├── Let's Encrypt (SSL Certificates)
+Next.js 15 (App Router, Turbopack, React 19)
+├── TypeScript (strict mode)
+├── Tailwind CSS 4 — Utility-first styling
+├── shadcn/ui + Radix UI — 50+ accessible components
+├── Jotai — Atomic state management
+├── React Hook Form + Zod — Form handling + validation
+├── TanStack React Table — Headless table logic
+├── jose + jsonwebtoken — JWT handling
+├── Recharts — Charts
+├── exceljs / jspdf — Export to Excel/PDF
+├── Sonner — Toast notifications
+├── Jest + React Testing Library — Component tests
+└── Playwright — E2E tests
+```
+
+### Infrastructure
+
+```
+DigitalOcean DOKS (Kubernetes)
+├── NGINX Ingress Controller
+├── cert-manager (Let's Encrypt TLS)
+├── Bitnami SealedSecrets (encrypted secrets in Git)
+├── Horizontal Pod Autoscaling
+├── Network Policies
 ├── GitHub Actions (CI/CD)
-├── DigitalOcean (Cloud Provider)
-├── Prometheus (Monitoring)
-├── Grafana (Dashboards)
-└── ELK Stack (Logging)
+├── GHCR (Container Registry)
+└── Helm Charts (deployment templates)
 ```
 
-## 🏛️ Architectural Patterns
+## Backend Architecture
 
-### 1. Domain-Driven Design (DDD)
+### Hexagonal Architecture
 
-The system is organized around business domains:
-
-```
-Domain Models:
-├── Order Management
-│   ├── Orders (Aggregate Root)
-│   ├── OrderItems
-│   └── OrderStatus
-├── Customer Management
-│   ├── Customers
-│   ├── CustomerProfiles
-│   └── CustomerPreferences
-├── Product Catalog
-│   ├── Products (Aggregate Root)
-│   ├── Brands
-│   ├── Models
-│   ├── Leathertypes
-│   ├── Options
-│   ├── Extras
-│   └── Presets
-├── User Management
-│   ├── Users
-│   ├── Roles
-│   └── Permissions
-├── Manufacturing
-│   ├── Fitters
-│   ├── Suppliers
-│   └── WorkflowSteps
-└── System
-    ├── Configuration
-    ├── FeatureFlags
-    └── AuditLogs
-```
-
-### 2. Layered Architecture
-
-Each domain follows a consistent layered approach:
+Every business entity follows this structure:
 
 ```
-Presentation Layer (Controllers)
-       ↓
-Application Layer (Services)
-       ↓
-Domain Layer (Entities/Models)
-       ↓
-Infrastructure Layer (Repositories/Database)
+backend/src/[entity]/
+├── domain/
+│   └── [entity].ts                    # Pure domain model (no infrastructure deps)
+├── infrastructure/persistence/relational/
+│   ├── entities/[entity].entity.ts    # TypeORM entity
+│   ├── repositories/[entity].repository.ts
+│   ├── mappers/[entity].mapper.ts
+│   └── relational-persistence.module.ts
+├── dto/
+│   ├── create-[entity].dto.ts
+│   ├── update-[entity].dto.ts
+│   └── query-[entity].dto.ts
+├── [entity].service.ts                # Business logic
+├── [entity].controller.ts             # HTTP layer
+└── [entity].module.ts                 # NestJS module
 ```
 
-**Layer Responsibilities:**
+### Modules
 
-- **Presentation Layer**: HTTP handling, validation, serialization
-- **Application Layer**: Business workflows, coordination
-- **Domain Layer**: Business rules, entity behavior
-- **Infrastructure Layer**: Data persistence, external integrations
+The `AppModule` registers ~47 modules. Key modules by category:
 
-### 3. Event-Driven Architecture
+**Core Business:**
+- `orders/` — Central order management
+- `order-lines/` — Order line items (orders_info)
+- `customers/` — Customer management
+- `fitters/` — Saddle fitters
+- `factories/` — Manufacturing facilities
+- `factory-employees/` — Factory staff
+- `users/` — User management
 
-Key business events trigger side effects:
+**Product Catalog:**
+- `brands/` — Saddle brands (Custom, Icon, Wolfgang)
+- `saddles/` — Master product entity
+- `leathertypes/` — Material options
+- `options/` — Configuration categories
+- `options-items/` — Specific choices within options
+- `extras/` — Additional product features (UUID PKs)
+- `saddle-extras/` — Saddle-extras relationships
+- `saddle-leathers/` — Saddle-leather combinations
+- `saddle-options-items/` — Saddle-option relationships
+- `presets/` — Saved configurations
+- `saddle-stock/` — Stock queries (Hydra format, raw SQL)
+- `order-product-saddles/` — Order-product-saddle links
 
-```
-Order Created → Email Notification + Audit Log
-Order Approved → Manufacturing Workflow + Customer Notification
-Payment Received → Order Processing + Inventory Update
-Shipment Created → Tracking Notification + Delivery Schedule
-```
+**System:**
+- `auth/` — Authentication (Passport.js, JWT, account lockout)
+- `roles/` — Role definitions and guards
+- `rls/` — PostgreSQL Row Level Security
+- `cache/` — Redis caching (production cache service, warming, metrics, invalidation)
+- `enriched-orders/` — Materialized view queries with caching
+- `audit-logging/` — Audit trail + database query logging
+- `health/` — Health check endpoints
+- `monitoring/` — Metrics collection
+- `session/` — Session management
+- `mail/` / `mailer/` — Email services
+- `files/` — File management
+- `comments/` — Comments system
+- `statuses/` — Order status definitions
+- `access-filter-groups/` — Access control groups
+- `country-managers/` — Country management
 
-## 🔄 Data Flow Architecture
+### Global Interceptors
 
-### Request Flow
+Registered in `app.module.ts` and `main.ts`:
 
-```
-1. Client Request
-   ├── Authentication Middleware
-   ├── Validation Middleware
-   ├── Rate Limiting
-   └── CORS Headers
-           ↓
-2. Controller Layer
-   ├── Input Validation (DTOs)
-   ├── Authorization Guards
-   ├── Request Parsing
-   └── Response Formatting
-           ↓
-3. Service Layer
-   ├── Business Logic
-   ├── Domain Rules
-   ├── Transaction Management
-   └── Error Handling
-           ↓
-4. Repository Layer
-   ├── Database Queries
-   ├── Entity Mapping
-   ├── Cache Management
-   └── Connection Pooling
-           ↓
-5. Database Layer
-   ├── Query Execution
-   ├── Index Usage
-   ├── Transaction Management
-   └── Data Persistence
-```
-
-### State Management Flow
-
-**Frontend State Management (Jotai)**
-```
-User Action → Component Event → Atom Update → Derived State → UI Re-render
-     ↓              ↓               ↓             ↓            ↓
-Form Submit → API Call → Success/Error → State Update → Notification
-```
-
-**Backend State Management**
-```
-HTTP Request → Controller → Service → Repository → Database
-     ↓             ↓          ↓          ↓           ↓
-Validation → Business → Entity → Query → Persistence
-             Logic     Update   Builder
-```
-
-## 🗄️ Database Architecture
-
-### Entity Relationship Design
-
-```
-Users ──┐
-        ├── Orders ──┐
-        │            ├── OrderItems
-        │            └── OrderStatus
-        └── Customers
-
-Products ──┐
-          ├── ProductVariants
-          ├── ProductOptions
-          └── ProductCategories
-
-Orders ────┤
-          ├── Fitters
-          ├── Suppliers
-          └── Workflows
-
-System ────┤
-          ├── AuditLogs
-          ├── FeatureFlags
-          └── Configuration
-```
-
-### Database Schema Strategy
-
-**Core Principles:**
-- **Normalization**: 3NF for transactional data
-- **Denormalization**: Strategic for read-heavy operations
-- **Indexing**: Optimized for query patterns
-- **Partitioning**: By date for audit logs
-- **Archiving**: Automated for old data
-
-**Performance Optimizations:**
-```sql
--- Strategic indexes for common queries
-CREATE INDEX idx_orders_status_created ON orders(status, created_at);
-CREATE INDEX idx_orders_customer_urgent ON orders(customer_id, urgent) WHERE status != 'completed';
-CREATE INDEX idx_audit_logs_entity_date ON audit_logs(entity_type, created_at)
-  WHERE created_at > CURRENT_DATE - INTERVAL '90 days';
-
--- Partial indexes for active records
-CREATE INDEX idx_active_orders ON orders(id, created_at) WHERE status IN ('pending', 'in_progress');
-
--- Composite indexes for complex queries
-CREATE INDEX idx_order_search ON orders(customer_id, status, urgent, created_at);
-```
-
-### Data Access Patterns
-
-**Repository Pattern Implementation:**
-```typescript
-@Injectable()
-export class OrderRepository {
-  // Basic CRUD operations
-  async findById(id: string): Promise<Order> {
-    return this.orderRepository.findOne({
-      where: { id },
-      relations: ['customer', 'fitter', 'product'],
-    });
-  }
-
-  // Complex queries with caching
-  @CachedQuery({ ttl: 300 })
-  async findActiveOrders(filters: OrderFilters): Promise<PaginatedResult<Order>> {
-    const queryBuilder = this.orderRepository
-      .createQueryBuilder('order')
-      .leftJoinAndSelect('order.customer', 'customer')
-      .leftJoinAndSelect('order.fitter', 'fitter')
-      .where('order.status IN (:...statuses)', {
-        statuses: ['pending', 'in_progress']
-      });
-
-    return this.applyFiltersAndPagination(queryBuilder, filters);
-  }
-
-  // Optimized bulk operations
-  async updateOrderStatuses(updates: OrderStatusUpdate[]): Promise<void> {
-    return this.dataSource.transaction(async (manager) => {
-      const promises = updates.map(update =>
-        manager.update(Order, update.id, { status: update.status })
-      );
-      await Promise.all(promises);
-    });
-  }
-}
-```
-
-## 🔐 Security Architecture
+| Interceptor | Scope | Purpose |
+|-------------|-------|---------|
+| `AuditLogInterceptor` | Global (`APP_INTERCEPTOR`) | Logs mutations (POST, PUT, PATCH, DELETE) with entity type, action, user, and order status changes. Uses `@AuditLog()` decorator metadata. |
+| `ResolvePromisesInterceptor` | Global (`main.ts`) | Resolves nested promises in response objects before serialization |
+| `ClassSerializerInterceptor` | Global (`main.ts`) | Applies class-transformer serialization (excludes `@Exclude()` fields) |
+| `CacheInterceptor` | Per-controller | Caches GET responses in Redis with configurable TTL and key |
+| `MonitoringInterceptor` | Per-controller | Records HTTP request metrics (method, route, status, duration) |
 
 ### Authentication & Authorization
 
-```
-Authentication Flow:
-Client Request → JWT Validation → User Resolution → Permission Check → Resource Access
-      ↓              ↓                ↓                ↓                ↓
-Login Endpoint → Token Generation → User Entity → Role/Permission → Authorized Response
-```
+**Auth Flow:**
 
-**Security Layers:**
-1. **Network Security**: HTTPS, CORS, Rate Limiting
-2. **Application Security**: JWT validation, RBAC, Input validation
-3. **Data Security**: SQL injection prevention, Encryption at rest
-4. **Infrastructure Security**: Container scanning, Secret management
+1. `POST /api/v1/auth/email/login` — Submit email/username + password
+2. `AuthService.validateLogin()` → `usersService.findByEmailOrUsername()` (dual login)
+3. Password validation via bcrypt
+4. Account lockout check (`failedLoginAttempts`, `lockedUntil`)
+5. JWT token generation (access + refresh tokens)
+6. Audit log of login action
 
-### Role-Based Access Control (RBAC)
+**Guards (applied per-controller):**
 
 ```typescript
-export enum UserRole {
-  USER = 'USER',           // Customer permissions
-  FITTER = 'FITTER',       // Measurement and validation
-  SUPPLIER = 'SUPPLIER',   // Inventory and fulfillment
-  SUPERVISOR = 'SUPERVISOR', // Approval and oversight
-  ADMIN = 'ADMIN'          // System administration
-}
-
-// Permission matrix
-const PERMISSIONS = {
-  [UserRole.USER]: [
-    'orders:read:own',
-    'orders:create',
-    'profile:update:own',
-  ],
-  [UserRole.FITTER]: [
-    'orders:read:assigned',
-    'orders:update:measurements',
-    'customers:read',
-  ],
-  [UserRole.SUPPLIER]: [
-    'orders:read:all',
-    'orders:update:fulfillment',
-    'inventory:manage',
-  ],
-  [UserRole.SUPERVISOR]: [
-    'orders:read:all',
-    'orders:approve',
-    'reports:generate',
-    'users:read',
-  ],
-  [UserRole.ADMIN]: ['*'] // All permissions
-};
+@UseGuards(JwtAuthGuard, RlsGuard, RolesGuard)
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
 ```
 
-## 🚀 Performance Architecture
+| Guard | Purpose |
+|-------|---------|
+| `JwtAuthGuard` | Validates JWT from Authorization header, sets `request.user` |
+| `RolesGuard` | Checks `@Roles()` decorator metadata against `request.user.role.id` |
+| `RlsGuard` | Sets PostgreSQL session variables for Row Level Security context |
 
-### Caching Strategy
+**Roles** (defined in `roles/roles.enum.ts`):
 
-**Multi-Level Caching:**
-```
-Browser Cache (304 responses)
-       ↓
-CDN Cache (Static assets)
-       ↓
-Application Cache (Redis)
-       ↓
-Database Query Cache
-       ↓
-Database Storage
-```
+| ID | Role | Description |
+|----|------|-------------|
+| 1 | `fitter` | Professional saddle fitters |
+| 2 | `admin` | System administration |
+| 3 | `factory` | Manufacturing and fulfillment |
+| 4 | `customsaddler` | Custom saddle specialists |
+| 5 | `supervisor` | Approval and oversight (highest) |
+| 6 | `user` | Basic user access |
 
-**Cache Implementation:**
-```typescript
-// Service-level caching
-@Injectable()
-export class ProductService {
-  @CachedQuery({ ttl: 3600, key: 'products:catalog' })
-  async getProductCatalog(): Promise<Product[]> {
-    return this.productRepository.find({
-      where: { active: true },
-      relations: ['brand', 'model', 'options'],
-      order: { createdAt: 'DESC' },
-    });
-  }
+Hierarchy: SUPERVISOR > ADMIN > FITTER/FACTORY > USER
 
-  @InvalidateCache({ keys: ['products:*'] })
-  async updateProduct(id: string, data: UpdateProductDto): Promise<Product> {
-    return this.productRepository.save({ id, ...data });
-  }
-}
+### Row Level Security (RLS)
 
-// Query result caching
-@Injectable()
-export class OrderService {
-  async getOrderStats(): Promise<OrderStats> {
-    const cacheKey = `order_stats:${new Date().toDateString()}`;
+PostgreSQL-level data isolation. The `RlsService` sets session variables used by RLS policies:
 
-    return this.cacheManager.wrap(cacheKey, async () => {
-      return this.orderRepository
-        .createQueryBuilder('order')
-        .select([
-          'COUNT(*) as total',
-          'COUNT(*) FILTER (WHERE status = "pending") as pending',
-          'COUNT(*) FILTER (WHERE urgent = true) as urgent',
-        ])
-        .getRawOne();
-    }, { ttl: 300 }); // 5 minutes
-  }
-}
-```
+- `rls.user_id` — Current user's UUID
+- `rls.user_role` — Role ID from `RoleEnum`
+- `rls.factory_id` — Factory ID (factory users only)
+- `rls.fitter_id` — Fitter ID (fitter users only)
 
-### Database Performance
+RLS policies automatically filter queries based on these variables without application code changes.
 
-**Query Optimization Strategies:**
-```sql
--- Example: Optimized order search
-EXPLAIN ANALYZE
-SELECT o.id, o.order_id, o.status, o.created_at,
-       c.name as customer_name,
-       f.name as fitter_name,
-       p.name as product_name
-FROM orders o
-LEFT JOIN customers c ON o.customer_id = c.id
-LEFT JOIN fitters f ON o.fitter_id = f.id
-LEFT JOIN products p ON o.product_id = p.id
-WHERE o.status IN ('pending', 'in_progress')
-  AND o.created_at >= CURRENT_DATE - INTERVAL '30 days'
-  AND (o.urgent = true OR f.region = 'priority_region')
-ORDER BY o.urgent DESC, o.created_at ASC
-LIMIT 50;
-```
+### Materialized Views
 
-**Connection Pooling:**
-```typescript
-// TypeORM configuration
-export const databaseConfig: TypeOrmModuleOptions = {
-  type: 'postgres',
-  url: process.env.DATABASE_URL,
-  entities: [__dirname + '/**/*.entity{.ts,.js}'],
-  synchronize: false, // Use migrations in production
-  logging: process.env.NODE_ENV === 'development',
+Two materialized views for pre-computed order data (created in migration `1737000000000-CreateEnrichedOrderViews`):
 
-  // Connection pooling
-  extra: {
-    connectionLimit: 20,
-    acquireTimeout: 30000,
-    timeout: 30000,
-    reconnect: true,
+**`enriched_order_view`** — Pre-joins orders with customers, fitters, factories, saddles, leather types, statuses. Includes computed `total_price`. Supports `CONCURRENT REFRESH` via unique index on `order_id`.
 
-    // Performance tuning
-    statement_timeout: '30s',
-    idle_in_transaction_session_timeout: '5min',
-  },
+**`order_edit_view`** — Aggregates order configuration details for editing UI.
 
-  // Connection pool optimization
-  maxQueryExecutionTime: 5000, // Log slow queries
-};
-```
+Queried by `EnrichedOrdersService` using raw SQL, cached in Redis with 5-minute TTL.
 
-## 🔧 Integration Architecture
+### Caching
 
-### External System Integration
+Redis-based caching with multiple components in `cache/`:
+
+| Component | Purpose |
+|-----------|---------|
+| `ProductionCacheService` | Main cache get/set/delete operations |
+| `CacheInvalidationService` | TTL management, automatic invalidation on mutations |
+| `CacheWarmingService` | Pre-populates cache on application startup |
+| `CacheMetricsService` | Tracks cache hit/miss ratios |
+| `CacheManagementController` | Admin endpoints for cache management |
+| `@Cache()` decorator | Method-level caching configuration |
+| `CacheInterceptor` | Automatic HTTP response caching for GET requests |
+
+Default TTL: 5 minutes. Invalidation on mutations (POST, PUT, PATCH, DELETE).
+
+### Health Endpoints
+
+Four endpoints via `@nestjs/terminus` (`health/health.controller.ts`):
+
+| Endpoint | Purpose | Checks |
+|----------|---------|--------|
+| `GET /health` | General health | DB, Redis, Memory (150 MB), Disk (90%) |
+| `GET /health/ready` | K8s readiness probe | DB only |
+| `GET /health/live` | K8s liveness probe | Memory (200 MB), Disk (95%) |
+| `GET /health/detailed` | Comprehensive report | All checks + metadata (version, env, timestamp) |
+
+### API Response Formats
+
+Different endpoints return different shapes:
+
+| Pattern | Endpoints | Shape |
+|---------|-----------|-------|
+| Paginated | customers, fitters, factories, orders | `{ data: T[], total, pages }` |
+| Order search | enriched orders search | `{ orders: T[], total, page, limit, hasNext, hasPrev }` |
+| Hydra | saddle-stock, enriched-orders | `{ hydra:member, hydra:totalItems, hydra:view }` |
+| Simple array | active, urgent, overdue endpoints | `T[]` |
+
+### Database
+
+**ID Strategy:**
+- Legacy entities use integer primary keys (`SERIAL`) matching the original MySQL schema
+- New entities (extras, files) use UUID (`@PrimaryGeneratedColumn("uuid")`)
+- Only `User` has a dual ID system (`id` UUID + `legacyId` integer)
+
+**TypeORM Configuration** (`database/typeorm-config.service.ts`):
+- Connection pooling via `database.maxConnections`
+- Conditional SSL with certificate support
+- Logging enabled in development, disabled in production
+- Entities auto-discovered via `src/**/*.entity{.ts,.js}` pattern
+- Migrations in `src/database/migrations/`
+
+**Migrations:** 18 TypeORM migrations covering initial schema (21 legacy tables), RLS policies, enriched order views, search indexes, seat sizes JSONB column, extras/audit tables, and user email population. See [Production Data Migration](./production-data-migration.md) for details.
+
+## Frontend Architecture
+
+### App Router Structure
+
+Next.js 15 App Router with 37 route segments:
 
 ```
-OMS Core System
-       ↓
-┌─────────────────────────────────────────┐
-│           Integration Layer             │
-├─────────────────────────────────────────┤
-│  ┌─────────────┐ ┌─────────────┐       │
-│  │   Payment   │ │   Shipping  │       │
-│  │  Processor  │ │   Provider  │       │
-│  │  (Stripe)   │ │    (DHL)    │       │
-│  └─────────────┘ └─────────────┘       │
-│  ┌─────────────┐ ┌─────────────┐       │
-│  │    Email    │ │   SMS/Push  │       │
-│  │   Service   │ │    Service  │       │
-│  │ (SendGrid)  │ │  (Twilio)   │       │
-│  └─────────────┘ └─────────────┘       │
-│  ┌─────────────┐ ┌─────────────┐       │
-│  │  Analytics  │ │  Monitoring │       │
-│  │  (Mixpanel) │ │ (DataDog)   │       │
-│  │             │ │             │       │
-│  └─────────────┘ └─────────────┘       │
-└─────────────────────────────────────────┘
+frontend/
+├── app/                              # Route segments
+│   ├── layout.tsx                    # Root layout
+│   ├── page.tsx                      # Redirects to /dashboard
+│   ├── login/                        # Authentication
+│   ├── dashboard/                    # Main dashboard
+│   ├── orders/                       # Order management
+│   ├── customers/                    # Customer management
+│   ├── fitters/                      # Fitter management
+│   ├── factories/                    # Factory management
+│   ├── brands/, leathertypes/, options/, extras/
+│   ├── models/, products/, product-stocks/
+│   ├── saddle-stock/, my-saddle-stock/
+│   ├── repairs/, reports/
+│   ├── users/, user-permissions/, warehouses/
+│   └── ...
+├── components/
+│   ├── ui/                           # 50+ shadcn/ui components (Radix-based)
+│   ├── shared/                       # Reusable business components
+│   │   ├── EntityTable.tsx           # Generic table for all entities
+│   │   ├── DataTable.tsx             # Core table (TanStack React Table)
+│   │   ├── TableHeaderFilter.tsx     # OData-compatible filtering
+│   │   ├── [Entity]DetailModal.tsx   # View modals
+│   │   ├── [Entity]EditModal.tsx     # Edit modals
+│   │   ├── forms/                    # Entity form components
+│   │   └── filters/                  # Filter implementations
+│   ├── providers/                    # Context/state providers
+│   └── SaddleModelling/              # Saddle modeling UI
+├── context/
+│   └── AuthContext.tsx               # Auth state (Jotai atoms)
+├── services/
+│   ├── api.ts                        # Centralized API (auth headers, OData filters)
+│   ├── auth/
+│   │   └── withPageRequiredAuth.tsx   # Route protection HOC
+│   └── [entity].ts                   # 30+ entity-specific services
+├── store/
+│   └── auth.ts                       # Jotai atoms (token, user, loading)
+├── hooks/
+│   ├── useEntities.ts                # Generic data fetching
+│   ├── useEntityData.ts              # Pagination + filtering
+│   ├── usePagination.ts              # Pagination logic
+│   ├── useTableFilters.ts            # Table filter state
+│   ├── useToken.ts                   # Token management
+│   └── useUserRole.ts               # Role checking
+├── types/                            # TypeScript interfaces
+│   ├── Role.ts, Order.ts, Customer.ts, etc.
+│   └── EnrichedOrder.ts
+└── middleware.ts                      # Edge middleware (route protection)
 ```
 
-### API Design Patterns
+### State Management (Jotai)
 
-**RESTful API Design:**
-```typescript
-// Standard resource endpoints
-@Controller('orders')
-export class OrderController {
-  @Get()           // GET /orders - List with pagination
-  @Get(':id')      // GET /orders/:id - Get specific order
-  @Post()          // POST /orders - Create new order
-  @Put(':id')      // PUT /orders/:id - Update entire order
-  @Patch(':id')    // PATCH /orders/:id - Partial update
-  @Delete(':id')   // DELETE /orders/:id - Remove order
-
-  // Custom actions
-  @Post(':id/approve')    // POST /orders/:id/approve
-  @Post(':id/cancel')     // POST /orders/:id/cancel
-  @Get(':id/history')     // GET /orders/:id/history
-}
-
-// Filtering and pagination
-@Get()
-async findAll(
-  @Query() query: OrderQueryDto,
-  @Query('page') page = 1,
-  @Query('limit') limit = 10
-): Promise<PaginatedResponse<Order>> {
-  return this.orderService.findAll({
-    ...query,
-    pagination: { page, limit }
-  });
-}
-```
-
-## 🏗️ Deployment Architecture
-
-### Container Architecture
-
-```dockerfile
-# Multi-stage build example
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-COPY . .
-RUN npm run build
-
-FROM node:18-alpine AS runner
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package*.json ./
-USER nestjs
-EXPOSE 3001
-CMD ["node", "dist/main"]
-```
-
-### Kubernetes Architecture
-
-```yaml
-# Deployment strategy
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: oms-backend
-spec:
-  replicas: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 2
-  selector:
-    matchLabels:
-      app: oms-backend
-  template:
-    spec:
-      containers:
-      - name: api
-        image: ordermysaddle/oms-backend:latest
-        ports:
-        - containerPort: 3001
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: oms-secrets
-              key: database-url
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 3001
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 3001
-          initialDelaySeconds: 5
-          periodSeconds: 5
-```
-
-## 📊 Monitoring Architecture
-
-### Observability Stack
+Atomic state management for auth and per-entity data:
 
 ```
-Application Metrics (Prometheus)
-       ↓
-System Metrics (Node Exporter)
-       ↓
-Log Aggregation (ELK Stack)
-       ↓
-Alerting (AlertManager)
-       ↓
-Visualization (Grafana)
+tokenAtom (localStorage) → isAuthenticatedAtom (derived)
+userAtom (memory)        → userBasicInfoAtom (localStorage fallback)
+isAuthLoadingAtom        → loading states
 ```
 
-**Monitoring Implementation:**
-```typescript
-// Health check endpoint
-@Controller('health')
-export class HealthController {
-  constructor(
-    private readonly healthCheckService: HealthCheckService,
-    private readonly typeOrmHealthIndicator: TypeOrmHealthIndicator,
-    private readonly redisHealthIndicator: RedisHealthIndicator,
-  ) {}
+### Authentication (Two-Layer)
 
-  @Get()
-  @HealthCheck()
-  check() {
-    return this.healthCheckService.check([
-      () => this.typeOrmHealthIndicator.pingCheck('database'),
-      () => this.redisHealthIndicator.pingCheck('redis'),
-    ]);
-  }
+1. **Edge Middleware** (`middleware.ts`) — Checks JWT in cookies/headers, validates role against route map, sets `x-user-id` and `x-user-role` headers
+2. **Component HOC** (`withPageRequiredAuth`) — Client-side check after hydration, redirects to `/login` if unauthenticated
 
-  @Get('metrics')
-  getMetrics() {
-    // Prometheus metrics endpoint
-    return this.metricsService.getMetrics();
-  }
-}
+### EntityTable Pattern
 
-// Custom metrics
-@Injectable()
-export class MetricsService {
-  private readonly orderCounter = new Counter({
-    name: 'orders_total',
-    help: 'Total number of orders created',
-    labelNames: ['status', 'urgent'],
-  });
+Generic, reusable table component (`components/shared/EntityTable.tsx`) used by all entity pages:
 
-  private readonly orderDuration = new Histogram({
-    name: 'order_processing_duration_seconds',
-    help: 'Time spent processing orders',
-    buckets: [0.1, 0.5, 1, 2, 5, 10],
-  });
+- Generic `<T extends { id?: string | number }>` typing
+- Supports 15+ entity types
+- Built on DataTable (TanStack React Table) + action buttons (View, Edit, Delete, Approve)
+- OData-compatible header filters
+- Pagination, search, loading/error states
 
-  recordOrderCreated(urgent: boolean) {
-    this.orderCounter.inc({ status: 'created', urgent: urgent.toString() });
-  }
+### API Service Layer
 
-  recordOrderProcessingTime(duration: number) {
-    this.orderDuration.observe(duration);
-  }
-}
-```
+Centralized in `services/api.ts`:
+- Bearer token from Jotai store with localStorage/cookie fallback
+- OData-style filter building with `escapeODataString()`
+- Base URL: `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`)
+- 30+ entity-specific service files for CRUD operations
 
-## 📋 Architectural Decisions
+### Configuration
 
-### 1. NestJS vs Express.js
-**Decision**: NestJS
-**Rationale**:
-- Built-in TypeScript support
-- Dependency injection and modular architecture
-- Extensive ecosystem (Guards, Interceptors, Pipes)
-- Enterprise-ready with testing utilities
+`next.config.ts`:
+- `output: 'standalone'` — Optimized for Docker
+- Security headers: HSTS, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), CSP
+- Image optimization: webp, avif formats, 60s cache TTL
+- Compression enabled
 
-### 2. TypeORM vs Prisma
-**Decision**: TypeORM
-**Rationale**:
-- Active Record pattern familiarity
-- Mature ecosystem with NestJS
-- Complex query capabilities
-- Migration system
+## Infrastructure
 
-### 3. Jotai vs Redux Toolkit
-**Decision**: Jotai
-**Rationale**:
-- Atomic state management reduces re-renders
-- Less boilerplate than Redux
-- Excellent TypeScript support
-- Better performance for complex state
+### Kubernetes
 
-### 4. Monorepo vs Multi-repo
-**Decision**: Monorepo
-**Rationale**:
-- Shared types between frontend/backend
-- Unified CI/CD pipeline
-- Easier dependency management
-- Atomic commits across services
+Shared DigitalOcean DOKS cluster (AMS3 region) with two namespaces:
 
-### 5. Docker vs Native Deployment
-**Decision**: Docker + Kubernetes
-**Rationale**:
-- Environment consistency
-- Horizontal scaling capabilities
-- Blue-green deployment support
-- Infrastructure as code
+| | Staging | Production |
+|---|---------|------------|
+| Namespace | `oms-nest-staging` | `oms-nest-production` |
+| Frontend URL | `next-staging.ordermysaddle.com` | `nest-production.ordermysaddle.com` |
+| Backend URL | `api-nest-staging.ordermysaddle.com` | `api-nest-production.ordermysaddle.com` |
+| Backend replicas | 2 (HPA: 2–6) | 3 (HPA: 3–10) |
+| Frontend replicas | 1 (HPA: 1–4) | 2 (HPA: 2–6) |
+| Redis persistence | No | Yes (2 Gi `do-block-storage`) |
+| Maildev | Enabled | Disabled |
+| Secrets | Bitnami SealedSecrets | Template-based |
 
-## 🔮 Future Architecture Considerations
+Manifests in `kubernetes/staging-v2/` (7 files) and `kubernetes/production/` (6 files).
 
-### Planned Improvements
+### Helm Charts
 
-**Microservices Evolution**
-```
-Current: Modular Monolith
-       ↓
-Phase 1: Extract Auth Service
-       ↓
-Phase 2: Extract Payment Service
-       ↓
-Phase 3: Extract Notification Service
-       ↓
-Future: Event-Driven Microservices
-```
+Located in `kube/helm/oms-nest/` with 19 templates:
 
-**Technology Upgrades**
-- **GraphQL Federation**: For complex frontend queries
-- **Event Sourcing**: For audit trails and replay capabilities
-- **CQRS**: Command/Query separation for performance
-- **Message Queue**: RabbitMQ/Apache Kafka for async processing
+- Deployments: backend, frontend, maildev, redis
+- HPAs: backend, frontend
+- Services: backend, frontend
+- Networking: ingress, network policies
+- Secrets: sealed-secrets, registry-secret, RBAC
+- Jobs: migration job
+- Monitoring: Prometheus rules, ServiceMonitor
+- Values: `values.yaml`, `values-staging.yaml`, `values-production.yaml`
 
-**Scalability Planning**
-- **Read Replicas**: For query performance
-- **Database Sharding**: By customer region
-- **CDN Integration**: Global static asset delivery
-- **Edge Computing**: Regional API deployment
+### Docker
 
-### Migration Strategies
+**Backend:**
+- `Dockerfile` — Development (Node 22-alpine, hot reload)
+- `Dockerfile.production` — Multi-stage build (Node 20-alpine, dumb-init, non-root user, healthcheck)
 
-**Database Migration Path**
-1. Current: Single PostgreSQL instance
-2. Phase 1: Master-slave replication
-3. Phase 2: Read/write splitting
-4. Phase 3: Microservice-specific databases
+**Frontend:**
+- `Dockerfile` — Production (Node 20-alpine, multi-stage, standalone output)
+- `Dockerfile.dev` — Development
 
-**Frontend Architecture Evolution**
-1. Current: Single Next.js application
-2. Phase 1: Module federation for large teams
-3. Phase 2: Micro-frontends for independent deployment
-4. Phase 3: Progressive Web App capabilities
+### Docker Compose (Local Development)
 
-## ⚡ Next Steps
+Root `docker-compose.yml` runs the full stack:
 
-For deeper architectural understanding:
+| Service | Port | Image |
+|---------|------|-------|
+| Backend API | 3001 | Local build |
+| Frontend | 3000 | Local build |
+| PostgreSQL | 5432 | postgres:17.6-alpine |
+| Redis | 6379 | redis:7-alpine |
+| Maildev | 1080 | Email testing UI |
+| Adminer | 8080 | Database admin UI |
 
-- **[API Reference](./api-reference.md)** - Detailed API documentation
-- **[Database Design](./database.md)** - Schema and data modeling
-- **[Security Guidelines](./security.md)** - Security implementation details
-- **[Performance Guide](./performance.md)** - Optimization strategies
-- **[Deployment Guide](./deployment.md)** - Infrastructure and deployment
-- **[Frontend Architecture](../frontend/docs/architecture.md)** - Frontend-specific architecture
-- **[Backend Architecture](../backend/docs/architecture.md)** - Backend-specific architecture
+Additional compose files: `backend/docker-compose.yaml` (backend-only), `docker-compose.relational.test.yaml` (tests), `docker-compose.relational.ci.yaml` (CI).
+
+### CI/CD (GitHub Actions)
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci-cd.yml` | Push to main/staging, PRs, daily schedule | Security scans (GitLeaks, Trivy, CodeQL), dependency audit, Docker build + push to GHCR |
+| `pr-checks.yml` | PRs to main/staging | Lint, type-check, coverage tests, CodeQL |
+| `staging-deployment.yml` | Push to staging branch, manual dispatch | Build images, push to GHCR, deploy to K8s (`oms-nest-staging`) |
+| `codeql.yml` | Push to main/staging, PRs, weekly | CodeQL advanced security analysis |
+
+Container images pushed to GHCR:
+- `ghcr.io/iam-dev/oms-nest-backend`
+- `ghcr.io/iam-dev/oms-nest-frontend`
+
+## Architectural Decisions
+
+### NestJS + Hexagonal Architecture
+
+Chosen for built-in TypeScript support, dependency injection, modular architecture, and the guards/interceptors/pipes ecosystem. Hexagonal architecture separates domain logic from infrastructure, making entities testable and portable.
+
+### TypeORM
+
+Mature ORM with NestJS integration, migration system, complex query builder, and support for both entity mapping and raw SQL (used by enriched-orders and saddle-stock).
+
+### Jotai (Frontend State)
+
+Atomic state management with less boilerplate than Redux. `atomWithStorage` provides persistence. Derived atoms compute auth state without re-renders.
+
+### Monorepo
+
+Enables shared context between backend/frontend/e2e packages. Unified CI/CD pipeline. Each package has its own `CLAUDE.md`, `package.json`, and test configuration.
+
+### Integer PKs for Legacy Data
+
+Legacy tables retain `SERIAL` integer primary keys matching the original MySQL schema. This allows direct joins in materialized views and raw SQL queries without UUID mapping overhead. Only new entities (extras, files) and the User entity use UUIDs.
+
+## Related Documentation
+
+- **[API Reference](./api-reference.md)** — Endpoint documentation
+- **[Deployment Guide](./deployment.md)** — Infrastructure and deployment
+- **[Staging Deployment](./staging-deployment.md)** — Staging environment
+- **[Production Data Migration](./production-data-migration.md)** — Data migration tooling
+- **[Development Workflow](./development-workflow.md)** — Development practices
+- **[Getting Started](./getting-started.md)** — Setup guide

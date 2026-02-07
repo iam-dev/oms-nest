@@ -2,7 +2,7 @@
 # Override per environment in values-staging.yaml / values-production.yaml
 
 global:
-  environment: production
+  environment: development
   imagePullSecrets:
     - name: registry-credentials
 
@@ -10,7 +10,7 @@ backend:
   image:
     repository: ghcr.io/iam-dev/oms-nest-backend
     tag: latest
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   port: 3001
   replicas: 2
   hpa:
@@ -53,7 +53,7 @@ frontend:
   image:
     repository: ghcr.io/iam-dev/oms-nest-frontend
     tag: latest
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   port: 3000
   replicas: 1
   hpa:
@@ -110,7 +110,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
   frontend:
-    host: nest-staging.ordermysaddle.com
+    host: next-staging.ordermysaddle.com
   backend:
     host: api-nest-staging.ordermysaddle.com
   tls:
