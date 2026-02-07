@@ -57,7 +57,7 @@ async function waitForServices(baseURL: string, apiURL: string): Promise<void> {
   await waitForService(baseURL, 'Frontend', maxRetries, retryDelay);
 
   // Wait for backend API
-  await waitForService(`${apiURL}/health`, 'Backend API', maxRetries, retryDelay);
+  await waitForService(`${apiURL}/api/health`, 'Backend API', maxRetries, retryDelay);
 
   console.log('✅ All services are ready');
 }
@@ -108,7 +108,7 @@ async function setupStagingEnvironment(apiURL: string): Promise<void> {
 
   try {
     // Health check and environment validation
-    const healthResponse = await axios.get(`${apiURL}/health`, { timeout: 10000 });
+    const healthResponse = await axios.get(`${apiURL}/api/health`, { timeout: 10000 });
     console.log(`✅ Staging health check passed: ${healthResponse.data.status}`);
 
     // Additional staging-specific setup
@@ -127,7 +127,7 @@ async function setupProductionEnvironment(apiURL: string): Promise<void> {
 
   try {
     // Production environment validation (read-only)
-    const healthResponse = await axios.get(`${apiURL}/health`, { timeout: 10000 });
+    const healthResponse = await axios.get(`${apiURL}/api/health`, { timeout: 10000 });
     console.log(`✅ Production health check passed: ${healthResponse.data.status}`);
 
     // Verify read-only access
