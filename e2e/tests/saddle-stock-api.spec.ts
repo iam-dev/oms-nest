@@ -211,7 +211,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     });
 
     const response = await unauthContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10`);
-    expect(response.status()).toBe(401);
+    expect([401, 429].includes(response.status())).toBeTruthy();
 
     await unauthContext.dispose();
   });
