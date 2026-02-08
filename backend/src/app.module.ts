@@ -51,6 +51,8 @@ import { SaddleStockModule } from "./saddle-stock/saddle-stock.module";
 import { SaddleExtraModule } from "./saddle-extras/saddle-extra.module";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { AuditLogInterceptor } from "./audit-logging/interceptors/audit-log.interceptor";
+import { RlsModule } from "./rls/rls.module";
+import { EnhancedRlsGuard } from "./rls/rls.guard";
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -75,10 +77,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       envFilePath: [".env"],
     }),
     ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 100,
-      },
+      { name: "short", ttl: 1000, limit: 3 },
+      { name: "medium", ttl: 60000, limit: 100 },
+      { name: "long", ttl: 3600000, limit: 600 },
     ]),
     infrastructureDatabaseModule,
     CacheModule,
@@ -119,11 +120,16 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     // ProductModule, // Needs implementation
     SaddleStockModule, // Saddle stock (fitter inventory) ✅ - enabled
     SaddleExtraModule, // Saddle-extra associations ✅ - enabled
+    RlsModule, // Row Level Security ✅ - enabled
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: EnhancedRlsGuard,
     },
     {
       provide: APP_INTERCEPTOR,
