@@ -1,44 +1,6 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        logger.log('🔑 Found token in auth_token localStorage');
-        return parsedToken;
-      }
-    } catch (e) {
-      logger.log('🔑 Failed to parse auth_token from localStorage, trying token key...');
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        logger.log('🔑 Found token in token localStorage');
-        return token;
-      }
-    } catch (e) {
-      logger.log('🔑 No token found in localStorage, trying cookies...');
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        logger.log('🔑 Found token in cookies');
-        return value;
-      }
-    }
-    logger.log('🔑 No token found anywhere');
-  }
-  return null;
-}
 
 export interface Supplier {
   id: number; // INTEGER - matching legacy database
@@ -128,8 +90,6 @@ export async function fetchSuppliers({
 }
 
 export async function createSupplier(supplierData: Partial<Supplier>): Promise<Supplier> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -179,7 +139,6 @@ export async function createSupplier(supplierData: Partial<Supplier>): Promise<S
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -220,8 +179,6 @@ export async function createSupplier(supplierData: Partial<Supplier>): Promise<S
 }
 
 export async function updateSupplier(id: number | string, supplierData: Partial<Supplier>): Promise<Supplier> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create entity with the same explicit structure as customers
   const entity = {
@@ -273,7 +230,6 @@ export async function updateSupplier(id: number | string, supplierData: Partial<
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -318,14 +274,10 @@ export async function updateSupplier(id: number | string, supplierData: Partial<
 }
 
 export async function deleteSupplier(id: number | string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-  
   const response = await fetch(`${API_URL}/api/v1/factories/${id}`, {
     method: 'DELETE',
     headers: {
-      'Accept': 'application/ld+json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Accept': 'application/json',
     },
     credentials: 'include',
   });

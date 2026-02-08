@@ -1,6 +1,7 @@
 import {
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
@@ -31,6 +32,7 @@ import { AuditLoggingService } from "../audit-logging/audit-logging.service";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     private jwtService: JwtService,
     private usersService: UsersService,
@@ -806,7 +808,7 @@ export class AuthService {
     success: boolean,
   ): void {
     // Basic security logging implementation
-    console.log(
+    this.logger.log(
       `Security attempt: User ${userId}, IP ${ipAddress}, Success: ${success}`,
     );
   }

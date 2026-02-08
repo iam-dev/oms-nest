@@ -1,23 +1,7 @@
 // Order Edit View API Service - Single endpoint for comprehensive order editing
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('token');
-  }
-  return null;
-}
-
-function authHeaders() {
-  const token = getToken();
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    Accept: 'application/ld+json',
-  };
-}
 
 export interface OrderEditData {
   // Basic order info (INTEGER ID)
@@ -80,7 +64,9 @@ export async function fetchOrderEditData(orderId: number): Promise<OrderEditData
   
   try {
     const response = await fetch(`${API_URL}/order_edit/${orderId}`, {
-      headers: authHeaders(),
+      headers: {
+        'Accept': 'application/json',
+      },
       credentials: 'include',
     });
     
@@ -183,7 +169,7 @@ export async function saveOrderEditData(orderId: number, orderData: Partial<Orde
     const response = await fetch(`${API_URL}/api/v1/enriched_orders/${orderId}`, {
       method: 'PATCH',
       headers: {
-        ...authHeaders(),
+        'Accept': 'application/json',
         'Content-Type': 'application/merge-patch+json',
       },
       credentials: 'include',

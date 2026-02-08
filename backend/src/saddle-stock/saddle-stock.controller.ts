@@ -10,10 +10,12 @@ import {
   Request,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { SaddleStockService } from "./saddle-stock.service";
 import { QuerySaddleStockDto } from "./dto/query-saddle-stock.dto";
-import { RoleEnum } from "../roles/roles.enum";
 
 @ApiTags("Saddle Stock")
 @Controller({
@@ -21,7 +23,8 @@ import { RoleEnum } from "../roles/roles.enum";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class SaddleStockController {
   private readonly logger = new Logger(SaddleStockController.name);
 

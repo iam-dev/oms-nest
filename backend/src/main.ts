@@ -13,6 +13,8 @@ import { useContainer } from "class-validator";
 import { AppModule } from "./app.module";
 import validationOptions from "./utils/validation-options";
 import { AllConfigType } from "./config/config.type";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { ResolvePromisesInterceptor } from "./utils/serializer.interceptor";
 
 async function bootstrap() {
@@ -44,6 +46,8 @@ async function bootstrap() {
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);
 
+  app.use(helmet());
+  app.use(cookieParser());
   app.enableShutdownHooks();
   app.setGlobalPrefix(
     configService.getOrThrow("app.apiPrefix", { infer: true }),
@@ -62,23 +66,28 @@ async function bootstrap() {
     new ClassSerializerInterceptor(app.get(Reflector)),
   );
 
-  const options = new DocumentBuilder()
-    .setTitle("API")
-    .setDescription("API docs")
-    .setVersion("1.0")
-    .addBearerAuth()
-    .addGlobalParameters({
-      in: "header",
-      required: false,
-      name: process.env.APP_HEADER_LANGUAGE || "x-custom-lang",
-      schema: {
-        example: "en",
-      },
-    })
-    .build();
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.NODE_ENV !== "staging"
+  ) {
+    const options = new DocumentBuilder()
+      .setTitle("API")
+      .setDescription("API docs")
+      .setVersion("1.0")
+      .addBearerAuth()
+      .addGlobalParameters({
+        in: "header",
+        required: false,
+        name: process.env.APP_HEADER_LANGUAGE || "x-custom-lang",
+        schema: {
+          example: "en",
+        },
+      })
+      .build();
 
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup("docs", app, document);
+    const document = SwaggerModule.createDocument(app, options);
+    SwaggerModule.setup("docs", app, document);
+  }
 
   await app.listen(configService.getOrThrow("app.port", { infer: true }));
 }

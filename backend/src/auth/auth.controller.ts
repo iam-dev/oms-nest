@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Request,
+  Response,
   Post,
   UseGuards,
   Patch,
@@ -13,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { AuthEmailLoginDto } from "./dto/auth-email-login.dto";
 import { AuthForgotPasswordDto } from "./dto/auth-forgot-password.dto";
 import { AuthConfirmEmailDto } from "./dto/auth-confirm-email.dto";
@@ -24,6 +26,19 @@ import { LoginResponseDto } from "./dto/login-response.dto";
 import { NullableType } from "../utils/types/nullable.type";
 import { User } from "../users/domain/user";
 import { RefreshResponseDto } from "./dto/refresh-response.dto";
+import { Response as ExpressResponse } from "express";
+
+const LOGIN_THROTTLE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 5;
+const REGISTER_THROTTLE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 3;
+const RESET_THROTTLE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 3;
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV !== "development",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: 15 * 60 * 1000, // 15 minutes
+};
 
 @ApiTags("Auth")
 @Controller({
@@ -33,6 +48,7 @@ import { RefreshResponseDto } from "./dto/refresh-response.dto";
 export class AuthController {
   constructor(private readonly service: AuthService) {}
 
+  @Throttle({ default: { limit: LOGIN_THROTTLE_LIMIT, ttl: 60000 } })
   @SerializeOptions({
     groups: ["me"],
   })
@@ -41,10 +57,16 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.OK)
-  public login(@Body() loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
+  public async login(
+    @Body() loginDto: AuthEmailLoginDto,
+    @Response({ passthrough: true }) res: ExpressResponse,
+  ): Promise<LoginResponseDto> {
+    const result = await this.service.validateLogin(loginDto);
+    res.cookie("token", result.token, COOKIE_OPTIONS);
+    return result;
   }
 
+  @Throttle({ default: { limit: REGISTER_THROTTLE_LIMIT, ttl: 60000 } })
   @Post("email/register")
   @HttpCode(HttpStatus.NO_CONTENT)
   async register(@Body() createUserDto: AuthRegisterLoginDto): Promise<void> {
@@ -67,6 +89,7 @@ export class AuthController {
     return this.service.confirmNewEmail(confirmEmailDto.hash);
   }
 
+  @Throttle({ default: { limit: RESET_THROTTLE_LIMIT, ttl: 60000 } })
   @Post("forgot/password")
   @HttpCode(HttpStatus.NO_CONTENT)
   async forgotPassword(
@@ -75,6 +98,7 @@ export class AuthController {
     return this.service.forgotPassword(forgotPasswordDto.email);
   }
 
+  @Throttle({ default: { limit: RESET_THROTTLE_LIMIT, ttl: 60000 } })
   @Post("reset/password")
   @HttpCode(HttpStatus.NO_CONTENT)
   resetPassword(@Body() resetPasswordDto: AuthResetPasswordDto): Promise<void> {
@@ -108,21 +132,30 @@ export class AuthController {
   @Post("refresh")
   @UseGuards(AuthGuard("jwt-refresh"))
   @HttpCode(HttpStatus.OK)
-  public refresh(@Request() request): Promise<RefreshResponseDto> {
-    return this.service.refreshToken({
+  public async refresh(
+    @Request() request,
+    @Response({ passthrough: true }) res: ExpressResponse,
+  ): Promise<RefreshResponseDto> {
+    const result = await this.service.refreshToken({
       sessionId: request.user.sessionId,
       hash: request.user.hash,
     });
+    res.cookie("token", result.token, COOKIE_OPTIONS);
+    return result;
   }
 
   @ApiBearerAuth()
   @Post("logout")
   @UseGuards(AuthGuard("jwt"))
   @HttpCode(HttpStatus.NO_CONTENT)
-  public async logout(@Request() request): Promise<void> {
+  public async logout(
+    @Request() request,
+    @Response({ passthrough: true }) res: ExpressResponse,
+  ): Promise<void> {
     await this.service.logout({
       sessionId: request.user.sessionId,
     });
+    res.clearCookie("token", { path: "/" });
   }
 
   @ApiBearerAuth()

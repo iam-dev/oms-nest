@@ -17,10 +17,23 @@ const TEST_USERS = [
     userType: 2, // ADMIN
   },
   {
+    username: "supervisor@omsaddle.com",
+    password: "SupervisorPass123!",
+    name: "Test Supervisor",
+    userType: 2, // ADMIN base type, promoted via is_supervisor
+    isSupervisor: 1,
+  },
+  {
     username: "sarah.thompson@fitters.com",
     password: "FitterPass123!",
     name: "Sarah Thompson",
     userType: 1, // FITTER
+  },
+  {
+    username: "factory-test@omsaddle.com",
+    password: "FactoryPass123!",
+    name: "Test Factory",
+    userType: 3, // FACTORY
   },
   {
     username: "testuser",
@@ -126,13 +139,46 @@ export class UserSeedService {
       // Insert directly into credentials table
       // The "user" view will automatically reflect this data
       // Include all NOT NULL columns: user_type, last_login, password_reset_hash
+      // Supervisor users need supervisor=1 to trigger the supervisor role
+      const supervisorFlag =
+        "isSupervisor" in userData ? (userData as any).isSupervisor : 0;
       await this.dataSource.query(
-        `INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted)
-         VALUES ($1, $2, $3, $4, 0, '', 0, 0)`,
-        [userData.username, hashedPassword, userData.name, userData.userType],
+        `INSERT INTO credentials (user_name, password_hash, full_name, user_type, supervisor, last_login, password_reset_hash, blocked, deleted)
+         VALUES ($1, $2, $3, $4, $5, 0, '', 0, 0)`,
+        [
+          userData.username,
+          hashedPassword,
+          userData.name,
+          userData.userType,
+          supervisorFlag,
+        ],
       );
 
       this.logger.log(`✅ Created user: ${userData.username}`);
+    }
+
+    // Ensure the fitter test user has a corresponding fitters table entry.
+    // Role resolution for user_type=1 requires a fitters row with matching user_id.
+    const fitterUser = await this.dataSource.query(
+      `SELECT user_id FROM credentials WHERE user_name = $1 LIMIT 1`,
+      ["sarah.thompson@fitters.com"],
+    );
+    if (fitterUser.length > 0) {
+      const fitterUserId = fitterUser[0].user_id;
+      const existingFitter = await this.dataSource.query(
+        `SELECT id FROM fitters WHERE user_id = $1 LIMIT 1`,
+        [fitterUserId],
+      );
+      if (existingFitter.length === 0) {
+        await this.dataSource.query(
+          `INSERT INTO fitters (user_id, deleted, address, zipcode, state, city, country, phone_no, cell_no, currency, emailaddress)
+           VALUES ($1, 0, '10 Test Lane', '12345', 'TestState', 'TestCity', 'United States', '5551234567', '', 1, 'sarah.thompson@fitters.com')`,
+          [fitterUserId],
+        );
+      }
+      this.logger.log(
+        `✅ Ensured fitter entry for sarah.thompson (user_id=${fitterUserId})`,
+      );
     }
 
     // Insert FK placeholder users with explicit user_ids

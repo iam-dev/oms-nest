@@ -15,31 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') return JSON.parse(stored);
-    } catch { /* fallback */ }
-    const cookies = document.cookie.split(';');
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') return value;
-    }
-  }
-  return null;
-}
-
-function authHeaders() {
-  const token = getToken();
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    'Content-Type': 'application/json',
-  };
-}
+import { API_URL } from '@/services/api-config';
 
 interface EditFormOptions {
   fitters: Array<{ id: number; username: string; fullName: string }>;
@@ -157,7 +133,10 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
       const [detail, options] = await Promise.all([
         fetchOrderDetail(orderId),
         fetch(`${API_URL}/api/v1/enriched_orders/edit-options`, {
-          headers: authHeaders(),
+          headers: {
+            'Accept': 'application/json',
+          },
+          credentials: 'include',
         }).then(r => {
           if (!r.ok) throw new Error(`Failed to fetch options: ${r.status}`);
           return r.json() as Promise<EditFormOptions>;
@@ -266,7 +245,10 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
       setCustomerSearchLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/v1/customers?search=${encodeURIComponent(customerSearchTerm)}&limit=10`, {
-          headers: authHeaders(),
+          headers: {
+            'Accept': 'application/json',
+          },
+          credentials: 'include',
         });
         if (res.ok) {
           const data = await res.json();
@@ -288,7 +270,10 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
       setFitterSearchLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/v1/fitters?search=${encodeURIComponent(fitterSearchTerm)}&limit=10`, {
-          headers: authHeaders(),
+          headers: {
+            'Accept': 'application/json',
+          },
+          credentials: 'include',
         });
         if (res.ok) {
           const data = await res.json();

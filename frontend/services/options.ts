@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Option {
@@ -78,44 +79,7 @@ export async function fetchOptions({
   });
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 export async function createOption(optionData: Partial<Option>): Promise<Option> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -156,7 +120,6 @@ export async function createOption(optionData: Partial<Option>): Promise<Option>
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -176,8 +139,6 @@ export async function createOption(optionData: Partial<Option>): Promise<Option>
 }
 
 export async function updateOption(id: string, optionData: Partial<Option>): Promise<Option> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -219,7 +180,6 @@ export async function updateOption(id: string, optionData: Partial<Option>): Pro
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -239,14 +199,10 @@ export async function updateOption(id: string, optionData: Partial<Option>): Pro
 }
 
 export async function deleteOption(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const response = await fetch(`${API_URL}/options/${id}`, {
     method: 'DELETE',
     headers: {
-      'Accept': 'application/ld+json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Accept': 'application/json',
     },
     credentials: 'include',
   });

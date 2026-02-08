@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react';
 import { Provider } from 'jotai';
 import { User, UserRole } from '@/types/Role';
-import { mockUsers, getMockUserByRole, getMockToken } from './mockUsers';
+import { mockUsers, getMockUserByRole } from './mockUsers';
 
 interface AuthTestProviderProps {
   children: ReactNode;
@@ -18,26 +18,22 @@ export const AuthTestProvider: React.FC<AuthTestProviderProps> = ({
 }) => {
   const mockUserData = getMockUserByRole(role);
   const mockUser = customUser || mockUserData.user;
-  const mockToken = getMockToken(mockUserData.role);
-
   // Mock the auth store atoms
   const mockAuthStore = React.useMemo(() => {
     const store = new Map();
-    
+
     if (isAuthenticated) {
       // Set authenticated state
       store.set('userAtom', mockUser);
-      store.set('tokenAtom', mockToken);
       store.set('isAuthenticatedAtom', true);
     } else {
       // Set unauthenticated state
       store.set('userAtom', null);
-      store.set('tokenAtom', null);
       store.set('isAuthenticatedAtom', false);
     }
-    
+
     return store;
-  }, [mockUser, mockToken, isAuthenticated]);
+  }, [mockUser, isAuthenticated]);
 
   return (
     <Provider>
@@ -61,11 +57,9 @@ export const createAuthTestWrapper = (
 export const mockAuthContext = (role: UserRole | string = UserRole.USER, isAuthenticated: boolean = true) => {
   const mockUserData = isAuthenticated ? getMockUserByRole(role) : null;
   const mockUser = mockUserData?.user || null;
-  const mockToken = mockUserData ? getMockToken(mockUserData.role) : null;
 
   return {
     user: mockUser,
-    token: mockToken,
     isAuthenticated,
     login: jest.fn(),
     logout: jest.fn(),

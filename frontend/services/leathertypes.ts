@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Leathertype {
@@ -75,44 +76,7 @@ export async function fetchLeathertypes({
   });
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 export async function createLeathertype(leathertypeData: Partial<Leathertype>): Promise<Leathertype> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -152,7 +116,6 @@ export async function createLeathertype(leathertypeData: Partial<Leathertype>): 
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -172,8 +135,6 @@ export async function createLeathertype(leathertypeData: Partial<Leathertype>): 
 }
 
 export async function updateLeathertype(id: string, leathertypeData: Partial<Leathertype>): Promise<Leathertype> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -214,7 +175,6 @@ export async function updateLeathertype(id: string, leathertypeData: Partial<Lea
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -234,14 +194,10 @@ export async function updateLeathertype(id: string, leathertypeData: Partial<Lea
 }
 
 export async function deleteLeathertype(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const response = await fetch(`${API_URL}/leathertypes/${id}`, {
     method: 'DELETE',
     headers: {
-      'Accept': 'application/ld+json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Accept': 'application/json',
     },
     credentials: 'include',
   });

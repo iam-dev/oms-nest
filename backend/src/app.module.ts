@@ -12,6 +12,7 @@ import redisConfig from "./config/redis.config";
 import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfigService } from "./database/typeorm-config.service";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { MailModule } from "./mail/mail.module";
 import { HomeModule } from "./home/home.module";
 import { DataSource, DataSourceOptions } from "typeorm";
@@ -48,7 +49,7 @@ import { CountryManagerModule } from "./country-managers/country-manager.module"
 import { WarehouseModule } from "./warehouses/warehouse.module";
 import { SaddleStockModule } from "./saddle-stock/saddle-stock.module";
 import { SaddleExtraModule } from "./saddle-extras/saddle-extra.module";
-import { APP_INTERCEPTOR } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { AuditLogInterceptor } from "./audit-logging/interceptors/audit-log.interceptor";
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
@@ -73,6 +74,12 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       ],
       envFilePath: [".env"],
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     infrastructureDatabaseModule,
     CacheModule,
     UsersModule,
@@ -114,6 +121,10 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     SaddleExtraModule, // Saddle-extra associations ✅ - enabled
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditLogInterceptor,

@@ -13,6 +13,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   EnrichedOrdersService,
@@ -25,7 +28,8 @@ import {
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class EnrichedOrdersController {
   private readonly logger = new Logger(EnrichedOrdersController.name);
 

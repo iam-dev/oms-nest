@@ -25,6 +25,9 @@ import { CreateLeathertypeDto } from "./dto/create-leathertype.dto";
 import { UpdateLeathertypeDto } from "./dto/update-leathertype.dto";
 import { LeathertypeDto } from "./dto/leathertype.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * Leathertype REST API Controller
@@ -38,7 +41,8 @@ import { AuthGuard } from "@nestjs/passport";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class LeathertypeController {
   constructor(private readonly leathertypeService: LeathertypeService) {}
 

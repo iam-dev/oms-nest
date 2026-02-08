@@ -185,7 +185,7 @@ export const jwtPayloadSchema = z.object({
 
 // Environment variable validation
 export const envSchema = z.object({
-  NEXT_PUBLIC_API_URL: z.string().url('Invalid API URL').default('http://localhost:8888'),
+  NEXT_PUBLIC_API_URL: z.string().url('Invalid API URL').default('http://localhost:3001'),
   JWT_SECRET: z.string().min(32, 'JWT secret must be at least 32 characters'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });

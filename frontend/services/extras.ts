@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Extra {
@@ -78,42 +79,7 @@ export async function fetchExtras({
   });
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 export async function createExtra(extraData: Partial<Extra>): Promise<Extra> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const payload = {
     name: extraData.name,
     sequence: extraData.sequence || 0,
@@ -129,11 +95,7 @@ export async function createExtra(extraData: Partial<Extra>): Promise<Extra> {
 
   const response = await fetch(`${API_URL}/api/v1/extras`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(payload),
   });
@@ -148,9 +110,6 @@ export async function createExtra(extraData: Partial<Extra>): Promise<Extra> {
 }
 
 export async function updateExtra(id: string, extraData: Partial<Extra>): Promise<Extra> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const payload: Record<string, any> = {};
   if (extraData.name !== undefined) payload.name = extraData.name;
   if (extraData.description !== undefined) payload.description = extraData.description;
@@ -165,11 +124,7 @@ export async function updateExtra(id: string, extraData: Partial<Extra>): Promis
 
   const response = await fetch(`${API_URL}/api/v1/extras/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(payload),
   });
@@ -184,15 +139,9 @@ export async function updateExtra(id: string, extraData: Partial<Extra>): Promis
 }
 
 export async function deleteExtra(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const response = await fetch(`${API_URL}/api/v1/extras/${id}`, {
     method: 'DELETE',
-    headers: {
-      'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Accept': 'application/json' },
     credentials: 'include',
   });
 
