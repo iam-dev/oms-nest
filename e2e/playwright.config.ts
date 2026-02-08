@@ -224,7 +224,8 @@ export default defineConfig({
       env: {
         ...process.env,
         NODE_ENV: 'test',
-        NEXT_PUBLIC_API_URL: config.apiURL,
+        // Frontend code appends /api/v1/... so base URL must NOT include /api
+        NEXT_PUBLIC_API_URL: config.apiURL.replace(/\/api$/, ''),
         NEXTAUTH_URL: config.baseURL,
         PORT: '3000',
       },
