@@ -85,6 +85,7 @@ export function LoginForm() {
     >
       <div className="flex flex-col gap-[18px]">
         <input
+          type="text"
           value={username}
           onChange={e => setUsername(e.target.value)}
           placeholder="Gebruikersnaam"

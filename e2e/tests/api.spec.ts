@@ -704,19 +704,18 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
 
     const enrichedData = await enrichedResponse.json();
 
-    expect(enrichedData).toHaveProperty('@context');
-    expect(enrichedData).toHaveProperty('@type', 'hydra:Collection');
-    expect(enrichedData).toHaveProperty('@id');
-    expect(enrichedData).toHaveProperty('hydra:member');
-    expect(enrichedData).toHaveProperty('hydra:totalItems');
-    expect(enrichedData).toHaveProperty('hydra:view');
-    expect(Array.isArray(enrichedData['hydra:member'])).toBeTruthy();
-    expect(typeof enrichedData['hydra:totalItems']).toBe('number');
+    // Enriched orders returns standard pagination format: { data, total, page, pages, hasNext, hasPrev }
+    expect(enrichedData).toHaveProperty('data');
+    expect(enrichedData).toHaveProperty('total');
+    expect(enrichedData).toHaveProperty('page');
+    expect(enrichedData).toHaveProperty('pages');
+    expect(Array.isArray(enrichedData.data)).toBeTruthy();
+    expect(typeof enrichedData.total).toBe('number');
 
-    console.log(`Enriched orders returned: ${enrichedData['hydra:member'].length} of ${enrichedData['hydra:totalItems']} total`);
+    console.log(`Enriched orders returned: ${enrichedData.data.length} of ${enrichedData.total} total`);
 
-    if (enrichedData['hydra:member'].length > 0) {
-      const order = enrichedData['hydra:member'][0];
+    if (enrichedData.data.length > 0) {
+      const order = enrichedData.data[0];
       expect(order).toHaveProperty('id');
     }
   });
@@ -727,11 +726,11 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
 
     const enrichedData = await enrichedResponse.json();
 
-    expect(enrichedData).toHaveProperty('hydra:member');
-    expect(enrichedData).toHaveProperty('hydra:totalItems');
-    expect(Array.isArray(enrichedData['hydra:member'])).toBeTruthy();
+    expect(enrichedData).toHaveProperty('data');
+    expect(enrichedData).toHaveProperty('total');
+    expect(Array.isArray(enrichedData.data)).toBeTruthy();
 
-    console.log(`Enriched orders search returned: ${enrichedData['hydra:member'].length} of ${enrichedData['hydra:totalItems']} total`);
+    console.log(`Enriched orders search returned: ${enrichedData.data.length} of ${enrichedData.total} total`);
   });
 
   test('should handle enriched-orders with fitter filter @api', async () => {
@@ -740,11 +739,11 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
 
     const enrichedData = await enrichedResponse.json();
 
-    expect(enrichedData).toHaveProperty('hydra:member');
-    expect(enrichedData).toHaveProperty('hydra:totalItems');
-    expect(Array.isArray(enrichedData['hydra:member'])).toBeTruthy();
+    expect(enrichedData).toHaveProperty('data');
+    expect(enrichedData).toHaveProperty('total');
+    expect(Array.isArray(enrichedData.data)).toBeTruthy();
 
-    console.log(`Enriched orders by fitter returned: ${enrichedData['hydra:member'].length} of ${enrichedData['hydra:totalItems']} total`);
+    console.log(`Enriched orders by fitter returned: ${enrichedData.data.length} of ${enrichedData.total} total`);
   });
 
   test('should handle enriched-orders with urgency filter @api', async () => {
@@ -753,11 +752,11 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
 
     const enrichedData = await enrichedResponse.json();
 
-    expect(enrichedData).toHaveProperty('hydra:member');
-    expect(enrichedData).toHaveProperty('hydra:totalItems');
-    expect(Array.isArray(enrichedData['hydra:member'])).toBeTruthy();
+    expect(enrichedData).toHaveProperty('data');
+    expect(enrichedData).toHaveProperty('total');
+    expect(Array.isArray(enrichedData.data)).toBeTruthy();
 
-    console.log(`Urgent enriched orders returned: ${enrichedData['hydra:member'].length} of ${enrichedData['hydra:totalItems']} total`);
+    console.log(`Urgent enriched orders returned: ${enrichedData.data.length} of ${enrichedData.total} total`);
   });
 
   test('should handle enriched-orders health endpoint @api', async () => {
@@ -778,18 +777,16 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     expect(page1Response.ok()).toBeTruthy();
 
     const page1Data = await page1Response.json();
-    expect(page1Data).toHaveProperty('hydra:member');
-    expect(page1Data).toHaveProperty('hydra:view');
+    expect(page1Data).toHaveProperty('data');
+    expect(page1Data).toHaveProperty('total');
+    expect(page1Data).toHaveProperty('page');
+    expect(page1Data).toHaveProperty('pages');
+    expect(page1Data).toHaveProperty('hasNext');
+    expect(page1Data).toHaveProperty('hasPrev');
 
-    const view = page1Data['hydra:view'];
-    expect(view).toHaveProperty('@id');
-    expect(view).toHaveProperty('@type', 'hydra:PartialCollectionView');
-    expect(view).toHaveProperty('hydra:first');
-    expect(view).toHaveProperty('hydra:last');
-
-    if (page1Data['hydra:totalItems'] > 5 && page1Data['hydra:member'].length > 0) {
-      expect(view).toHaveProperty('hydra:next');
-      console.log(`Pagination test: page 1 of ${Math.ceil(page1Data['hydra:totalItems'] / 5)}`);
+    if (page1Data.total > 5 && page1Data.data.length > 0) {
+      expect(page1Data.hasNext).toBeTruthy();
+      console.log(`Pagination test: page 1 of ${page1Data.pages}`);
     }
   });
 
