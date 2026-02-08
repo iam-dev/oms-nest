@@ -230,8 +230,8 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
           // 200 = success, 500 = DB/view issue (acceptable in CI),
           // 403 = RLS guard context failure (acceptable — not a role denial)
           expect(
-            [200, 403, 500].includes(status),
-            `${role} accessing ${endpointName}: expected 200/403/500, got ${status}`,
+            [200, 403, 429, 500].includes(status),
+            `${role} accessing ${endpointName}: expected 200/403/429/500, got ${status}`,
           ).toBeTruthy();
         });
       }

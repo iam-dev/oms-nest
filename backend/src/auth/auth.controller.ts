@@ -29,7 +29,8 @@ import { RefreshResponseDto } from "./dto/refresh-response.dto";
 import { Response as ExpressResponse } from "express";
 import { SkipRlsContext } from "../rls/rls.guard";
 
-const isTest = process.env.NODE_ENV === "test";
+const isTest =
+  process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
