@@ -13,6 +13,10 @@ kubernetes/production/secrets-template.yaml:database-password:51
 kubernetes/production/secrets-template.yaml:database-password:66
 
 # User seed service - test-only passwords for CI/dev seeding (not used in production)
-8835b801b5a40f81300ebe1b8722b8046f7630fd:backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:15
-8835b801b5a40f81300ebe1b8722b8046f7630fd:backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:24
-8835b801b5a40f81300ebe1b8722b8046f7630fd:backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:33
+backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:21
+backend/src/database/seeds/relational/user/user-seed.service.ts:database-password:34
+
+# E2E test helpers - test-only passwords for automated testing (not used in production)
+e2e/shared/auth-helpers.ts:database-password:20
+e2e/shared/auth-helpers.ts:database-password:32
+e2e/shared/auth-helpers.ts:database-password:38

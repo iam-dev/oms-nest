@@ -15,16 +15,28 @@ export const TEST_USERS: Record<string, TestUser> = {
     role: 'admin',
     expectedRedirect: '/dashboard'
   },
+  supervisor: {
+    username: 'supervisor@omsaddle.com',
+    password: 'SupervisorPass123!',
+    role: 'supervisor',
+    expectedRedirect: '/dashboard'
+  },
   fitter: {
     username: 'sarah.thompson@fitters.com',
     password: 'FitterPass123!',
     role: 'fitter',
     expectedRedirect: '/dashboard'
   },
-  supervisor: {
-    username: 'admin@omsaddle.com',
-    password: 'AdminPass123!',
-    role: 'supervisor',
+  factory: {
+    username: 'factory-test@omsaddle.com',
+    password: 'FactoryPass123!',
+    role: 'factory',
+    expectedRedirect: '/dashboard'
+  },
+  user: {
+    username: 'testuser',
+    password: 'TestUser123!',
+    role: 'user',
     expectedRedirect: '/dashboard'
   }
 };

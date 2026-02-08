@@ -1,4 +1,4 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { RoleEnum } from "../roles/roles.enum";
 
@@ -21,6 +21,7 @@ import { RoleEnum } from "../roles/roles.enum";
  */
 @Injectable()
 export class RlsService {
+  private readonly logger = new Logger(RlsService.name);
   constructor(
     @Inject("DATA_SOURCE")
     private readonly dataSource: DataSource,
@@ -752,8 +753,8 @@ export class RlsService {
     fitterId?: string,
   ): Promise<void> {
     // Log context change
-    console.log(
-      `[AUDIT] Setting user context: ${userId}, role: ${userRole}, factory: ${factoryId}, fitter: ${fitterId}`,
+    this.logger.log(
+      `Setting user context: ${userId}, role: ${userRole}, factory: ${factoryId}, fitter: ${fitterId}`,
     );
 
     await this.setUserContext(userId, userRole, factoryId, fitterId);
@@ -776,7 +777,7 @@ export class RlsService {
       );
     } catch (error) {
       // Audit table may not exist, that's okay
-      console.log(`[AUDIT] Could not log to audit table: ${error.message}`);
+      this.logger.warn(`Could not log to audit table: ${error.message}`);
     } finally {
       await queryRunner.release();
     }

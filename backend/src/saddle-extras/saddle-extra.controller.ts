@@ -25,6 +25,9 @@ import { CreateSaddleExtraDto } from "./dto/create-saddle-extra.dto";
 import { UpdateSaddleExtraDto } from "./dto/update-saddle-extra.dto";
 import { SaddleExtraDto } from "./dto/saddle-extra.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 @ApiTags("Saddle Extras")
 @Controller({
@@ -32,7 +35,8 @@ import { AuthGuard } from "@nestjs/passport";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class SaddleExtraController {
   constructor(private readonly service: SaddleExtraService) {}
 

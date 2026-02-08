@@ -1,6 +1,7 @@
 // Comprehensive Order Detail API Service
 // Based on the old Breeze UI implementation for complete order editing
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 // API endpoints from the old implementation
@@ -138,11 +139,11 @@ export async function fetchComprehensiveOrderData(orderId: number): Promise<Comp
     logger.log('Fetched order:', order);
 
     // Get product saddle related data if the order has product saddles
-    let productSaddleExtras: any[] = [];
-    let productSaddleItems: any[] = [];
-    let modelItems: any[] = [];
-    let modelLeatherPrices: any[] = [];
-    let productSaddles: any[] = [];
+    const productSaddleExtras: any[] = [];
+    const productSaddleItems: any[] = [];
+    const modelItems: any[] = [];
+    const modelLeatherPrices: any[] = [];
+    const productSaddles: any[] = [];
 
     const orderLines = orderLinesResponse['hydra:member'] || [];
     
@@ -326,12 +327,13 @@ export async function saveComprehensiveOrder(orderData: any): Promise<any> {
     // different parts of the order (order, order lines, product saddles, etc.)
     // For now, we'll implement a basic save
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${orderData.id}`, {
+    const response = await fetch(`${API_URL}/orders/${orderData.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/merge-patch+json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Accept': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify(orderData),
     });
 

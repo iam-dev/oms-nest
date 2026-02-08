@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 
 export interface Warehouse {
   id: string;
@@ -32,19 +33,6 @@ export interface WarehousesResponse {
   'hydra:totalItems': number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-function getAuthHeaders() {
-  const token = typeof window !== 'undefined' ? 
-    document.cookie.split(';').find(c => c.trim().startsWith('token='))?.split('=')[1] : null;
-  
-  return {
-    'Content-Type': 'application/ld+json',
-    'Accept': 'application/ld+json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-  };
-}
-
 /**
  * Fetch warehouses with pagination and filtering
  */
@@ -73,7 +61,10 @@ export async function fetchWarehouses({
  */
 export async function getWarehouse(id: string): Promise<Warehouse> {
   const response = await fetch(`${API_URL}/warehouses/${id}`, {
-    headers: getAuthHeaders(),
+    headers: {
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -89,7 +80,11 @@ export async function getWarehouse(id: string): Promise<Warehouse> {
 export async function createWarehouse(warehouseData: CreateWarehouseData): Promise<Warehouse> {
   const response = await fetch(`${API_URL}/warehouses`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
     body: JSON.stringify({
       username: warehouseData.username,
       name: warehouseData.name,
@@ -113,7 +108,11 @@ export async function createWarehouse(warehouseData: CreateWarehouseData): Promi
 export async function updateWarehouse(id: string, warehouseData: UpdateWarehouseData): Promise<Warehouse> {
   const response = await fetch(`${API_URL}/warehouses/${id}`, {
     method: 'PUT',
-    headers: getAuthHeaders(),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
     body: JSON.stringify(warehouseData),
   });
 
@@ -131,7 +130,10 @@ export async function updateWarehouse(id: string, warehouseData: UpdateWarehouse
 export async function deleteWarehouse(id: string): Promise<void> {
   const response = await fetch(`${API_URL}/warehouses/${id}`, {
     method: 'DELETE',
-    headers: getAuthHeaders(),
+    headers: {
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
   });
 
   if (!response.ok) {

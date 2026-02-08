@@ -1,48 +1,10 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import type { AccessFilterGroup, AccessFilterGroupsResponse } from '@/types/AccessFilterGroup';
 import { logger } from '@/utils/logger';
 
 // Re-export types for component usage
 export type { AccessFilterGroup, AccessFilterGroupsResponse };
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        logger.log('🔑 Found token in auth_token localStorage');
-        return parsedToken;
-      }
-    } catch (e) {
-      logger.log('🔑 Failed to parse auth_token from localStorage, trying token key...');
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        logger.log('🔑 Found token in token localStorage');
-        return token;
-      }
-    } catch (e) {
-      logger.log('🔑 No token found in localStorage, trying cookies...');
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        logger.log('🔑 Found token in cookies');
-        return value;
-      }
-    }
-    logger.log('🔑 No token found anywhere');
-  }
-  return null;
-}
 
 export async function fetchAccessFilterGroups({
   page = 1,
@@ -94,8 +56,6 @@ export async function fetchAccessFilterGroups({
 }
 
 export async function createAccessFilterGroup(accessFilterGroupData: Partial<AccessFilterGroup>): Promise<AccessFilterGroup> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -135,7 +95,6 @@ export async function createAccessFilterGroup(accessFilterGroupData: Partial<Acc
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -176,8 +135,6 @@ export async function createAccessFilterGroup(accessFilterGroupData: Partial<Acc
 }
 
 export async function updateAccessFilterGroup(id: string, accessFilterGroupData: Partial<AccessFilterGroup>): Promise<AccessFilterGroup> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create entity with the same explicit structure as suppliers
   const entity = {
@@ -219,7 +176,6 @@ export async function updateAccessFilterGroup(id: string, accessFilterGroupData:
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -262,14 +218,10 @@ export async function updateAccessFilterGroup(id: string, accessFilterGroupData:
 }
 
 export async function deleteAccessFilterGroup(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const response = await fetch(`${API_URL}/access_filter_groups/${id}`, {
     method: 'DELETE',
     headers: {
-      'Accept': 'application/ld+json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Accept': 'application/json',
     },
     credentials: 'include',
   });

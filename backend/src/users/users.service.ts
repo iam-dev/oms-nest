@@ -1,6 +1,7 @@
 import {
   HttpStatus,
   Injectable,
+  Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -25,6 +26,8 @@ import { RoleEntity } from "../roles/infrastructure/persistence/relational/entit
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly usersRepository: UserRepository,
     private readonly filesService: FilesService,
@@ -357,7 +360,7 @@ export class UsersService {
   ): Promise<void> {
     await Promise.resolve();
     // Basic implementation for production security validation
-    console.log(
+    this.logger.log(
       `Validating login security for user ${userId} from IP ${ipAddress}`,
     );
   }
@@ -365,7 +368,7 @@ export class UsersService {
   async recordLoginAttempt(attemptData: any): Promise<void> {
     await Promise.resolve();
     // Basic implementation for login attempt recording
-    console.log(`Recording login attempt:`, attemptData);
+    this.logger.log(`Recording login attempt for user ${attemptData?.userId}`);
   }
 
   async unlockAccount(userId: User["id"]): Promise<void> {

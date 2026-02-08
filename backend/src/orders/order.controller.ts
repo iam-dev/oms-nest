@@ -32,6 +32,9 @@ import { QueryOrderDto } from "./dto/query-order.dto";
 import { OrderSearchDto } from "./dto/order-search.dto";
 import { OrderDto } from "./dto/order.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AuditLog } from "../audit-logging/decorators";
 
 /**
@@ -46,7 +49,8 @@ import { AuditLog } from "../audit-logging/decorators";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderController {
   constructor(
     private readonly orderService: OrderService,

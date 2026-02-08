@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext } from "@nestjs/common";
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  Logger,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { RlsService } from "./rls.service";
 import { RoleEnum } from "../roles/roles.enum";
@@ -21,6 +26,8 @@ import { RoleEnum } from "../roles/roles.enum";
  */
 @Injectable()
 export class RlsGuard implements CanActivate {
+  private readonly logger = new Logger(RlsGuard.name);
+
   constructor(
     private readonly rlsService: RlsService,
     protected readonly reflector: Reflector,
@@ -67,9 +74,8 @@ export class RlsGuard implements CanActivate {
 
       return true;
     } catch (error) {
-      // Log error but don't block the request
-      console.error("Failed to set RLS context:", error);
-      return true;
+      this.logger.error("Failed to set RLS context — denying request", error);
+      return false;
     }
   }
 }

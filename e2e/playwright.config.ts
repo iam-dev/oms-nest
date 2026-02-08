@@ -4,7 +4,7 @@ import * as dotenv from 'dotenv';
 // Load environment variables from .env file
 dotenv.config();
 
-// Environment configuration for Ralph Loop automation
+// Environment configuration
 const ENVIRONMENT = process.env.ENVIRONMENT || 'local';
 
 const environmentConfig = {
@@ -33,7 +33,7 @@ const grepFilter = ['staging', 'production'].includes(ENVIRONMENT)
  * 🚀 Enhanced Playwright configuration for OMS E2E testing
  * 🔄 Fully automated DevSecOps pipeline compatible
  * 🔐 Security-first approach with environment-based testing
- * 🎯 Ralph Loop automation ready with zero interventions
+ * 🎯 Automation ready with zero interventions
  */
 export default defineConfig({
   testDir: './tests',
@@ -52,7 +52,7 @@ export default defineConfig({
   /* Workers configuration for CI/CD optimization */
   workers: process.env.CI ? 2 : undefined,
 
-  /* Comprehensive reporter configuration for Ralph Loop integration */
+  /* Comprehensive reporter configuration */
   reporter: [
     ['html', {
       outputFolder: './test-results/html-report',
@@ -262,7 +262,7 @@ export default defineConfig({
     version: process.env.npm_package_version || '1.0.0',
     environment: ENVIRONMENT,
     testSuite: 'E2E-Comprehensive',
-    automation: 'Ralph-Loop-Compatible',
+    automation: 'CI-Compatible',
     security: 'DevSecOps-Enabled'
   },
 });

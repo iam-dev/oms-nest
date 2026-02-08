@@ -20,6 +20,7 @@ import { ProductionCacheService } from "./production-cache.service";
 import { CacheWarmingService } from "./cache-warming.service";
 import { CacheMetricsService } from "./cache-metrics.service";
 import { CacheInvalidationService } from "./cache-invalidation.service";
+import { AuthGuard } from "@nestjs/passport";
 import { RolesGuard } from "../roles/roles.guard";
 import { Roles } from "../roles/roles.decorator";
 import { RoleEnum } from "../roles/roles.enum";
@@ -32,7 +33,7 @@ import { RoleEnum } from "../roles/roles.enum";
 @ApiTags("Cache Management")
 @Controller("admin/cache")
 @ApiBearerAuth()
-@UseGuards(RolesGuard)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 export class CacheManagementController {
   constructor(

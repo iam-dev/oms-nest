@@ -15,25 +15,14 @@ const mapRolesToPrimary = (roles: string[]): string => {
 };
 import { getEnrichedOrders } from '@/services/enrichedOrders';
 
-// Mock tokenManager
-const getAuthTokens = jest.fn();
-const clearAuthTokens = jest.fn();
-
 // Mock getCurrentUser
 const getCurrentUser = jest.fn();
 
 // Mock dependencies
 jest.mock('@/services/enrichedOrders');
-jest.mock('jwt-decode', () => ({
-  __esModule: true,
-  default: jest.fn(),
-}), { virtual: true });
 
 const mockGetEnrichedOrders = getEnrichedOrders as jest.MockedFunction<typeof getEnrichedOrders>;
 const mockGetCurrentUser = getCurrentUser as jest.Mock;
-const mockGetAuthTokens = getAuthTokens as jest.Mock;
-const mockClearAuthTokens = clearAuthTokens as jest.Mock;
-const mockJwtDecode = require('jwt-decode').default;
 
 // Test component to demonstrate multi-role behavior
 const MultiRoleTestComponent = () => {
@@ -125,17 +114,6 @@ describe('Multi-Role Scenario Tests', () => {
   describe('Role Mapping Scenarios', () => {
     describe('SUPERVISOR + ADMIN combination', () => {
       it('should map to SUPERVISOR and provide highest permissions', async () => {
-        const mockToken = 'supervisor.admin.token';
-        const mockDecodedToken = {
-          userId: 1,
-          username: 'supervisor.admin',
-          roles: ['ROLE_SUPERVISOR', 'ROLE_ADMIN'],
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-
-        mockGetAuthTokens.mockReturnValue({ token: mockToken, refreshToken: 'refresh.token' });
-        mockJwtDecode.mockReturnValue(mockDecodedToken);
-
         // Verify role mapping
         const primaryRole = mapRolesToPrimary(['ROLE_SUPERVISOR', 'ROLE_ADMIN']);
         expect(primaryRole).toBe('ROLE_SUPERVISOR');
@@ -177,17 +155,6 @@ describe('Multi-Role Scenario Tests', () => {
 
     describe('ADMIN + FITTER combination', () => {
       it('should map to ADMIN and bypass fitter filtering', async () => {
-        const mockToken = 'admin.fitter.token';
-        const mockDecodedToken = {
-          userId: 2,
-          username: 'admin.fitter',
-          roles: ['ROLE_ADMIN', 'ROLE_FITTER'],
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-
-        mockGetAuthTokens.mockReturnValue({ token: mockToken, refreshToken: 'refresh.token' });
-        mockJwtDecode.mockReturnValue(mockDecodedToken);
-
         const primaryRole = mapRolesToPrimary(['ROLE_ADMIN', 'ROLE_FITTER']);
         expect(primaryRole).toBe('ROLE_ADMIN');
 

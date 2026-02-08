@@ -59,21 +59,11 @@ const roleMap: Record<string, string[]> = {
   '/find-saddle': ['admin', 'user', 'supervisor', 'fitter'],
 };
 
-// Use the same hardcoded JWT secret that the PHP backend uses
-// This matches the SIGNER_KEY in api/src/Security/JwtHelper.php line 28
-const JWT_SECRET = '0c5853eea5701a7c505c3915c6efab21b966db94ac04b6f127a0f2d0973cbb1aebf5a129185bf3edf3dc9d0503e7e045ff941301e0012e44daeb2bca36bcf89f';
+const JWT_SECRET = process.env.JWT_SECRET || '';
 
 export async function middleware(request: NextRequest) {
-  // Check for token in cookies first, then authorization header
-  let token = request.cookies.get('token')?.value;
-
-  // If no cookie token, check Authorization header
-  if (!token) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    }
-  }
+  // Token is stored as httpOnly cookie by the backend
+  const token = request.cookies.get('token')?.value;
 
   const { pathname } = request.nextUrl;
   const cookies = request.cookies.getAll();
@@ -108,9 +98,21 @@ export async function middleware(request: NextRequest) {
   logger.log('🔑 Middleware: Protected path found:', protectedPath);
   
   if (protectedPath) {
-    // Decode token to extract role (without signature verification)
-    // FIXME: Re-enable full JWT verification once signature mismatch is resolved
-    const payload = token ? decodeJwtPayload(token) : null;
+    // Verify token signature and extract role
+    let payload: JwtPayload | null = null;
+    if (token) {
+      if (JWT_SECRET) {
+        payload = await verifyJwt(token);
+        if (!payload) {
+          logger.log('🔑 Middleware: JWT verification failed, redirecting to login');
+          return NextResponse.redirect(new URL('/login', request.url));
+        }
+      } else {
+        // Fallback to decode-only when JWT_SECRET is not configured (dev without env)
+        logger.log('🔑 Middleware: JWT_SECRET not set, falling back to decode-only');
+        payload = decodeJwtPayload(token);
+      }
+    }
     const userRole = typeof payload?.role === 'object' && payload.role
       ? (payload.role as any).name?.toLowerCase()
       : undefined;

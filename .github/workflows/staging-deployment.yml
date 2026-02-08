@@ -399,6 +399,16 @@ jobs:
       run: doctl kubernetes cluster kubeconfig save k8s-1-28-6-do-0-ams3-1713552913551
       working-directory: .
 
+    - name: Generate E2E test passwords
+      id: e2e-creds
+      run: |
+        E2E_ADMIN_PASSWORD="$(openssl rand -hex 16)Aa1@"
+        E2E_FITTER_PASSWORD="$(openssl rand -hex 16)Ft1@"
+        echo "::add-mask::$E2E_ADMIN_PASSWORD"
+        echo "::add-mask::$E2E_FITTER_PASSWORD"
+        echo "E2E_ADMIN_PASSWORD=$E2E_ADMIN_PASSWORD" >> "$GITHUB_OUTPUT"
+        echo "E2E_FITTER_PASSWORD=$E2E_FITTER_PASSWORD" >> "$GITHUB_OUTPUT"
+
     - name: Create E2E test users on staging
       working-directory: .
       run: |
@@ -417,18 +427,18 @@ jobs:
           });
           (async () => {
             await c.connect();
-            const adminHash = await bcrypt.hash('E2eAdminPass123!', 10);
-            const fitterHash = await bcrypt.hash('E2eFitterPass123!', 10);
+            const adminHash = await bcrypt.hash('${{ steps.e2e-creds.outputs.E2E_ADMIN_PASSWORD }}', 10);
+            const fitterHash = await bcrypt.hash('${{ steps.e2e-creds.outputs.E2E_FITTER_PASSWORD }}', 10);
             await c.query(
-              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT DO NOTHING',
+              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT (user_name) DO UPDATE SET password_hash = EXCLUDED.password_hash, blocked = 0, deleted = 0',
               ['e2e-admin@test.com', adminHash, 'E2E Admin', 2]
             );
             await c.query(
-              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT DO NOTHING',
+              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT (user_name) DO UPDATE SET password_hash = EXCLUDED.password_hash, blocked = 0, deleted = 0',
               ['e2e-fitter@test.com', fitterHash, 'E2E Fitter', 1]
             );
             await c.end();
-            console.log('E2E test users created successfully');
+            console.log('E2E test users created/updated with random passwords');
           })().catch(e => { console.error('Failed to create test users:', e.message); process.exit(1); });
         "
 
@@ -440,9 +450,9 @@ jobs:
         STAGING_BASE_URL: https://next-staging.ordermysaddle.com
         STAGING_API_URL: https://api-nest-staging.ordermysaddle.com
         TEST_ADMIN_EMAIL: e2e-admin@test.com
-        TEST_ADMIN_PASSWORD: E2eAdminPass123!
+        TEST_ADMIN_PASSWORD: ${{ steps.e2e-creds.outputs.E2E_ADMIN_PASSWORD }}
         TEST_FITTER_EMAIL: e2e-fitter@test.com
-        TEST_FITTER_PASSWORD: E2eFitterPass123!
+        TEST_FITTER_PASSWORD: ${{ steps.e2e-creds.outputs.E2E_FITTER_PASSWORD }}
 
     - name: Delete E2E test users from staging
       if: always()

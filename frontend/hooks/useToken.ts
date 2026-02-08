@@ -1,23 +1,18 @@
-import { useAtom } from 'jotai';
-import { tokenAtom } from '../store/auth';
 import { logger } from '@/utils/logger';
 
+/**
+ * @deprecated Token is now stored as httpOnly cookie and not accessible from JS.
+ * Authentication is handled via credentials: 'include' on fetch requests.
+ * This hook is kept for backward compatibility but always returns null.
+ */
 export function useToken() {
-  const [token] = useAtom(tokenAtom);
-  return token;
+  return null;
 }
 
-// Helper function to get token without React context (for middleware, etc.)
+/**
+ * @deprecated Token is now stored as httpOnly cookie and not accessible from JS.
+ * This function is kept for backward compatibility but always returns null.
+ */
 export function getStoredToken(): string | null {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      logger.warn('Failed to parse stored token:', e);
-    }
-  }
   return null;
 }

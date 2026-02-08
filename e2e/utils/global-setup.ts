@@ -2,7 +2,7 @@ import { chromium, FullConfig } from '@playwright/test';
 import axios from 'axios';
 
 /**
- * 🚀 Global E2E Test Setup for Ralph Loop Automation
+ * 🚀 Global E2E Test Setup
  * 🔐 Security-first approach with environment preparation
  * 🎯 Zero-intervention setup for automated testing
  */

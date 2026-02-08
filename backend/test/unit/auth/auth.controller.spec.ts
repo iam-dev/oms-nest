@@ -16,6 +16,13 @@ describe("AuthController", () => {
   let controller: AuthController;
   let authService: jest.Mocked<AuthService>;
 
+  const mockResponse = () => {
+    const res: any = {};
+    res.cookie = jest.fn().mockReturnValue(res);
+    res.clearCookie = jest.fn().mockReturnValue(res);
+    return res;
+  };
+
   const mockUser: Partial<User> = {
     id: 1,
     email: "test@example.com",
@@ -74,15 +81,21 @@ describe("AuthController", () => {
         email: "test@example.com",
         password: "password123",
       };
+      const res = mockResponse();
       authService.validateLogin.mockResolvedValue(mockLoginResponse);
 
       // Act
-      const result = await controller.login(loginDto);
+      const result = await controller.login(loginDto, res);
 
       // Assert
       expect(result).toEqual(mockLoginResponse);
       expect(authService.validateLogin).toHaveBeenCalledWith(loginDto);
       expect(authService.validateLogin).toHaveBeenCalledTimes(1);
+      expect(res.cookie).toHaveBeenCalledWith(
+        "token",
+        mockLoginResponse.token,
+        expect.any(Object),
+      );
     });
 
     it("should throw UnprocessableEntityException for invalid credentials", async () => {
@@ -99,7 +112,7 @@ describe("AuthController", () => {
       );
 
       // Act & Assert
-      await expect(controller.login(loginDto)).rejects.toThrow(
+      await expect(controller.login(loginDto, mockResponse())).rejects.toThrow(
         UnprocessableEntityException,
       );
       expect(authService.validateLogin).toHaveBeenCalledWith(loginDto);
@@ -114,7 +127,7 @@ describe("AuthController", () => {
       authService.validateLogin.mockResolvedValue(mockLoginResponse);
 
       // Act
-      const result = await controller.login(loginDto);
+      const result = await controller.login(loginDto, mockResponse());
 
       // Assert
       expect(result).toEqual(mockLoginResponse);
@@ -336,13 +349,19 @@ describe("AuthController", () => {
       const mockRequest = {
         user: { sessionId: 123, hash: "session-hash" },
       };
+      const res = mockResponse();
       authService.refreshToken.mockResolvedValue(mockRefreshResponse);
 
       // Act
-      const result = await controller.refresh(mockRequest);
+      const result = await controller.refresh(mockRequest, res);
 
       // Assert
       expect(result).toEqual(mockRefreshResponse);
+      expect(res.cookie).toHaveBeenCalledWith(
+        "token",
+        mockRefreshResponse.token,
+        expect.any(Object),
+      );
       expect(authService.refreshToken).toHaveBeenCalledWith({
         sessionId: mockRequest.user.sessionId,
         hash: mockRequest.user.hash,
@@ -357,16 +376,18 @@ describe("AuthController", () => {
       const mockRequest = {
         user: { sessionId: 123 },
       };
+      const res = mockResponse();
       authService.logout.mockResolvedValue();
 
       // Act
-      await controller.logout(mockRequest);
+      await controller.logout(mockRequest, res);
 
       // Assert
       expect(authService.logout).toHaveBeenCalledWith({
         sessionId: mockRequest.user.sessionId,
       });
       expect(authService.logout).toHaveBeenCalledTimes(1);
+      expect(res.clearCookie).toHaveBeenCalledWith("token", { path: "/" });
     });
   });
 
@@ -466,7 +487,7 @@ describe("AuthController", () => {
       authService.validateLogin.mockRejectedValue(new Error("Database error"));
 
       // Act & Assert
-      await expect(controller.login(loginDto)).rejects.toThrow(
+      await expect(controller.login(loginDto, mockResponse())).rejects.toThrow(
         "Database error",
       );
       expect(authService.validateLogin).toHaveBeenCalledWith(loginDto);

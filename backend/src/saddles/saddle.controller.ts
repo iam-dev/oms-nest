@@ -25,6 +25,9 @@ import { CreateSaddleDto } from "./dto/create-saddle.dto";
 import { UpdateSaddleDto } from "./dto/update-saddle.dto";
 import { SaddleDto } from "./dto/saddle.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * Saddle REST API Controller
@@ -38,7 +41,8 @@ import { AuthGuard } from "@nestjs/passport";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter, RoleEnum.factory)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class SaddleController {
   constructor(private readonly saddleService: SaddleService) {}
 

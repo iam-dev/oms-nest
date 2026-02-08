@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -19,6 +20,7 @@ import { FactoryEmployeeDtoMapper } from "./mappers/factory-employee-dto.mapper"
  */
 @Injectable()
 export class FactoryEmployeeService {
+  private readonly logger = new Logger(FactoryEmployeeService.name);
   constructor(
     @Inject("FactoryEmployeeRepository")
     private readonly factoryEmployeeRepository: FactoryEmployeeRepository,
@@ -238,7 +240,7 @@ export class FactoryEmployeeService {
         updatedEmployees.push(updated);
       } catch (error) {
         // Continue with other employees if one fails
-        console.warn(
+        this.logger.warn(
           `Failed to transfer employee ${employeeId}: ${error.message}`,
         );
       }
