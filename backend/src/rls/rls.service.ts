@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { RoleEnum } from "../roles/roles.enum";
 
@@ -22,10 +22,7 @@ import { RoleEnum } from "../roles/roles.enum";
 @Injectable()
 export class RlsService {
   private readonly logger = new Logger(RlsService.name);
-  constructor(
-    @Inject("DATA_SOURCE")
-    private readonly dataSource: DataSource,
-  ) {}
+  constructor(private readonly dataSource: DataSource) {}
 
   /**
    * Set RLS context for the current database session

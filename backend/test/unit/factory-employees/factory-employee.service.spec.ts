@@ -1,6 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import {
-  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -452,7 +451,7 @@ describe("FactoryEmployeeService", () => {
       const employeeIds = [1, 2, 3];
       const newFactoryId = 200;
       const loggerWarnSpy = jest
-        .spyOn(Logger.prototype, "warn")
+        .spyOn(service["logger"], "warn")
         .mockImplementation(() => {});
 
       repository.findById

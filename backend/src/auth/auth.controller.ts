@@ -27,10 +27,9 @@ import { NullableType } from "../utils/types/nullable.type";
 import { User } from "../users/domain/user";
 import { RefreshResponseDto } from "./dto/refresh-response.dto";
 import { Response as ExpressResponse } from "express";
+import { SkipRlsContext } from "../rls/rls.guard";
 
-const LOGIN_THROTTLE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 5;
-const REGISTER_THROTTLE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 3;
-const RESET_THROTTLE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 3;
+const isTest = process.env.NODE_ENV === "test";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -41,6 +40,7 @@ const COOKIE_OPTIONS = {
 };
 
 @ApiTags("Auth")
+@SkipRlsContext()
 @Controller({
   path: "auth",
   version: "1",
@@ -48,7 +48,11 @@ const COOKIE_OPTIONS = {
 export class AuthController {
   constructor(private readonly service: AuthService) {}
 
-  @Throttle({ default: { limit: LOGIN_THROTTLE_LIMIT, ttl: 60000 } })
+  @Throttle({
+    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 5, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 20, ttl: 3600000 },
+  })
   @SerializeOptions({
     groups: ["me"],
   })
@@ -66,7 +70,11 @@ export class AuthController {
     return result;
   }
 
-  @Throttle({ default: { limit: REGISTER_THROTTLE_LIMIT, ttl: 60000 } })
+  @Throttle({
+    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 3, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 3, ttl: 3600000 },
+  })
   @Post("email/register")
   @HttpCode(HttpStatus.NO_CONTENT)
   async register(@Body() createUserDto: AuthRegisterLoginDto): Promise<void> {
@@ -89,7 +97,11 @@ export class AuthController {
     return this.service.confirmNewEmail(confirmEmailDto.hash);
   }
 
-  @Throttle({ default: { limit: RESET_THROTTLE_LIMIT, ttl: 60000 } })
+  @Throttle({
+    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 3, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 3, ttl: 3600000 },
+  })
   @Post("forgot/password")
   @HttpCode(HttpStatus.NO_CONTENT)
   async forgotPassword(
@@ -98,7 +110,11 @@ export class AuthController {
     return this.service.forgotPassword(forgotPasswordDto.email);
   }
 
-  @Throttle({ default: { limit: RESET_THROTTLE_LIMIT, ttl: 60000 } })
+  @Throttle({
+    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 3, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 3, ttl: 3600000 },
+  })
   @Post("reset/password")
   @HttpCode(HttpStatus.NO_CONTENT)
   resetPassword(@Body() resetPasswordDto: AuthResetPasswordDto): Promise<void> {

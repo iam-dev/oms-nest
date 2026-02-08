@@ -3,22 +3,6 @@ import { fetchEntities } from './api';
 import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
-// Helper function to get current user from auth context
-function getCurrentUser() {
-  if (typeof window !== 'undefined') {
-    try {
-      // Try to get user from Jotai store
-      const storedUser = localStorage.getItem('auth_user');
-      if (storedUser && storedUser !== 'null') {
-        return JSON.parse(storedUser);
-      }
-    } catch (error) {
-      logger.warn('Failed to get user from localStorage:', error);
-    }
-  }
-  return null;
-}
-
 interface GetEnrichedOrdersParams {
   page?: number;
   partial?: boolean;
@@ -130,13 +114,8 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   // Format filters for API Platform
   const formattedFilters = { ...params.filters };
   logger.log('enrichedOrders.ts: Initial formattedFilters:', formattedFilters);
-  
-  // Auto-apply fitter filtering for FITTER role users
-  const currentUser = getCurrentUser();
-  if (currentUser && currentUser.role === 'ROLE_FITTER' && currentUser.username && !formattedFilters.fitterUsername) {
-    logger.log('enrichedOrders.ts: Auto-applying fitter filter for user:', currentUser.username);
-    formattedFilters.fitterUsername = currentUser.username;
-  }
+
+  // Fitter filtering is handled server-side via RLS and the authenticated cookie session
   
   // Special case for orderId search - use paginated search if we have an exact orderId
   if (formattedFilters.orderId && /^\d+$/.test(formattedFilters.orderId)) {

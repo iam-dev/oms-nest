@@ -66,19 +66,13 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
 
   const { pathname } = request.nextUrl;
-  const cookies = request.cookies.getAll();
-  const cookieNames = cookies.map(c => c.name).join(', ');
 
-  logger.log('🔑 Middleware: Processing request for:', pathname);
-  logger.log('🔑 Middleware: Token present:', token ? 'YES' : 'NO');
-  logger.log('🔑 Middleware: All cookies:', cookieNames);
-  logger.log('🔑 Middleware: Request method:', request.method);
-  logger.log('🔑 Middleware: User agent:', request.headers.get('user-agent')?.substring(0, 50));
+  logger.log('Middleware: path:', pathname, '| token:', token ? 'present' : 'absent');
   
   // Public routes that don't require authentication
   const publicPaths = ['/login', '/api/login', '/_next', '/favicon.ico', '/public'];
   if (publicPaths.some(path => pathname.startsWith(path))) {
-    logger.log('🔑 Middleware: Public path, allowing access');
+    logger.log('Middleware: public path, allowing');
     return NextResponse.next();
   }
 
@@ -89,13 +83,13 @@ export async function middleware(request: NextRequest) {
   if (isClientNavigation && !token) {
     // For client navigation without cookie token, allow the request to proceed
     // The client-side AuthContext will handle the redirect if needed
-    logger.log('🔑 Middleware: Client navigation without cookie, allowing for client-side auth check');
+    logger.log('Middleware: client navigation without cookie, deferring to client auth');
     return NextResponse.next();
   }
 
   // Only check for protected routes
   const protectedPath = Object.keys(roleMap).find(path => pathname.startsWith(path));
-  logger.log('🔑 Middleware: Protected path found:', protectedPath);
+  logger.log('Middleware: protected path:', protectedPath || 'none');
   
   if (protectedPath) {
     // Verify token signature and extract role
@@ -104,12 +98,12 @@ export async function middleware(request: NextRequest) {
       if (JWT_SECRET) {
         payload = await verifyJwt(token);
         if (!payload) {
-          logger.log('🔑 Middleware: JWT verification failed, redirecting to login');
+          logger.log('Middleware: JWT verification failed, redirecting to login');
           return NextResponse.redirect(new URL('/login', request.url));
         }
       } else {
         // Fallback to decode-only when JWT_SECRET is not configured (dev without env)
-        logger.log('🔑 Middleware: JWT_SECRET not set, falling back to decode-only');
+        logger.log('Middleware: JWT_SECRET not set, falling back to decode-only');
         payload = decodeJwtPayload(token);
       }
     }
@@ -117,11 +111,11 @@ export async function middleware(request: NextRequest) {
       ? (payload.role as any).name?.toLowerCase()
       : undefined;
 
-    logger.log('🔑 Middleware: Decoded role:', userRole);
+    logger.log('Middleware: role:', userRole || 'none');
 
     const allowedRoles = roleMap[protectedPath];
     if (allowedRoles && userRole && !allowedRoles.includes(userRole)) {
-      logger.log('🔑 Middleware: Role not allowed for path:', protectedPath, 'role:', userRole);
+      logger.log('Middleware: access denied for path:', protectedPath);
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 

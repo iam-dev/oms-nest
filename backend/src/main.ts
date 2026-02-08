@@ -16,6 +16,7 @@ import { AllConfigType } from "./config/config.type";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { ResolvePromisesInterceptor } from "./utils/serializer.interceptor";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 
 async function bootstrap() {
   const debugLog = process.env.DEBUG_LOG === "true";
@@ -59,6 +60,7 @@ async function bootstrap() {
     type: VersioningType.URI,
   });
   app.useGlobalPipes(new ValidationPipe(validationOptions));
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     // ResolvePromisesInterceptor is used to resolve promises in responses because class-transformer can't do it
     // https://github.com/typestack/class-transformer/issues/549

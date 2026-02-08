@@ -7,7 +7,6 @@ import { API_URL } from '../services/api-config';
 import { logger } from '@/utils/logger';
 import {
   userAtom,
-  userBasicInfoAtom,
   isAuthLoadingAtom,
   isAuthenticatedAtom,
   loginActionAtom,
@@ -31,22 +30,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  logger.log('AuthProvider: Component mounting/initializing');
+  logger.log('AuthProvider: initializing');
 
-  const [user, setUser] = useAtom(userAtom);
-  const [userBasicInfo, setUserBasicInfo] = useAtom(userBasicInfoAtom);
+  const [user] = useAtom(userAtom);
   const [isLoading] = useAtom(isAuthLoadingAtom);
   const [isAuthenticated] = useAtom(isAuthenticatedAtom);
   const [, loginAction] = useAtom(loginActionAtom);
   const [, logoutAction] = useAtom(logoutActionAtom);
   const [, setLoadingAction] = useAtom(setLoadingAtom);
 
-  logger.log('AuthProvider: Current state on mount:', {
-    hasUser: !!user,
-    isLoading,
-    isAuthenticated,
-    username: user?.username || 'none'
-  });
+  logger.log('AuthProvider: state:', { hasUser: !!user, isLoading, isAuthenticated });
 
   const isLoaded = !isLoading;
 
@@ -85,7 +78,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     loginAction({ user: userData });
-    logger.log('AuthContext: User data set from /auth/me:', userData);
+    logger.log('AuthContext: user loaded, role:', userData.role);
     return userData;
   }, [loginAction]);
 
@@ -101,26 +94,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       logger.log('AuthContext: Starting checkAuth...');
       setLoadingAction(true);
       try {
-        // Restore user from localStorage basic info immediately for fast UI render
-        if (!user && userBasicInfo && userBasicInfo.id && userBasicInfo.username) {
-          logger.log('AuthContext: Restoring user from basic info:', userBasicInfo);
-          const restoredUser: User = {
-            id: userBasicInfo.id,
-            username: userBasicInfo.username,
-            role: userBasicInfo.role as UserRole,
-            email: userBasicInfo.email,
-            firstName: userBasicInfo.firstName,
-            lastName: userBasicInfo.lastName,
-          };
-          setUser(restoredUser);
-        }
-
         // Verify session with backend (cookie sent automatically)
         await fetchUserData();
         logger.log('AuthContext: Session verified via /auth/me');
       } catch (error) {
-        logger.log('AuthContext: No valid session, clearing auth state:', error);
-        clearAuthTokens();
+        logger.log('AuthContext: no valid session, clearing auth state');
         logoutAction();
       } finally {
         setLoadingAction(false);
@@ -132,11 +110,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Login function
   const login = async (username: string, password: string) => {
-    logger.log('AuthContext: Starting login for username:', username);
+    logger.log('AuthContext: login attempt');
 
     try {
       const result = await loginApi(username, password);
-      logger.log('AuthContext: Login API result:', result);
+      logger.log('AuthContext: login result:', result.success ? 'success' : 'failed');
 
       if (result.success) {
         logger.log('AuthContext: Login API successful, fetching user data...');
@@ -144,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           // Cookie is now set by backend, fetch full user data
           const userData = await fetchUserData();
-          logger.log('AuthContext: User data fetched successfully:', userData);
+          logger.log('AuthContext: user data fetched successfully');
 
           return {
             success: true,
@@ -167,7 +145,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               lastName: result.user.lastName || '',
             };
 
-            logger.log('AuthContext: Using fallback user data from login response:', userData);
+            logger.log('AuthContext: using fallback user data from login response');
             loginAction({ user: userData });
 
             return {
@@ -183,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           };
         }
       } else {
-        logger.log('AuthContext: Login API failed:', result.message);
+        logger.log('AuthContext: login failed');
         return {
           success: false,
           message: result.message || 'Login failed. Please check your credentials.'
@@ -232,7 +210,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 function mapTypeNameToRole(typeName: string): UserRole {
-  logger.log('mapTypeNameToRole: input typeName:', typeName);
+  logger.log('mapTypeNameToRole:', typeName);
 
   // Normalize to lowercase for comparison
   const normalized = typeName.toLowerCase();
@@ -260,11 +238,7 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
 
-  logger.log('useAuth: context value:', {
-    user: ctx.user,
-    isLoaded: ctx.isLoaded,
-    isAuthenticated: ctx.isAuthenticated,
-  });
+  logger.log('useAuth: authenticated:', ctx.isAuthenticated, '| loaded:', ctx.isLoaded);
 
   return ctx;
 }

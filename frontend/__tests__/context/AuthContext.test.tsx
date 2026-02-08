@@ -19,10 +19,6 @@ jest.mock('jotai', () => ({
   atom: jest.fn((initialValue) => ({ init: initialValue })),
 }));
 
-jest.mock('jotai/utils', () => ({
-  atomWithStorage: jest.fn((key: string, initialValue: any) => ({ key, init: initialValue })),
-}));
-
 // Mock global fetch
 global.fetch = jest.fn();
 
@@ -47,7 +43,6 @@ const TestComponent = () => {
 
 // Create individual atom state holders
 let mockUser: any = null;
-let mockUserBasicInfo: any = null;
 let mockIsAuthLoading: boolean = false;
 let mockIsAuthenticated: boolean = false;
 
@@ -55,12 +50,9 @@ describe('AuthContext - Cookie-Based Auth', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
-    localStorage.clear();
-    document.cookie = '';
 
     // Reset mock state
     mockUser = null;
-    mockUserBasicInfo = null;
     mockIsAuthLoading = false;
     mockIsAuthenticated = false;
 
@@ -70,21 +62,17 @@ describe('AuthContext - Cookie-Based Auth', () => {
 
     // Setup Jotai mock to return different atom hooks based on which atom is being used
     mockUseAtom.mockImplementation((atom: any): any => {
-      if (atom?.key === 'auth_user') {
-        return [mockUserBasicInfo, jest.fn((newValue: any) => {
-          mockUserBasicInfo = newValue;
-        })];
-      } else if (atom?.init === null && !atom?.key) {
-        // This could be the userAtom (plain atom)
+      if (atom?.init === null && !atom?.key) {
+        // This is the userAtom (plain atom with null init)
         return [mockUser, jest.fn((newValue: any) => {
           mockUser = newValue;
         })];
       } else if (atom?.init === false) {
-        // This could be isAuthLoadingAtom (init: false) — but we start with true
+        // This could be isAuthLoadingAtom (init: false) -- but we start with true
         return [mockIsAuthLoading, jest.fn((newValue: any) => { mockIsAuthLoading = newValue; })];
       } else if (typeof atom === 'function') {
         // Derived atom like isAuthenticatedAtom
-        mockIsAuthenticated = !!(mockUser || mockUserBasicInfo);
+        mockIsAuthenticated = !!mockUser;
         return [mockIsAuthenticated, jest.fn()];
       } else {
         // Action atoms - return a setter function
@@ -92,14 +80,6 @@ describe('AuthContext - Cookie-Based Auth', () => {
           if (action && action.user) {
             // This is loginActionAtom
             mockUser = action.user;
-            mockUserBasicInfo = {
-              id: action.user.id,
-              username: action.user.username,
-              role: action.user.role,
-              firstName: action.user.firstName,
-              lastName: action.user.lastName,
-              email: action.user.email
-            };
             mockIsAuthLoading = false;
             mockIsAuthenticated = true;
           } else if (action === true || action === false) {
@@ -134,14 +114,6 @@ describe('AuthContext - Cookie-Based Auth', () => {
         firstName: 'API',
         lastName: 'User',
       };
-      mockUserBasicInfo = {
-        id: 1000,
-        username: 'api.user',
-        role: 'ROLE_ADMIN',
-        firstName: 'API',
-        lastName: 'User',
-        email: 'api@example.com'
-      };
       mockIsAuthenticated = true;
       mockIsAuthLoading = false;
 
@@ -166,7 +138,6 @@ describe('AuthContext - Cookie-Based Auth', () => {
     it('renders unauthenticated state when no user data is present', async () => {
       // With no pre-set user state, component should render unauthenticated
       mockUser = null;
-      mockUserBasicInfo = null;
       mockIsAuthenticated = false;
       mockIsAuthLoading = false;
 
@@ -210,9 +181,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockIsAuthLoading = false;
 
       mockUseAtom.mockImplementation((atom: any): any => {
-        if (atom?.key === 'auth_user') {
-          return [mockUserBasicInfo, jest.fn()];
-        } else if (atom?.init === null && !atom?.key) {
+        if (atom?.init === null && !atom?.key) {
           return [mockUser, jest.fn()];
         } else if (atom?.init === false) {
           return [false, jest.fn()];
@@ -245,9 +214,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockIsAuthLoading = false;
 
       mockUseAtom.mockImplementation((atom: any): any => {
-        if (atom?.key === 'auth_user') {
-          return [mockUserBasicInfo, jest.fn()];
-        } else if (atom?.init === null && !atom?.key) {
+        if (atom?.init === null && !atom?.key) {
           return [mockUser, jest.fn()];
         } else if (atom?.init === false) {
           return [false, jest.fn()];
@@ -280,9 +247,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockIsAuthLoading = false;
 
       mockUseAtom.mockImplementation((atom: any): any => {
-        if (atom?.key === 'auth_user') {
-          return [mockUserBasicInfo, jest.fn()];
-        } else if (atom?.init === null && !atom?.key) {
+        if (atom?.init === null && !atom?.key) {
           return [mockUser, jest.fn()];
         } else if (atom?.init === false) {
           return [false, jest.fn()];
@@ -314,14 +279,6 @@ describe('AuthContext - Cookie-Based Auth', () => {
         firstName: '',
         lastName: '',
       };
-      mockUserBasicInfo = {
-        id: 1003,
-        username: 'storage.test',
-        role: 'ROLE_ADMIN',
-        firstName: '',
-        lastName: '',
-        email: 'storage@example.com'
-      };
       mockIsAuthenticated = true;
       mockIsAuthLoading = false;
 
@@ -338,7 +295,6 @@ describe('AuthContext - Cookie-Based Auth', () => {
 
     it('shows no user when session is invalid', async () => {
       mockUser = null;
-      mockUserBasicInfo = null;
       mockIsAuthenticated = false;
       mockIsAuthLoading = false;
 
@@ -417,13 +373,6 @@ describe('AuthContext - Cookie-Based Auth', () => {
           role: role,
           firstName: '',
           lastName: '',
-        };
-        mockUserBasicInfo = {
-          id: userId,
-          username: 'hierarchy.test',
-          role: role,
-          firstName: '',
-          lastName: ''
         };
         mockIsAuthenticated = true;
         mockIsAuthLoading = false;

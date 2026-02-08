@@ -7,8 +7,34 @@ import { test, expect, Page } from '@playwright/test';
  * NOTE: These tests are aspirational integration test stubs.
  * Many data-testid selectors referenced here do not exist in the actual frontend.
  * Tests are structured to gracefully handle missing selectors and still validate
- * what is available. The login flow uses actual frontend selectors.
+ * what is available.
  */
+
+/** Fill login form using resilient type-based selectors */
+async function fillLoginForm(
+  target: Page,
+  email: string,
+  password: string,
+): Promise<void> {
+  const emailInput = target.locator('input[type="email"], input[type="text"]').first();
+  const passwordInput = target.locator('input[type="password"]');
+
+  await emailInput.waitFor({ state: 'visible' });
+  await emailInput.fill(email);
+  await passwordInput.fill(password);
+}
+
+/** Submit the login form and wait for navigation away from /login */
+async function submitLoginAndWait(target: Page): Promise<boolean> {
+  await target.locator('button[type="submit"]').click();
+
+  await Promise.race([
+    target.waitForURL(/.*(?<!\/login)$/, { timeout: 10000 }),
+    target.locator('.text-destructive').waitFor({ state: 'visible', timeout: 10000 }),
+  ]).catch(() => {});
+
+  return !target.url().includes('/login');
+}
 
 test.describe('Order Management Flow @critical @smoke @readonly', () => {
   let page: Page;
@@ -16,29 +42,29 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
   test.beforeEach(async ({ page: testPage }) => {
     page = testPage;
 
-    // Login as admin user before each test using actual login form
+    // Login as admin user before each test
     await page.goto('/login');
-    await page.fill('input[placeholder="Gebruikersnaam"]', process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
-    await page.fill('input[placeholder="Wachtwoord"]', process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
-    await page.click('button[type="submit"]');
+    await fillLoginForm(
+      page,
+      process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+      process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
+    );
 
-    // Wait for login to complete
-    await page.waitForTimeout(3000);
-
-    // Verify we're logged in (redirected away from login)
-    const currentUrl = page.url();
-    if (currentUrl.includes('/login')) {
+    const isLoggedIn = await submitLoginAndWait(page);
+    if (!isLoggedIn) {
       console.log('Login may have failed - continuing with test');
     }
   });
 
-  test('should display orders list page correctly @smoke', async () => {
+  test('should display orders list page correctly @smoke @readonly', async () => {
     const response = await page.goto('/orders', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
 
     // Verify the page responded (navigation didn't fail with a network error)
     const status = response?.status() ?? 0;
     expect(status).toBeGreaterThan(0);
+
+    // Wait for content to render
+    await page.waitForLoadState('domcontentloaded');
 
     // Check for rendered content - auth guard may return null in CI
     const hasTable = await page.locator('table, [role="table"]').isVisible({ timeout: 5000 }).catch(() => false);
@@ -49,14 +75,13 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
     } else if (hasContent) {
       console.log('Orders page rendered (no table visible - may be loading or auth redirect)');
     } else {
-      // In CI, auth guard may render null if token hydration fails
       console.log(`Orders page URL: ${page.url()}, status: ${status}, title: ${await page.title()}`);
       const html = await page.content();
       console.log(`Page HTML length: ${html.length} chars`);
     }
   });
 
-  test('should navigate to order details @smoke', async () => {
+  test('should navigate to order details @smoke @readonly', async () => {
     await page.goto('/orders');
     await page.waitForLoadState('networkidle');
 
@@ -65,7 +90,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
       'tbody tr',
       '[data-testid*="order-row"]',
       'button:has-text("View")',
-      'button:has-text("Details")'
+      'button:has-text("Details")',
     ];
 
     for (const selector of orderSelectors) {
@@ -73,10 +98,14 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
         const element = page.locator(selector).first();
         if (await element.isVisible({ timeout: 3000 })) {
           await element.click();
-          await page.waitForTimeout(2000);
 
-          // Check if modal or detail view opened
-          const detailVisible = await page.locator('[role="dialog"], .modal').isVisible({ timeout: 3000 });
+          // Wait for detail view or URL change instead of fixed timeout
+          await Promise.race([
+            page.locator('[role="dialog"], .modal').waitFor({ state: 'visible', timeout: 5000 }),
+            page.waitForURL(/\/orders\/\d+/, { timeout: 5000 }),
+          ]).catch(() => {});
+
+          const detailVisible = await page.locator('[role="dialog"], .modal').isVisible().catch(() => false);
           const urlChanged = !page.url().endsWith('/orders');
 
           if (detailVisible || urlChanged) {
@@ -90,7 +119,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
     }
   });
 
-  test('should support search functionality @regression', async () => {
+  test('should support search functionality @regression @readonly', async () => {
     await page.goto('/orders');
     await page.waitForLoadState('networkidle');
 
@@ -98,7 +127,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
       'input[placeholder*="search" i]',
       'input[type="search"]',
       '[data-testid="search-orders"]',
-      'input[name="search"]'
+      'input[name="search"]',
     ];
 
     for (const selector of searchSelectors) {
@@ -106,7 +135,9 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
         const searchInput = page.locator(selector).first();
         if (await searchInput.isVisible({ timeout: 3000 })) {
           await searchInput.fill('test');
-          await page.waitForTimeout(1500);
+
+          // Wait for search results to update (network request)
+          await page.waitForLoadState('networkidle').catch(() => {});
 
           console.log('Search input found and populated');
           break;
@@ -117,7 +148,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
     }
   });
 
-  test('should handle order pagination @performance', async () => {
+  test('should handle order pagination @performance @readonly', async () => {
     await page.goto('/orders');
     await page.waitForLoadState('networkidle');
 
@@ -127,7 +158,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
       '.pagination',
       'button:has-text("Next")',
       'button:has-text("2")',
-      '[aria-label*="pagination" i]'
+      '[aria-label*="pagination" i]',
     ];
 
     for (const selector of paginationSelectors) {
@@ -140,7 +171,9 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
           const nextButton = page.locator('button:has-text("Next"), button:has-text(">")').first();
           if (await nextButton.isVisible({ timeout: 2000 })) {
             await nextButton.click();
-            await page.waitForTimeout(1500);
+
+            // Wait for page content to update
+            await page.waitForLoadState('networkidle').catch(() => {});
             console.log('Navigated to next page');
           }
           break;
@@ -151,7 +184,7 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
     }
   });
 
-  test('should handle concurrent order access @security', async ({ browser }) => {
+  test('should handle concurrent order access @security @readonly', async ({ browser }) => {
     const context1 = await browser.newContext();
     const context2 = await browser.newContext();
 
@@ -164,34 +197,12 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
         await testPage.goto('/login', { waitUntil: 'domcontentloaded' });
         await testPage.waitForLoadState('domcontentloaded');
 
-        // Try multiple selector patterns for username/password fields
-        const usernameSelectors = ['input[placeholder="Gebruikersnaam"]', 'input[name="email"]', 'input[type="email"]', 'input[placeholder*="user" i]', 'input[placeholder*="email" i]'];
-        const passwordSelectors = ['input[placeholder="Wachtwoord"]', 'input[name="password"]', 'input[type="password"]'];
-
-        let loginFilled = false;
-        for (const uSel of usernameSelectors) {
-          try {
-            if (await testPage.locator(uSel).isVisible({ timeout: 3000 })) {
-              await testPage.fill(uSel, process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
-              loginFilled = true;
-              break;
-            }
-          } catch { continue; }
-        }
-
-        for (const pSel of passwordSelectors) {
-          try {
-            if (await testPage.locator(pSel).isVisible({ timeout: 3000 })) {
-              await testPage.fill(pSel, process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!');
-              break;
-            }
-          } catch { continue; }
-        }
-
-        if (loginFilled) {
-          await testPage.click('button[type="submit"]');
-          await testPage.waitForTimeout(3000);
-        }
+        await fillLoginForm(
+          testPage,
+          process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+          process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
+        );
+        await submitLoginAndWait(testPage);
       }
 
       // Both users access orders page concurrently
@@ -200,8 +211,11 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
         page2.goto('/orders', { waitUntil: 'domcontentloaded' }),
       ]);
 
-      await page1.waitForTimeout(2000);
-      await page2.waitForTimeout(2000);
+      // Wait for content to load
+      await Promise.all([
+        page1.waitForLoadState('domcontentloaded'),
+        page2.waitForLoadState('domcontentloaded'),
+      ]);
 
       // Verify both pages responded (navigation didn't fail)
       const status1 = response1?.status() ?? 0;

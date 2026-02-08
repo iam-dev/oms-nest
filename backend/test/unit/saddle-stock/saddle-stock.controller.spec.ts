@@ -63,7 +63,7 @@ describe("SaddleStockController", () => {
   });
 
   describe("getSaddleStock", () => {
-    it("should return Hydra format response", async () => {
+    it("should return standard pagination format response", async () => {
       // Arrange
       const req = createMockRequest(10, RoleEnum.fitter);
       const query = { type: "my" as const };
@@ -73,12 +73,13 @@ describe("SaddleStockController", () => {
       const result = await controller.getSaddleStock(query, req);
 
       // Assert
-      expect(result["@context"]).toBe("/api/contexts/SaddleStock");
-      expect(result["@type"]).toBe("hydra:Collection");
-      expect(result["@id"]).toContain("/api/v1/saddle-stock");
-      expect(result["hydra:member"]).toEqual(mockServiceResult.data);
-      expect(result["hydra:totalItems"]).toBe(1);
-      expect(result["hydra:view"]).toBeDefined();
+      expect(result.data).toEqual(mockServiceResult.data);
+      expect(result.total).toBe(1);
+      expect(result.pages).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(30);
+      expect(result.hasNext).toBe(false);
+      expect(result.hasPrev).toBe(false);
     });
 
     it("should throw Unauthorized when no userId", async () => {
@@ -142,7 +143,7 @@ describe("SaddleStockController", () => {
       const result = await controller.getSaddleStock(query, req);
 
       // Assert
-      expect(result["hydra:member"]).toBeDefined();
+      expect(result.data).toBeDefined();
       expect(service.getSaddleStock).toHaveBeenCalledWith(
         "my",
         10,
@@ -162,7 +163,7 @@ describe("SaddleStockController", () => {
       const result = await controller.getSaddleStock(query, req);
 
       // Assert
-      expect(result["hydra:member"]).toBeDefined();
+      expect(result.data).toBeDefined();
       expect(service.getSaddleStock).toHaveBeenCalledWith(
         "all",
         10,
@@ -182,7 +183,7 @@ describe("SaddleStockController", () => {
       const result = await controller.getSaddleStock(query, req);
 
       // Assert
-      expect(result["hydra:member"]).toBeDefined();
+      expect(result.data).toBeDefined();
       expect(service.getSaddleStock).toHaveBeenCalledWith(
         "all",
         10,
@@ -249,7 +250,7 @@ describe("SaddleStockController", () => {
       );
     });
 
-    it("should include hydra:next when not on last page", async () => {
+    it("should set hasNext to true when not on last page", async () => {
       // Arrange
       const req = createMockRequest(10, RoleEnum.fitter);
       const query = { type: "my" as const };
@@ -265,10 +266,10 @@ describe("SaddleStockController", () => {
       const result = await controller.getSaddleStock(query, req);
 
       // Assert
-      expect(result["hydra:view"]["hydra:next"]).toContain("page=2");
+      expect(result.hasNext).toBe(true);
     });
 
-    it("should include hydra:previous when not on first page", async () => {
+    it("should set hasPrev to true when not on first page", async () => {
       // Arrange
       const req = createMockRequest(10, RoleEnum.fitter);
       const query = { type: "my" as const, page: 2 };
@@ -284,7 +285,7 @@ describe("SaddleStockController", () => {
       const result = await controller.getSaddleStock(query, req);
 
       // Assert
-      expect(result["hydra:view"]["hydra:previous"]).toContain("page=1");
+      expect(result.hasPrev).toBe(true);
     });
 
     it("should wrap non-HttpException errors in HttpException", async () => {

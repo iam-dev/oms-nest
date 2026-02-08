@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   Logger,
+  SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { RlsService } from "./rls.service";
@@ -81,20 +82,21 @@ export class RlsGuard implements CanActivate {
 }
 
 /**
- * Decorator to skip RLS context setting for specific endpoints
- * Useful for public endpoints or special administrative operations
+ * Decorator to skip RLS context setting for specific endpoints or controllers.
+ * Can be applied at the class level (entire controller) or method level.
  */
-export const SkipRlsContext = () => Reflect.metadata("skipRlsContext", true);
+export const SkipRlsContext = () => SetMetadata("skipRlsContext", true);
 
 /**
  * Enhanced RLS Guard that respects SkipRlsContext decorator
+ * on both handler (method) and class (controller) levels.
  */
 @Injectable()
 export class EnhancedRlsGuard extends RlsGuard {
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const skipRls = this.reflector.get<boolean>(
+    const skipRls = this.reflector.getAllAndOverride<boolean>(
       "skipRlsContext",
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
 
     if (skipRls) {

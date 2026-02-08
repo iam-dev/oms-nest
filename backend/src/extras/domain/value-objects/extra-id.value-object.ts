@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 
 export class ExtraId {
   constructor(private readonly _id: string) {
@@ -8,7 +8,7 @@ export class ExtraId {
   }
 
   public static generate(): ExtraId {
-    return new ExtraId(uuidv4());
+    return new ExtraId(randomUUID());
   }
 
   public static fromString(id: string): ExtraId {
@@ -29,7 +29,7 @@ export class ExtraId {
 
   private isValidUuid(id: string): boolean {
     const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(id);
   }
 }

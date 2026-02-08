@@ -170,8 +170,11 @@ export class AuthService {
         "User",
         String(user.id),
       )
-      .catch(() => {
-        // Silently ignore audit log failures
+      .catch((error) => {
+        this.logger.error(
+          `Failed to create audit log: ${error.message}`,
+          error.stack,
+        );
       });
 
     return {

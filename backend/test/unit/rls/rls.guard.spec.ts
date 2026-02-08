@@ -166,7 +166,7 @@ describe("EnhancedRlsGuard", () => {
   });
 
   it("should skip RLS when SkipRlsContext decorator is present", async () => {
-    mockReflector.get.mockReturnValue(true);
+    mockReflector.getAllAndOverride.mockReturnValue(true);
 
     const context = createMockExecutionContext({
       user: { id: "user-1", role: { id: RoleEnum.admin } },
@@ -179,7 +179,7 @@ describe("EnhancedRlsGuard", () => {
   });
 
   it("should call parent when SkipRlsContext is not set", async () => {
-    mockReflector.get.mockReturnValue(false);
+    mockReflector.getAllAndOverride.mockReturnValue(false);
 
     const context = createMockExecutionContext({
       user: { id: "user-1", role: { id: RoleEnum.admin } },

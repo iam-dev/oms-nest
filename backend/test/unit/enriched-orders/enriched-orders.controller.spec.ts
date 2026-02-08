@@ -59,7 +59,7 @@ describe("EnrichedOrdersController", () => {
   });
 
   describe("getEnrichedOrders", () => {
-    it("should return enriched orders in Hydra format", async () => {
+    it("should return enriched orders in standard pagination format", async () => {
       // Arrange
       const query = {
         page: 1,
@@ -73,16 +73,14 @@ describe("EnrichedOrdersController", () => {
 
       // Assert
       expect(result).toMatchObject({
-        "@context": "/api/contexts/EnrichedOrder",
-        "@type": "hydra:Collection",
-        "@id": "/api/enriched_orders",
-        "hydra:member": [mockEnrichedOrder],
-        "hydra:totalItems": 100,
+        data: [mockEnrichedOrder],
+        total: 100,
+        pages: 5,
+        page: 1,
+        limit: 50,
+        hasNext: true,
+        hasPrev: false,
       });
-      expect(result["hydra:view"]).toBeDefined();
-      expect(result["hydra:view"]["hydra:next"]).toBe(
-        "/api/enriched_orders?page=2",
-      );
     });
 
     it("should sanitize query parameters", async () => {
@@ -216,7 +214,7 @@ describe("EnrichedOrdersController", () => {
       );
     });
 
-    it("should include previous link when not on first page", async () => {
+    it("should set hasPrev to true when not on first page", async () => {
       // Arrange
       const query = {
         page: 2,
@@ -237,12 +235,10 @@ describe("EnrichedOrdersController", () => {
       const result = await controller.getEnrichedOrders(query as any);
 
       // Assert
-      expect(result["hydra:view"]["hydra:previous"]).toBe(
-        "/api/enriched_orders?page=1",
-      );
+      expect(result.hasPrev).toBe(true);
     });
 
-    it("should not include next link on last page", async () => {
+    it("should set hasNext to false on last page", async () => {
       // Arrange
       const query = {
         page: 5,
@@ -263,7 +259,7 @@ describe("EnrichedOrdersController", () => {
       const result = await controller.getEnrichedOrders(query as any);
 
       // Assert
-      expect(result["hydra:view"]["hydra:next"]).toBeUndefined();
+      expect(result.hasNext).toBe(false);
     });
 
     it("should throw HttpException on service error", async () => {
