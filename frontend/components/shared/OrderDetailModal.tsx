@@ -56,7 +56,7 @@ export function OrderDetailModal({ order, isOpen, onClose }: OrderDetailModalPro
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Order Details - #{order.orderId || order.id}</DialogTitle>
+          <DialogTitle>Order Details - #{String(order.orderId ?? order.id)}</DialogTitle>
         </DialogHeader>
         
         <div className="grid grid-cols-3 gap-6 mt-4">
@@ -68,7 +68,7 @@ export function OrderDetailModal({ order, isOpen, onClose }: OrderDetailModalPro
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-700">Order ID:</span>
-                  <span className="text-gray-900">{order.orderId || order.id || '-'}</span>
+                  <span className="text-gray-900">{String(order.orderId ?? order.id ?? '-')}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-700">Your reference:</span>
@@ -167,12 +167,12 @@ export function OrderDetailModal({ order, isOpen, onClose }: OrderDetailModalPro
               <div className="border rounded-lg p-4">
                 <h3 className="font-semibold text-sm mb-4">Additional Information</h3>
                 <div className="space-y-3">
-                  {order.notes && (
+                  {order.notes ? (
                     <div>
                       <span className="font-medium text-gray-700 text-sm">Notes:</span>
-                      <p className="text-sm text-gray-900 mt-1">{order.notes}</p>
+                      <p className="text-sm text-gray-900 mt-1">{String(order.notes)}</p>
                     </div>
-                  )}
+                  ) : null}
                   {order.specialInstructions && (
                     <div>
                       <span className="font-medium text-gray-700 text-sm">Special Instructions:</span>

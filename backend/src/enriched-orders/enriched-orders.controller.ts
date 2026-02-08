@@ -53,23 +53,13 @@ export class EnrichedOrdersController {
       );
 
       return {
-        "@context": "/api/contexts/EnrichedOrder",
-        "@type": "hydra:Collection",
-        "@id": "/api/enriched_orders",
-        "hydra:member": result.data,
-        "hydra:totalItems": result.pagination.totalItems,
-        "hydra:view": {
-          "@id": `/api/enriched_orders?page=${result.pagination.currentPage}`,
-          "@type": "hydra:PartialCollectionView",
-          "hydra:first": "/api/enriched_orders?page=1",
-          "hydra:last": `/api/enriched_orders?page=${result.pagination.totalPages}`,
-          ...(result.pagination.hasNext && {
-            "hydra:next": `/api/enriched_orders?page=${result.pagination.currentPage + 1}`,
-          }),
-          ...(result.pagination.hasPrevious && {
-            "hydra:previous": `/api/enriched_orders?page=${result.pagination.currentPage - 1}`,
-          }),
-        },
+        data: result.data,
+        total: result.pagination.totalItems,
+        pages: result.pagination.totalPages,
+        page: result.pagination.currentPage,
+        limit: result.pagination.itemsPerPage,
+        hasNext: result.pagination.hasNext,
+        hasPrev: result.pagination.hasPrevious,
         metadata: result.metadata,
       };
     } catch (error) {

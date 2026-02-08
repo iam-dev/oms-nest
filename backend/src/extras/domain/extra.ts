@@ -1,90 +1,93 @@
 import { ExtraId } from "./value-objects/extra-id.value-object";
-import { ExtraStatus } from "./value-objects/extra-status.value-object";
 
+/**
+ * Extra Domain Entity
+ *
+ * Represents an extra (add-on) in the saddle manufacturing system.
+ * Uses UUID IDs and 7-tier pricing (USD, EUR, GBP, CAD, AUD, NOK, DKK).
+ * Soft delete via deletedAt timestamp.
+ */
 export class Extra {
   constructor(
     private readonly _id: ExtraId,
     private _name: string,
-    private _description: string,
-    private _price: number = 0,
-    private _isOptional: boolean = true,
-    private _status: ExtraStatus = ExtraStatus.ACTIVE,
-    private readonly _createdAt: Date = new Date(),
-    private _updatedAt: Date = new Date(),
-  ) {
-    this.validateName(_name);
-    this.validateDescription(_description);
-    this.validatePrice(_price);
-  }
+    private _description: string | null,
+    private _price1: number,
+    private _price2: number,
+    private _price3: number,
+    private _price4: number,
+    private _price5: number,
+    private _price6: number,
+    private _price7: number,
+    private _sequence: number,
+    private readonly _createdAt: Date,
+    private _updatedAt: Date,
+    private _deletedAt: Date | null,
+  ) {}
 
   public static create(
     id: ExtraId,
     name: string,
-    description: string,
-    price: number = 0,
-    isOptional: boolean = true,
+    description?: string,
+    price1: number = 0,
+    price2: number = 0,
+    price3: number = 0,
+    price4: number = 0,
+    price5: number = 0,
+    price6: number = 0,
+    price7: number = 0,
+    sequence: number = 0,
   ): Extra {
     return new Extra(
       id,
       name,
-      description,
-      price,
-      isOptional,
-      ExtraStatus.ACTIVE,
+      description ?? null,
+      price1,
+      price2,
+      price3,
+      price4,
+      price5,
+      price6,
+      price7,
+      sequence,
+      new Date(),
+      new Date(),
+      null,
     );
   }
 
   public updateInfo(
-    name: string,
-    description: string,
-    price: number,
-    isOptional?: boolean,
+    name?: string,
+    description?: string,
+    price1?: number,
+    price2?: number,
+    price3?: number,
+    price4?: number,
+    price5?: number,
+    price6?: number,
+    price7?: number,
+    sequence?: number,
   ): void {
-    this.validateName(name);
-    this.validateDescription(description);
-    this.validatePrice(price);
-
-    this._name = name;
-    this._description = description;
-    this._price = price;
-    if (isOptional !== undefined) {
-      this._isOptional = isOptional;
-    }
+    if (name !== undefined) this._name = name;
+    if (description !== undefined) this._description = description ?? null;
+    if (price1 !== undefined) this._price1 = price1;
+    if (price2 !== undefined) this._price2 = price2;
+    if (price3 !== undefined) this._price3 = price3;
+    if (price4 !== undefined) this._price4 = price4;
+    if (price5 !== undefined) this._price5 = price5;
+    if (price6 !== undefined) this._price6 = price6;
+    if (price7 !== undefined) this._price7 = price7;
+    if (sequence !== undefined) this._sequence = sequence;
     this._updatedAt = new Date();
   }
 
-  public changeStatus(newStatus: ExtraStatus): void {
-    this._status = newStatus;
+  public softDelete(): void {
+    this._deletedAt = new Date();
     this._updatedAt = new Date();
-  }
-
-  public activate(): void {
-    this.changeStatus(ExtraStatus.ACTIVE);
-  }
-
-  public deactivate(): void {
-    this.changeStatus(ExtraStatus.INACTIVE);
   }
 
   public isActive(): boolean {
-    return this._status === ExtraStatus.ACTIVE;
-  }
-
-  private validateName(name: string): void {
-    if (!name?.trim()) throw new Error("Extra name cannot be empty");
-    if (name.length > 100)
-      throw new Error("Extra name cannot exceed 100 characters");
-  }
-
-  private validateDescription(description: string): void {
-    if (!description?.trim())
-      throw new Error("Extra description cannot be empty");
-    if (description.length > 500)
-      throw new Error("Extra description cannot exceed 500 characters");
-  }
-
-  private validatePrice(price: number): void {
-    if (price < 0) throw new Error("Extra price cannot be negative");
+    return this._deletedAt === null;
   }
 
   // Getters
@@ -94,22 +97,40 @@ export class Extra {
   public get name(): string {
     return this._name;
   }
-  public get description(): string {
+  public get description(): string | null {
     return this._description;
   }
-  public get price(): number {
-    return this._price;
+  public get price1(): number {
+    return this._price1;
   }
-  public get isOptional(): boolean {
-    return this._isOptional;
+  public get price2(): number {
+    return this._price2;
   }
-  public get status(): ExtraStatus {
-    return this._status;
+  public get price3(): number {
+    return this._price3;
+  }
+  public get price4(): number {
+    return this._price4;
+  }
+  public get price5(): number {
+    return this._price5;
+  }
+  public get price6(): number {
+    return this._price6;
+  }
+  public get price7(): number {
+    return this._price7;
+  }
+  public get sequence(): number {
+    return this._sequence;
   }
   public get createdAt(): Date {
     return this._createdAt;
   }
   public get updatedAt(): Date {
     return this._updatedAt;
+  }
+  public get deletedAt(): Date | null {
+    return this._deletedAt;
   }
 }

@@ -1,56 +1,58 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { getRepositoryToken } from "@nestjs/typeorm";
-import { Repository, Like, IsNull } from "typeorm";
 import { NotFoundException, ConflictException } from "@nestjs/common";
 import { ExtraService } from "../../../src/extras/extra.service";
-import { ExtraEntity } from "../../../src/extras/infrastructure/persistence/relational/entities/extra.entity";
+import { IExtraRepository } from "../../../src/extras/domain/extra.repository";
+import { Extra } from "../../../src/extras/domain/extra";
+import { ExtraId } from "../../../src/extras/domain/value-objects/extra-id.value-object";
 import { CreateExtraDto } from "../../../src/extras/dto/create-extra.dto";
 import { UpdateExtraDto } from "../../../src/extras/dto/update-extra.dto";
 
 describe("ExtraService", () => {
   let service: ExtraService;
-  let repository: jest.Mocked<Repository<ExtraEntity>>;
+  let repository: jest.Mocked<IExtraRepository>;
 
-  const mockExtraEntity: ExtraEntity = {
-    id: "123e4567-e89b-12d3-a456-426614174000",
-    name: "Complete Re-Flock",
-    description: "Complete re-flocking service",
-    price1: 250,
-    price2: 150,
-    price3: 135,
-    price4: 290,
-    price5: 290,
-    price6: 0,
-    price7: 0,
-    sequence: 1,
-    createdAt: new Date("2024-01-01"),
-    updatedAt: new Date("2024-01-01"),
-    deletedAt: null,
-  } as ExtraEntity;
+  const mockExtraId = ExtraId.fromString(
+    "123e4567-e89b-12d3-a456-426614174000",
+  );
+  const mockExtra = new Extra(
+    mockExtraId,
+    "Complete Re-Flock",
+    "Complete re-flocking service",
+    250,
+    150,
+    135,
+    290,
+    290,
+    0,
+    0,
+    1,
+    new Date("2024-01-01"),
+    new Date("2024-01-01"),
+    null,
+  );
 
   beforeEach(async () => {
     const mockRepository = {
-      create: jest.fn(),
+      findById: jest.fn(),
+      findByName: jest.fn(),
+      findAll: jest.fn(),
+      findActive: jest.fn(),
       save: jest.fn(),
-      findOne: jest.fn(),
-      find: jest.fn(),
-      findAndCount: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
+      softDelete: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ExtraService,
         {
-          provide: getRepositoryToken(ExtraEntity),
+          provide: IExtraRepository,
           useValue: mockRepository,
         },
       ],
     }).compile();
 
     service = module.get<ExtraService>(ExtraService);
-    repository = module.get(getRepositoryToken(ExtraEntity));
+    repository = module.get(IExtraRepository);
   });
 
   afterEach(() => {
@@ -70,19 +72,10 @@ describe("ExtraService", () => {
         sequence: 2,
       };
 
-      const newExtraEntity = {
-        ...createDto,
-        price6: 0,
-        price7: 0,
-        id: "223e4567-e89b-12d3-a456-426614174000",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        deletedAt: null,
-      };
-
-      repository.findOne.mockResolvedValue(null);
-      repository.create.mockReturnValue(newExtraEntity as ExtraEntity);
-      repository.save.mockResolvedValue(newExtraEntity as ExtraEntity);
+      repository.findByName.mockResolvedValue(null);
+      repository.save.mockImplementation((extra: Extra) =>
+        Promise.resolve(extra),
+      );
 
       const result = await service.create(createDto);
 
@@ -91,21 +84,7 @@ describe("ExtraService", () => {
         price1: createDto.price1,
         price2: createDto.price2,
       });
-      expect(repository.findOne).toHaveBeenCalledWith({
-        where: { name: createDto.name, deletedAt: IsNull() },
-      });
-      expect(repository.create).toHaveBeenCalledWith({
-        name: "New Extra",
-        description: "New description",
-        price1: 100,
-        price2: 80,
-        price3: 70,
-        price4: 120,
-        price5: 120,
-        price6: 0,
-        price7: 0,
-        sequence: 2,
-      });
+      expect(repository.findByName).toHaveBeenCalledWith(createDto.name);
       expect(repository.save).toHaveBeenCalled();
     });
 
@@ -115,39 +94,21 @@ describe("ExtraService", () => {
         price1: 50,
       };
 
-      const newExtraEntity = {
-        ...createDto,
-        price2: 0,
-        price3: 0,
-        price4: 0,
-        price5: 0,
-        price6: 0,
-        price7: 0,
-        sequence: 0,
-        id: "223e4567-e89b-12d3-a456-426614174000",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        deletedAt: null,
-      };
-
-      repository.findOne.mockResolvedValue(null);
-      repository.create.mockReturnValue(newExtraEntity as ExtraEntity);
-      repository.save.mockResolvedValue(newExtraEntity as ExtraEntity);
-
-      await service.create(createDto);
-
-      expect(repository.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          price1: 50,
-          price2: 0,
-          price3: 0,
-          price4: 0,
-          price5: 0,
-          price6: 0,
-          price7: 0,
-          sequence: 0,
-        }),
+      repository.findByName.mockResolvedValue(null);
+      repository.save.mockImplementation((extra: Extra) =>
+        Promise.resolve(extra),
       );
+
+      const result = await service.create(createDto);
+
+      expect(result.price1).toBe(50);
+      expect(result.price2).toBe(0);
+      expect(result.price3).toBe(0);
+      expect(result.price4).toBe(0);
+      expect(result.price5).toBe(0);
+      expect(result.price6).toBe(0);
+      expect(result.price7).toBe(0);
+      expect(result.sequence).toBe(0);
     });
 
     it("should throw ConflictException when extra name already exists", async () => {
@@ -155,98 +116,99 @@ describe("ExtraService", () => {
         name: "Existing Extra",
       };
 
-      repository.findOne.mockResolvedValue(mockExtraEntity);
+      repository.findByName.mockResolvedValue(mockExtra);
 
       await expect(service.create(createDto)).rejects.toThrow(
         ConflictException,
       );
-      expect(repository.create).not.toHaveBeenCalled();
       expect(repository.save).not.toHaveBeenCalled();
     });
   });
 
   describe("findOne", () => {
     it("should find extra by UUID", async () => {
-      const extraId = "123e4567-e89b-12d3-a456-426614174000";
-      repository.findOne.mockResolvedValue(mockExtraEntity);
+      repository.findById.mockResolvedValue(mockExtra);
 
-      const result = await service.findOne(extraId);
+      const result = await service.findOne(mockExtraId.value);
 
       expect(result).toMatchObject({
-        id: mockExtraEntity.id,
-        name: mockExtraEntity.name,
-        price1: mockExtraEntity.price1,
+        id: mockExtra.id.value,
+        name: mockExtra.name,
+        price1: mockExtra.price1,
       });
-      expect(repository.findOne).toHaveBeenCalledWith({
-        where: { id: extraId, deletedAt: IsNull() },
-      });
+      expect(repository.findById).toHaveBeenCalled();
     });
 
     it("should throw NotFoundException when extra not found", async () => {
-      const extraId = "999e4567-e89b-12d3-a456-426614174000";
-      repository.findOne.mockResolvedValue(null);
+      repository.findById.mockResolvedValue(null);
 
-      await expect(service.findOne(extraId)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.findOne("999e4567-e89b-12d3-a456-426614174000"),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe("findAll", () => {
     it("should return paginated extras with default parameters", async () => {
-      const extras = [mockExtraEntity];
-      const total = 1;
-      repository.findAndCount.mockResolvedValue([extras, total]);
+      repository.findAll.mockResolvedValue({
+        extras: [mockExtra],
+        total: 1,
+      });
 
       const result = await service.findAll();
 
       expect(result).toEqual({
         data: expect.arrayContaining([
           expect.objectContaining({
-            id: mockExtraEntity.id,
-            name: mockExtraEntity.name,
-            price1: mockExtraEntity.price1,
+            id: mockExtra.id.value,
+            name: mockExtra.name,
+            price1: mockExtra.price1,
           }),
         ]),
         total: 1,
         pages: 1,
       });
-      expect(repository.findAndCount).toHaveBeenCalledWith({
-        where: { deletedAt: IsNull() },
-        order: { sequence: "ASC", name: "ASC" },
-        skip: 0,
-        take: 10,
+      expect(repository.findAll).toHaveBeenCalledWith({
+        page: 1,
+        limit: 10,
+        search: undefined,
       });
     });
 
     it("should search by name", async () => {
-      repository.findAndCount.mockResolvedValue([[mockExtraEntity], 1]);
+      repository.findAll.mockResolvedValue({
+        extras: [mockExtra],
+        total: 1,
+      });
 
       const result = await service.findAll(1, 10, "Flock");
 
       expect(result.data).toHaveLength(1);
-      expect(repository.findAndCount).toHaveBeenCalledWith({
-        where: { deletedAt: IsNull(), name: Like("%Flock%") },
-        order: { sequence: "ASC", name: "ASC" },
-        skip: 0,
-        take: 10,
+      expect(repository.findAll).toHaveBeenCalledWith({
+        page: 1,
+        limit: 10,
+        search: "Flock",
       });
     });
 
     it("should handle pagination", async () => {
-      repository.findAndCount.mockResolvedValue([[mockExtraEntity], 25]);
+      repository.findAll.mockResolvedValue({
+        extras: [mockExtra],
+        total: 25,
+      });
 
       const result = await service.findAll(2, 10);
 
       expect(result.pages).toBe(3);
-      expect(repository.findAndCount).toHaveBeenCalledWith({
-        where: { deletedAt: IsNull() },
-        order: { sequence: "ASC", name: "ASC" },
-        skip: 10,
-        take: 10,
+      expect(repository.findAll).toHaveBeenCalledWith({
+        page: 2,
+        limit: 10,
+        search: undefined,
       });
     });
 
     it("should return empty array when no extras found", async () => {
-      repository.findAndCount.mockResolvedValue([[], 0]);
+      repository.findAll.mockResolvedValue({ extras: [], total: 0 });
 
       const result = await service.findAll();
 
@@ -256,18 +218,32 @@ describe("ExtraService", () => {
 
   describe("update", () => {
     it("should update extra prices successfully", async () => {
-      const extraId = "123e4567-e89b-12d3-a456-426614174000";
       const updateDto: UpdateExtraDto = {
         price1: 300,
         price2: 200,
       };
 
-      const updatedEntity = { ...mockExtraEntity, ...updateDto };
+      const updatedExtra = new Extra(
+        mockExtraId,
+        mockExtra.name,
+        mockExtra.description,
+        300,
+        200,
+        mockExtra.price3,
+        mockExtra.price4,
+        mockExtra.price5,
+        mockExtra.price6,
+        mockExtra.price7,
+        mockExtra.sequence,
+        mockExtra.createdAt,
+        new Date(),
+        null,
+      );
 
-      repository.findOne.mockResolvedValueOnce(mockExtraEntity);
-      repository.save.mockResolvedValue(updatedEntity as ExtraEntity);
+      repository.findById.mockResolvedValue(mockExtra);
+      repository.save.mockResolvedValue(updatedExtra);
 
-      const result = await service.update(extraId, updateDto);
+      const result = await service.update(mockExtraId.value, updateDto);
 
       expect(result).toMatchObject({
         price1: 300,
@@ -277,121 +253,111 @@ describe("ExtraService", () => {
     });
 
     it("should throw NotFoundException when extra not found", async () => {
-      const extraId = "999e4567-e89b-12d3-a456-426614174000";
       const updateDto: UpdateExtraDto = { name: "New name" };
-      repository.findOne.mockResolvedValue(null);
+      repository.findById.mockResolvedValue(null);
 
-      await expect(service.update(extraId, updateDto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update("999e4567-e89b-12d3-a456-426614174000", updateDto),
+      ).rejects.toThrow(NotFoundException);
       expect(repository.save).not.toHaveBeenCalled();
     });
 
     it("should check for name conflicts when updating name", async () => {
-      const extraId = "123e4567-e89b-12d3-a456-426614174000";
       const updateDto: UpdateExtraDto = { name: "New Unique Name" };
 
-      repository.findOne
-        .mockResolvedValueOnce(mockExtraEntity)
-        .mockResolvedValueOnce(null);
+      repository.findById.mockResolvedValue(mockExtra);
+      repository.findByName.mockResolvedValue(null);
+      repository.save.mockImplementation((extra: Extra) =>
+        Promise.resolve(extra),
+      );
 
-      repository.save.mockResolvedValue({
-        ...mockExtraEntity,
-        ...updateDto,
-      } as ExtraEntity);
-
-      const result = await service.update(extraId, updateDto);
+      const result = await service.update(mockExtraId.value, updateDto);
 
       expect(result.name).toBe(updateDto.name);
-      expect(repository.findOne).toHaveBeenCalledTimes(2);
+      expect(repository.findByName).toHaveBeenCalledWith("New Unique Name");
     });
 
     it("should throw ConflictException when updating to existing name", async () => {
-      const extraId = "123e4567-e89b-12d3-a456-426614174000";
       const updateDto: UpdateExtraDto = { name: "Existing Name" };
-      const existingExtraWithSameName = {
-        ...mockExtraEntity,
-        id: "999e4567-e89b-12d3-a456-426614174000",
-        name: "Existing Name",
-      };
-
-      repository.findOne
-        .mockResolvedValueOnce(mockExtraEntity)
-        .mockResolvedValueOnce(existingExtraWithSameName as ExtraEntity);
-
-      await expect(service.update(extraId, updateDto)).rejects.toThrow(
-        ConflictException,
+      const existingExtra = new Extra(
+        ExtraId.fromString("999e4567-e89b-12d3-a456-426614174000"),
+        "Existing Name",
+        null,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        new Date(),
+        new Date(),
+        null,
       );
+
+      repository.findById.mockResolvedValue(mockExtra);
+      repository.findByName.mockResolvedValue(existingExtra);
+
+      await expect(
+        service.update(mockExtraId.value, updateDto),
+      ).rejects.toThrow(ConflictException);
       expect(repository.save).not.toHaveBeenCalled();
     });
 
     it("should not check for conflicts when name is not changed", async () => {
-      const extraId = "123e4567-e89b-12d3-a456-426614174000";
       const updateDto: UpdateExtraDto = { price1: 999, sequence: 5 };
 
-      repository.findOne.mockResolvedValue(mockExtraEntity);
-      repository.save.mockResolvedValue({
-        ...mockExtraEntity,
-        ...updateDto,
-      } as ExtraEntity);
+      repository.findById.mockResolvedValue(mockExtra);
+      repository.save.mockImplementation((extra: Extra) =>
+        Promise.resolve(extra),
+      );
 
-      await service.update(extraId, updateDto);
+      await service.update(mockExtraId.value, updateDto);
 
-      expect(repository.findOne).toHaveBeenCalledTimes(1);
+      expect(repository.findByName).not.toHaveBeenCalled();
       expect(repository.save).toHaveBeenCalled();
     });
   });
 
   describe("remove", () => {
     it("should soft delete extra successfully", async () => {
-      const extraId = "123e4567-e89b-12d3-a456-426614174000";
-      repository.findOne.mockResolvedValue(mockExtraEntity);
-      repository.save.mockResolvedValue({
-        ...mockExtraEntity,
-        deletedAt: new Date(),
-      } as ExtraEntity);
+      repository.findById.mockResolvedValue(mockExtra);
+      repository.softDelete.mockResolvedValue(undefined);
 
-      await service.remove(extraId);
+      await service.remove(mockExtraId.value);
 
-      expect(repository.findOne).toHaveBeenCalledWith({
-        where: { id: extraId, deletedAt: IsNull() },
-      });
-      expect(repository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          deletedAt: expect.any(Date),
-        }),
-      );
+      expect(repository.findById).toHaveBeenCalled();
+      expect(repository.softDelete).toHaveBeenCalled();
     });
 
     it("should throw NotFoundException when extra not found", async () => {
-      const extraId = "999e4567-e89b-12d3-a456-426614174000";
-      repository.findOne.mockResolvedValue(null);
+      repository.findById.mockResolvedValue(null);
 
-      await expect(service.remove(extraId)).rejects.toThrow(NotFoundException);
-      expect(repository.save).not.toHaveBeenCalled();
+      await expect(
+        service.remove("999e4567-e89b-12d3-a456-426614174000"),
+      ).rejects.toThrow(NotFoundException);
+      expect(repository.softDelete).not.toHaveBeenCalled();
     });
   });
 
   describe("findActiveExtras", () => {
     it("should return all active extras", async () => {
-      repository.find.mockResolvedValue([mockExtraEntity]);
+      repository.findActive.mockResolvedValue([mockExtra]);
 
       const result = await service.findActiveExtras();
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        id: mockExtraEntity.id,
-        name: mockExtraEntity.name,
-        price1: mockExtraEntity.price1,
+        id: mockExtra.id.value,
+        name: mockExtra.name,
+        price1: mockExtra.price1,
       });
-      expect(repository.find).toHaveBeenCalledWith({
-        where: { deletedAt: IsNull() },
-        order: { sequence: "ASC", name: "ASC" },
-      });
+      expect(repository.findActive).toHaveBeenCalled();
     });
 
     it("should return empty array when no active extras", async () => {
-      repository.find.mockResolvedValue([]);
+      repository.findActive.mockResolvedValue([]);
 
       const result = await service.findActiveExtras();
 

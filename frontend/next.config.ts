@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   async headers() {
     return [
@@ -42,10 +42,10 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Note: eval needed for development
-              "style-src 'self' 'unsafe-inline'", // Note: inline styles needed for some components
+              "script-src 'self'",
+              "style-src 'self' 'unsafe-inline'", // inline styles needed for component libraries (shadcn/ui, Radix)
               "img-src 'self' data: blob:",
-              "font-src 'self' data:",
+              "font-src 'self'",
               "connect-src 'self' http://localhost:3001 https://*.ordermysaddle.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",

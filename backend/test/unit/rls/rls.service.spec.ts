@@ -27,14 +27,14 @@ describe("RlsService", () => {
       providers: [
         RlsService,
         {
-          provide: "DATA_SOURCE",
+          provide: DataSource,
           useValue: mockDataSource,
         },
       ],
     }).compile();
 
     service = module.get<RlsService>(RlsService);
-    _dataSource = module.get<DataSource>("DATA_SOURCE");
+    _dataSource = module.get<DataSource>(DataSource);
   });
 
   afterEach(() => {

@@ -261,9 +261,6 @@ export async function fetchEntities({
     url += `&${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`;
   }
 
-  // Add cache-busting timestamp to ensure fresh data
-  url += `&_t=${Date.now()}`;
-
   logger.log('fetchEntities: Fetching URL:', url.toString());
 
   const controller = new AbortController();
@@ -273,9 +270,6 @@ export async function fetchEntities({
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
       },
       credentials: 'include',
       signal: controller.signal,

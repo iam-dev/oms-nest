@@ -3,56 +3,52 @@ import {
   NotFoundException,
   ConflictException,
 } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, Like, IsNull } from "typeorm";
-import { ExtraEntity } from "./infrastructure/persistence/relational/entities/extra.entity";
+import { IExtraRepository } from "./domain/extra.repository";
+import { Extra } from "./domain/extra";
+import { ExtraId } from "./domain/value-objects/extra-id.value-object";
 import { CreateExtraDto } from "./dto/create-extra.dto";
 import { UpdateExtraDto } from "./dto/update-extra.dto";
 import { ExtraDto } from "./dto/extra.dto";
-import { plainToClass } from "class-transformer";
 
+/**
+ * Extra Application Service
+ *
+ * Orchestrates extra domain operations.
+ * Uses domain repository abstraction instead of TypeORM directly.
+ */
 @Injectable()
 export class ExtraService {
-  constructor(
-    @InjectRepository(ExtraEntity)
-    private readonly extraRepository: Repository<ExtraEntity>,
-  ) {}
+  constructor(private readonly extraRepository: IExtraRepository) {}
 
   async create(createExtraDto: CreateExtraDto): Promise<ExtraDto> {
-    const existingExtra = await this.extraRepository.findOne({
-      where: { name: createExtraDto.name, deletedAt: IsNull() },
-    });
-
-    if (existingExtra) {
+    const existing = await this.extraRepository.findByName(createExtraDto.name);
+    if (existing) {
       throw new ConflictException("Extra with this name already exists");
     }
 
-    const extra = this.extraRepository.create({
-      name: createExtraDto.name,
-      description: createExtraDto.description,
-      price1: createExtraDto.price1 ?? 0,
-      price2: createExtraDto.price2 ?? 0,
-      price3: createExtraDto.price3 ?? 0,
-      price4: createExtraDto.price4 ?? 0,
-      price5: createExtraDto.price5 ?? 0,
-      price6: createExtraDto.price6 ?? 0,
-      price7: createExtraDto.price7 ?? 0,
-      sequence: createExtraDto.sequence ?? 0,
-    });
-    const savedExtra = await this.extraRepository.save(extra);
+    const extra = Extra.create(
+      ExtraId.generate(),
+      createExtraDto.name,
+      createExtraDto.description,
+      createExtraDto.price1 ?? 0,
+      createExtraDto.price2 ?? 0,
+      createExtraDto.price3 ?? 0,
+      createExtraDto.price4 ?? 0,
+      createExtraDto.price5 ?? 0,
+      createExtraDto.price6 ?? 0,
+      createExtraDto.price7 ?? 0,
+      createExtraDto.sequence ?? 0,
+    );
 
+    const savedExtra = await this.extraRepository.save(extra);
     return this.toDto(savedExtra);
   }
 
   async findOne(id: string): Promise<ExtraDto> {
-    const extra = await this.extraRepository.findOne({
-      where: { id, deletedAt: IsNull() },
-    });
-
+    const extra = await this.extraRepository.findById(ExtraId.fromString(id));
     if (!extra) {
       throw new NotFoundException("Extra not found");
     }
-
     return this.toDto(extra);
   }
 
@@ -61,17 +57,10 @@ export class ExtraService {
     limit: number = 10,
     search?: string,
   ): Promise<{ data: ExtraDto[]; total: number; pages: number }> {
-    const where: any = { deletedAt: IsNull() };
-
-    if (search) {
-      where.name = Like(`%${search}%`);
-    }
-
-    const [extras, total] = await this.extraRepository.findAndCount({
-      where,
-      order: { sequence: "ASC", name: "ASC" },
-      skip: (page - 1) * limit,
-      take: limit,
+    const { extras, total } = await this.extraRepository.findAll({
+      page,
+      limit,
+      search,
     });
 
     return {
@@ -82,75 +71,67 @@ export class ExtraService {
   }
 
   async update(id: string, updateExtraDto: UpdateExtraDto): Promise<ExtraDto> {
-    const extra = await this.extraRepository.findOne({
-      where: { id, deletedAt: IsNull() },
-    });
-
+    const extra = await this.extraRepository.findById(ExtraId.fromString(id));
     if (!extra) {
       throw new NotFoundException("Extra not found");
     }
 
     if (updateExtraDto.name && updateExtraDto.name !== extra.name) {
-      const existingExtra = await this.extraRepository.findOne({
-        where: { name: updateExtraDto.name, deletedAt: IsNull() },
-      });
-      if (existingExtra && existingExtra.id !== extra.id) {
+      const existing = await this.extraRepository.findByName(
+        updateExtraDto.name,
+      );
+      if (existing && existing.id.value !== extra.id.value) {
         throw new ConflictException("Extra with this name already exists");
       }
     }
 
-    if (updateExtraDto.name !== undefined) extra.name = updateExtraDto.name;
-    if (updateExtraDto.description !== undefined)
-      extra.description = updateExtraDto.description;
-    if (updateExtraDto.price1 !== undefined)
-      extra.price1 = updateExtraDto.price1;
-    if (updateExtraDto.price2 !== undefined)
-      extra.price2 = updateExtraDto.price2;
-    if (updateExtraDto.price3 !== undefined)
-      extra.price3 = updateExtraDto.price3;
-    if (updateExtraDto.price4 !== undefined)
-      extra.price4 = updateExtraDto.price4;
-    if (updateExtraDto.price5 !== undefined)
-      extra.price5 = updateExtraDto.price5;
-    if (updateExtraDto.price6 !== undefined)
-      extra.price6 = updateExtraDto.price6;
-    if (updateExtraDto.price7 !== undefined)
-      extra.price7 = updateExtraDto.price7;
-    if (updateExtraDto.sequence !== undefined)
-      extra.sequence = updateExtraDto.sequence;
+    extra.updateInfo(
+      updateExtraDto.name,
+      updateExtraDto.description,
+      updateExtraDto.price1,
+      updateExtraDto.price2,
+      updateExtraDto.price3,
+      updateExtraDto.price4,
+      updateExtraDto.price5,
+      updateExtraDto.price6,
+      updateExtraDto.price7,
+      updateExtraDto.sequence,
+    );
 
     const savedExtra = await this.extraRepository.save(extra);
-
     return this.toDto(savedExtra);
   }
 
   async remove(id: string): Promise<void> {
-    const extra = await this.extraRepository.findOne({
-      where: { id, deletedAt: IsNull() },
-    });
-
+    const extra = await this.extraRepository.findById(ExtraId.fromString(id));
     if (!extra) {
       throw new NotFoundException("Extra not found");
     }
-
-    extra.deletedAt = new Date();
-    await this.extraRepository.save(extra);
+    await this.extraRepository.softDelete(ExtraId.fromString(id));
   }
 
   async findActiveExtras(): Promise<ExtraDto[]> {
-    const extras = await this.extraRepository.find({
-      where: { deletedAt: IsNull() },
-      order: { sequence: "ASC", name: "ASC" },
-    });
-
+    const extras = await this.extraRepository.findActive();
     return extras.map((extra) => this.toDto(extra));
   }
 
-  private toDto(extra: ExtraEntity): ExtraDto {
-    const dto = plainToClass(ExtraDto, extra, {
-      excludeExtraneousValues: true,
-    });
-    dto.isActive = extra.deletedAt === null;
+  private toDto(extra: Extra): ExtraDto {
+    const dto = new ExtraDto();
+    dto.id = extra.id.value;
+    dto.name = extra.name;
+    dto.description = extra.description ?? undefined;
+    dto.price1 = extra.price1;
+    dto.price2 = extra.price2;
+    dto.price3 = extra.price3;
+    dto.price4 = extra.price4;
+    dto.price5 = extra.price5;
+    dto.price6 = extra.price6;
+    dto.price7 = extra.price7;
+    dto.sequence = extra.sequence;
+    dto.createdAt = extra.createdAt;
+    dto.updatedAt = extra.updatedAt;
+    dto.deletedAt = extra.deletedAt;
+    dto.isActive = extra.isActive();
     dto.displayName = extra.name;
     return dto;
   }

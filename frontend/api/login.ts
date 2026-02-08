@@ -43,11 +43,6 @@ export async function login(username: string, password: string): Promise<LoginRe
       };
     }
 
-    // Store minimal user info for UI display
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_user', JSON.stringify(user));
-    }
-
     return {
       success: true,
       userId: user.id,
@@ -62,11 +57,9 @@ export async function login(username: string, password: string): Promise<LoginRe
   }
 }
 
-// Helper function to clear auth tokens
+// Helper function to clear auth state (localStorage no longer used; cookie cleared by backend)
 export function clearAuthTokens() {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('auth_user');
-  }
+  // No-op: httpOnly cookies are cleared by the backend logout endpoint
 }
 
 // Logout function
@@ -82,15 +75,10 @@ export async function logout(): Promise<void> {
       credentials: 'include',
     });
 
-    // Clear local tokens regardless of backend response
-    clearAuthTokens();
-
     if (!response.ok) {
-      logger.warn('Logout endpoint failed, but tokens cleared locally');
+      logger.warn('Logout endpoint failed, but cookie should be cleared by backend');
     }
   } catch (error) {
     logger.error('Logout error:', error);
-    // Still clear local tokens even if network fails
-    clearAuthTokens();
   }
 }
