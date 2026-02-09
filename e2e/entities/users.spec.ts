@@ -15,6 +15,10 @@ test.describe('Users Entity Management', () => {
     await authHelper.waitForPageLoad();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should load users page and validate API response', async ({ page }) => {
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
 
@@ -52,7 +56,8 @@ test.describe('Users Entity Management', () => {
       apiHelper.clearRequestHistory();
 
       await searchInput.fill('admin');
-      await page.waitForTimeout(1000);
+      // Wait for debounced search API call after typing
+      await page.waitForResponse(resp => resp.url().includes('/users') && resp.status() === 200);
 
       const searchRequest = apiHelper.getLastApiRequest('/users');
       if (searchRequest) {
@@ -76,12 +81,17 @@ test.describe('Users Entity Management', () => {
         const trigger = page.locator(selector).first();
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          const detailVisible = await page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]').isVisible({ timeout: 2000 });
-          const urlChanged = page.url().includes('/user') && !page.url().endsWith('/users');
-
-          expect(detailVisible || urlChanged).toBeTruthy();
+          // Wait for either a modal to appear or URL to change
+          const detailModal = page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]');
+          try {
+            await detailModal.waitFor({ state: 'visible', timeout: 3000 });
+            expect(true).toBeTruthy();
+          } catch {
+            // If no modal, check if URL changed to a detail page
+            const urlChanged = page.url().includes('/user') && !page.url().endsWith('/users');
+            expect(urlChanged).toBeTruthy();
+          }
           break;
         }
       } catch {

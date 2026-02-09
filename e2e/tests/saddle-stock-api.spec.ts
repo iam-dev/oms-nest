@@ -65,7 +65,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${adminToken}`,
+        'Cookie': `token=${adminToken}`,
         'User-Agent': 'OMS-E2E-Tests/1.0.0'
       },
       ignoreHTTPSErrors: true,
@@ -76,7 +76,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${fitterToken}`,
+        'Cookie': `token=${fitterToken}`,
         'User-Agent': 'OMS-E2E-Tests/1.0.0'
       },
       ignoreHTTPSErrors: true,

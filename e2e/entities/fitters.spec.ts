@@ -15,6 +15,10 @@ test.describe('Fitters Entity Management', () => {
     await authHelper.waitForPageLoad();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should load fitters page and validate API response', async ({ page }) => {
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
 
@@ -50,7 +54,8 @@ test.describe('Fitters Entity Management', () => {
       apiHelper.clearRequestHistory();
 
       await searchInput.fill('test fitter');
-      await page.waitForTimeout(1000);
+      // Wait for debounced search API call after typing
+      await page.waitForResponse(resp => resp.url().includes('/fitters') && resp.status() === 200);
 
       const searchRequest = apiHelper.getLastApiRequest('/fitters');
       if (searchRequest) {
@@ -74,12 +79,17 @@ test.describe('Fitters Entity Management', () => {
         const trigger = page.locator(selector).first();
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          const detailVisible = await page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]').isVisible({ timeout: 2000 });
-          const urlChanged = page.url().includes('/fitter') && !page.url().endsWith('/fitters');
-
-          expect(detailVisible || urlChanged).toBeTruthy();
+          // Wait for either a modal to appear or URL to change
+          const detailModal = page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]');
+          try {
+            await detailModal.waitFor({ state: 'visible', timeout: 3000 });
+            expect(true).toBeTruthy();
+          } catch {
+            // If no modal, check if URL changed to a detail page
+            const urlChanged = page.url().includes('/fitter') && !page.url().endsWith('/fitters');
+            expect(urlChanged).toBeTruthy();
+          }
           break;
         }
       } catch {
@@ -104,9 +114,15 @@ test.describe('Fitters Entity Management', () => {
         const trigger = page.locator(selector);
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          const formVisible = await page.locator('form, [role="dialog"], .modal').isVisible({ timeout: 2000 });
+          // Wait for form modal or navigation to create page
+          const formLocator = page.locator('form, [role="dialog"], .modal');
+          try {
+            await formLocator.waitFor({ state: 'visible', timeout: 3000 });
+          } catch {
+            // May have navigated to create page instead
+          }
+          const formVisible = await formLocator.isVisible();
           const createPageVisible = page.url().includes('/create') || page.url().includes('/new');
 
           if (formVisible || createPageVisible) {
