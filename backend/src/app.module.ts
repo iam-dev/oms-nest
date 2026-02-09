@@ -54,6 +54,9 @@ import { AuditLogInterceptor } from "./audit-logging/interceptors/audit-log.inte
 import { RlsModule } from "./rls/rls.module";
 import { EnhancedRlsGuard } from "./rls/rls.guard";
 
+const isTestOrDev =
+  process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development";
+
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
   dataSourceFactory: async (options: DataSourceOptions) => {
@@ -76,11 +79,19 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       ],
       envFilePath: [".env"],
     }),
-    ThrottlerModule.forRoot([
-      { name: "short", ttl: 1000, limit: 3 },
-      { name: "medium", ttl: 60000, limit: 100 },
-      { name: "long", ttl: 3600000, limit: 600 },
-    ]),
+    ThrottlerModule.forRoot(
+      isTestOrDev
+        ? [
+            { name: "short", ttl: 1000, limit: 10000 },
+            { name: "medium", ttl: 60000, limit: 10000 },
+            { name: "long", ttl: 3600000, limit: 10000 },
+          ]
+        : [
+            { name: "short", ttl: 1000, limit: 3 },
+            { name: "medium", ttl: 60000, limit: 100 },
+            { name: "long", ttl: 3600000, limit: 600 },
+          ],
+    ),
     infrastructureDatabaseModule,
     CacheModule,
     UsersModule,

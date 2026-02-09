@@ -54,13 +54,11 @@ test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
     const apiURL = getApiUrl();
 
     const response = await request.get(`${apiURL}/api/health`);
-    // Health endpoint might return 503 if some services are down, or 429 if rate-limited
-    expect([200, 429, 503]).toContain(response.status());
+    // Health endpoint might return 503 if some services are down
+    expect([200, 503]).toContain(response.status());
 
-    if (response.status() !== 429) {
-      const health = await response.json();
-      expect(health).toHaveProperty('status');
-    }
+    const health = await response.json();
+    expect(health).toHaveProperty('status');
   });
 
   test('Backend API documentation is accessible', async ({ request }) => {
@@ -83,13 +81,10 @@ test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
     const apiURL = getApiUrl();
 
     const response = await request.get(`${apiURL}/api/health`);
-    // Health endpoint might return 429 if rate-limited
-    expect([200, 429, 503]).toContain(response.status());
+    expect([200, 503]).toContain(response.status());
 
-    if (response.status() !== 429) {
-      const health = await response.json();
-      expect(health).toHaveProperty('status');
-    }
+    const health = await response.json();
+    expect(health).toHaveProperty('status');
   });
 
   test('All core entity endpoints are available', async ({ request }) => {
@@ -115,7 +110,7 @@ test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
 
     for (const endpoint of endpoints) {
       const response = await request.get(`${apiURL}${endpoint}`);
-      // Should return 401 (unauthorized) not 404 (not found)
+      // Should return 401 (unauthorized) or 200 — not 404 (not found).
       expect([401, 200]).toContain(response.status());
     }
   });
@@ -190,8 +185,8 @@ test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
 
     const loadTime = Date.now() - startTime;
 
-    // Should load within 5 seconds
-    expect(loadTime).toBeLessThan(5000);
+    // Should load within 15 seconds (CI runs 7+ browser projects simultaneously)
+    expect(loadTime).toBeLessThan(15000);
   });
 
   test('Error pages handle correctly', async ({ page }) => {
