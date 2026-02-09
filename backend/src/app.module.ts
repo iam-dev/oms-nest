@@ -88,9 +88,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
             { name: "long", ttl: 3600000, limit: 10000 },
           ]
         : [
-            { name: "short", ttl: 1000, limit: 3 },
-            { name: "medium", ttl: 60000, limit: 100 },
-            { name: "long", ttl: 3600000, limit: 600 },
+            { name: "short", ttl: 1000, limit: 20 },
+            { name: "medium", ttl: 60000, limit: 300 },
+            { name: "long", ttl: 3600000, limit: 3000 },
           ],
     ),
     infrastructureDatabaseModule,
