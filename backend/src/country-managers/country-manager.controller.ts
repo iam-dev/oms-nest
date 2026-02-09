@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
 } from "@nestjs/swagger";
@@ -40,7 +40,7 @@ import { RoleEnum } from "../roles/roles.enum";
   path: "country_managers",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CountryManagerController {

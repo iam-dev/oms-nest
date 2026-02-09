@@ -13,7 +13,7 @@ import {
   SerializeOptions,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import { ApiCookieAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { AuthEmailLoginDto } from "./dto/auth-email-login.dto";
 import { AuthForgotPasswordDto } from "./dto/auth-forgot-password.dto";
@@ -38,6 +38,14 @@ const COOKIE_OPTIONS = {
   sameSite: "lax" as const,
   path: "/",
   maxAge: 15 * 60 * 1000, // 15 minutes
+};
+
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV !== "development",
+  sameSite: "lax" as const,
+  path: "/api/v1/auth/refresh",
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
 @ApiTags("Auth")
@@ -68,6 +76,9 @@ export class AuthController {
   ): Promise<LoginResponseDto> {
     const result = await this.service.validateLogin(loginDto);
     res.cookie("token", result.token, COOKIE_OPTIONS);
+    if (result.refreshToken) {
+      res.cookie("refreshToken", result.refreshToken, REFRESH_COOKIE_OPTIONS);
+    }
     return result;
   }
 
@@ -125,7 +136,7 @@ export class AuthController {
     );
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth("token")
   @SerializeOptions({
     groups: ["me"],
   })
@@ -139,7 +150,7 @@ export class AuthController {
     return this.service.me(request.user);
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth("token")
   @ApiOkResponse({
     type: RefreshResponseDto,
   })
@@ -158,10 +169,13 @@ export class AuthController {
       hash: request.user.hash,
     });
     res.cookie("token", result.token, COOKIE_OPTIONS);
+    if (result.refreshToken) {
+      res.cookie("refreshToken", result.refreshToken, REFRESH_COOKIE_OPTIONS);
+    }
     return result;
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth("token")
   @Post("logout")
   @UseGuards(AuthGuard("jwt"))
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -173,9 +187,10 @@ export class AuthController {
       sessionId: request.user.sessionId,
     });
     res.clearCookie("token", { path: "/" });
+    res.clearCookie("refreshToken", { path: "/api/v1/auth/refresh" });
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth("token")
   @SerializeOptions({
     groups: ["me"],
   })
@@ -192,7 +207,7 @@ export class AuthController {
     return this.service.update(request.user, userDto);
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth("token")
   @Delete("me")
   @UseGuards(AuthGuard("jwt"))
   @HttpCode(HttpStatus.NO_CONTENT)

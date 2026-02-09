@@ -34,16 +34,8 @@ Located at `services/api.ts`:
 ```typescript
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// Centralized authentication headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
-
 // Generic fetch wrapper with error handling
+// Authentication is handled via httpOnly cookies — no manual header injection needed
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
@@ -52,8 +44,9 @@ export const apiRequest = async <T>(
 
   const response = await fetch(url, {
     ...options,
+    credentials: 'include', // Send httpOnly auth cookies automatically
     headers: {
-      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
       ...options.headers,
     },
   });
@@ -256,51 +249,33 @@ export const useOrder = (id: string) => {
 
 ### Token Management
 
-Authentication tokens are managed automatically in the service layer:
+Authentication tokens are stored in httpOnly cookies set by the server. The frontend doesn't need to manage tokens directly — cookies are sent automatically by the browser with `credentials: 'include'`.
 
 ```typescript
-// Token storage
-export const setAuthToken = (token: string) => {
-  localStorage.setItem('token', token);
-};
-
-export const getAuthToken = (): string | null => {
-  return localStorage.getItem('token');
-};
-
-export const clearAuthToken = () => {
-  localStorage.removeItem('token');
-};
-
-// Automatic token refresh
-export const refreshToken = async (): Promise<string> => {
-  const currentToken = getAuthToken();
-  if (!currentToken) {
-    throw new Error('No token to refresh');
-  }
-
-  const response = await apiRequest<{ token: string }>('/auth/refresh', {
+// Token refresh — calls the server which rotates both token and refreshToken cookies
+export const refreshToken = async (): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${currentToken}` },
+    credentials: 'include', // Sends refreshToken cookie
   });
 
-  setAuthToken(response.token);
-  return response.token;
+  if (!response.ok) {
+    throw new Error('Token refresh failed');
+  }
+  // Server sets new cookies automatically via Set-Cookie headers
 };
 ```
 
 ### Protected API Calls
 
-All API calls automatically include authentication:
+All API calls automatically include authentication cookies:
 
 ```typescript
-// Authentication headers are added automatically
+// Cookies are sent automatically with credentials: 'include'
 const customers = await fetchCustomers(1, 10, { active: true });
 
-// Manual authentication override (rarely needed)
-const publicData = await apiRequest('/public/health', {
-  headers: { Authorization: '' }, // Override to remove auth
-});
+// Public endpoints work the same way (server ignores missing cookie)
+const publicData = await apiRequest('/public/health');
 ```
 
 ## 🔄 State Management Integration

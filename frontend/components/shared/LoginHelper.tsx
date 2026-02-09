@@ -32,12 +32,22 @@ export function LoginHelper() {
     }
   };
 
-  const checkToken = () => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      setMessage(`✅ Token found: ${token.substring(0, 20)}...`);
-    } else {
-      setMessage('❌ No authentication token found');
+  const checkToken = async () => {
+    setIsLoading(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const res = await fetch(`${apiUrl}/api/v1/auth/me`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setMessage('Auth cookie is valid (authenticated).');
+      } else {
+        setMessage('Not authenticated. Please log in.');
+      }
+    } catch {
+      setMessage('Could not reach backend to verify auth status.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -74,12 +84,13 @@ export function LoginHelper() {
             {isLoading ? 'Logging in...' : 'Login'}
           </Button>
           
-          <Button 
-            onClick={checkToken} 
+          <Button
+            onClick={checkToken}
             variant="outline"
             size="sm"
+            disabled={isLoading}
           >
-            Check Token
+            Check Auth
           </Button>
         </div>
         

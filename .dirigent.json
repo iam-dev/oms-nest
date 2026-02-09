@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dirigent-dev/dirigent/main/schema/config.json",
+
+  "defaultMode": "interactive",
+  "defaultBudget": "medium",
+
+  "coverage": {
+    "threshold": 80,
+    "enforceBranch": true
+  },
+
+  "phases": {
+    "skip": [],
+    "require": ["validate"]
+  },
+
+  "integrity": {
+    "allowAny": false,
+    "allowTsIgnore": false,
+    "maxFileLines": 400,
+    "customForbiddenPatterns": []
+  },
+
+  "specialists": {
+    "preferred": [],
+    "disabled": []
+  },
+
+  "deploy": {
+    "target": null,
+    "productionBranch": "main",
+    "previewOnPR": true
+  },
+
+  "testing": {
+    "e2e": false,
+    "integration": false,
+    "visual": false,
+    "a11y": false,
+    "perf": false,
+    "contracts": false
+  },
+
+  "monorepo": {
+    "defaultPackage": null,
+    "sharedPackages": []
+  },
+
+  "changelog": {
+    "auto": true,
+    "preset": "angular"
+  }
+}

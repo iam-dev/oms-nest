@@ -14,7 +14,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
@@ -28,7 +28,7 @@ import { QueryWarehouseDto } from "./dto/query-warehouse.dto";
 import { Warehouse } from "./warehouse.entity";
 
 @ApiTags("Warehouses")
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller({

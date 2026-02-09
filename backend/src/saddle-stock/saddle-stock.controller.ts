@@ -13,7 +13,7 @@ import { AuthGuard } from "@nestjs/passport";
 import { RolesGuard } from "../roles/roles.guard";
 import { Roles } from "../roles/roles.decorator";
 import { RoleEnum } from "../roles/roles.enum";
-import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import { SaddleStockService } from "./saddle-stock.service";
 import { QuerySaddleStockDto } from "./dto/query-saddle-stock.dto";
 
@@ -22,7 +22,7 @@ import { QuerySaddleStockDto } from "./dto/query-saddle-stock.dto";
   path: "saddle-stock",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class SaddleStockController {

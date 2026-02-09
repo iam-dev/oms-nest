@@ -209,43 +209,38 @@ describe('API Permissions and Authorization', () => {
     }, TEST_TIMEOUTS.NORMAL);
   });
 
-  describe('Authorization Header Validation', () => {
-    it('should reject malformed Authorization headers', async () => {
-      // Test with a simple malformed Bearer token instead of complex mocking
-      const testCase = {
-        header: 'Bearer invalid-token-format',
-        description: 'malformed Bearer token'
-      };
-
-      // Set a malformed token via the API client
+  describe('Cookie Auth Validation', () => {
+    it('should reject malformed cookie tokens', async () => {
+      // Set a malformed token via the API client (sent as cookie)
       apiClient.setAuthToken('invalid-token-format');
 
       try {
         await apiClient.get('/users');
-        fail(`${testCase.description} should be rejected`);
-      } catch (error: any) {
+        fail('malformed cookie token should be rejected');
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
         // Accept various error responses for malformed auth
-        expect(error.status).toBeOneOf([
+        expect(apiError.status).toBeOneOf([
           HTTP_STATUS.UNAUTHORIZED,
           HTTP_STATUS.BAD_REQUEST,
           HTTP_STATUS.FORBIDDEN,
-          HTTP_STATUS.INTERNAL_SERVER_ERROR // Server may throw 500 for malformed tokens
+          HTTP_STATUS.INTERNAL_SERVER_ERROR
         ]);
       } finally {
-        // Clear the malformed token
         apiClient.clearAuth();
       }
     }, TEST_TIMEOUTS.NORMAL);
 
-    it('should require Bearer token format', async () => {
-      // Test that only Bearer tokens are accepted
-      apiClient.setAuthToken('valid-token-without-bearer-prefix');
+    it('should reject invalid token values in cookie', async () => {
+      // Test that invalid JWT values are rejected
+      apiClient.setAuthToken('not-a-valid-jwt');
 
       try {
         await apiClient.get('/users');
-        fail('Non-Bearer token should be rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+        fail('Invalid cookie token should be rejected');
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
+        expect(apiError.status).toBeOneOf([HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
