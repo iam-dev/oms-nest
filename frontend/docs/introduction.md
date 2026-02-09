@@ -92,7 +92,7 @@ This application is part of a strategic migration from a legacy PHP/Symfony syst
 ## 🔐 Security & Authentication
 
 ### JWT-Based Authentication
-- **Token Storage**: localStorage for persistence
+- **Token Storage**: httpOnly secure cookies (set by server)
 - **Token Refresh**: Automatic refresh before expiration
 - **Role-Based Access**: Route protection based on user roles
 - **Session Management**: Secure logout and cleanup
@@ -100,7 +100,7 @@ This application is part of a strategic migration from a legacy PHP/Symfony syst
 ### Authorization Patterns
 - **Route Protection**: Middleware checks user roles
 - **Component Guards**: Conditional rendering based on permissions
-- **API Security**: Bearer tokens for all backend requests
+- **API Security**: httpOnly cookies sent automatically with all backend requests
 - **Data Isolation**: Users only see their authorized data
 
 ## 🚀 Performance Considerations

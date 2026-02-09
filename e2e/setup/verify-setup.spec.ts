@@ -30,10 +30,10 @@ test.describe('E2E Setup Verification', () => {
   test('should verify login page loads correctly', async ({ page }) => {
     await page.goto('/login');
 
-    // Should see login form elements (using placeholder text as the form doesn't use name attributes)
-    const usernameInput = page.locator('input[placeholder="Gebruikersnaam"]');
-    const passwordInput = page.locator('input[placeholder="Wachtwoord"]');
-    const submitButton = page.locator('button[type="submit"]');
+    // Should see login form elements
+    const usernameInput = page.getByTestId('username-input');
+    const passwordInput = page.getByTestId('password-input');
+    const submitButton = page.getByTestId('login-submit');
 
     await expect(usernameInput).toBeVisible();
     await expect(passwordInput).toBeVisible();
@@ -45,7 +45,7 @@ test.describe('E2E Setup Verification', () => {
     await page.goto('/login');
 
     // Test that we can interact with elements
-    const usernameInput = page.locator('input[placeholder="Gebruikersnaam"]');
+    const usernameInput = page.getByTestId('username-input');
     await usernameInput.fill('test');
 
     const value = await usernameInput.inputValue();

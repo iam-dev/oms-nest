@@ -16,6 +16,10 @@ test.describe('Orders Entity Management', () => {
     await authHelper.waitForPageLoad();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should load orders page and make API call', async ({ page }) => {
     // Verify page loads correctly
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
@@ -92,7 +96,8 @@ test.describe('Orders Entity Management', () => {
 
       // Perform search
       await searchInput.fill('test');
-      await page.waitForTimeout(1000); // Debounce delay
+      // Wait for debounced search API call after typing
+      await page.waitForResponse(resp => resp.url().includes('/enriched_orders') && resp.status() === 200);
 
       // Check if API call was made with search parameter
       const searchRequest = apiHelper.getLastApiRequest('/enriched_orders');
@@ -128,9 +133,9 @@ test.describe('Orders Entity Management', () => {
           await filterElement.selectOption({ index: 1 }); // Select first non-default option
         } else if (tagName === 'button') {
           await filterElement.click();
-          // Look for dropdown options
-          await page.waitForTimeout(500);
+          // Wait for dropdown options to appear
           const option = page.locator('[role="option"], .dropdown-item').first();
+          await option.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
           if (await option.isVisible({ timeout: 1000 })) {
             await option.click();
           }
@@ -138,7 +143,8 @@ test.describe('Orders Entity Management', () => {
           await filterElement.fill('pending');
         }
 
-        await page.waitForTimeout(1000);
+        // Wait for filter API response
+        await page.waitForResponse(resp => resp.url().includes('/enriched_orders') && resp.status() === 200);
 
         // Check if API call was made with filter
         const filterRequest = apiHelper.getLastApiRequest('/enriched_orders');
@@ -175,7 +181,8 @@ test.describe('Orders Entity Management', () => {
 
         // Click to sort
         await sortableColumn.click();
-        await page.waitForTimeout(1000);
+        // Wait for sort API response
+        await page.waitForResponse(resp => resp.url().includes('/enriched_orders') && resp.status() === 200);
 
         // Check if API call was made with sort parameter
         const sortRequest = apiHelper.getLastApiRequest('/enriched_orders');
@@ -223,7 +230,8 @@ test.describe('Orders Entity Management', () => {
           }
         }
 
-        await page.waitForTimeout(1000);
+        // Wait for pagination API response
+        await page.waitForResponse(resp => resp.url().includes('/enriched_orders') && resp.status() === 200);
 
         // Check if API call was made with pagination parameter
         const pageRequest = apiHelper.getLastApiRequest('/enriched_orders');
@@ -255,7 +263,12 @@ test.describe('Orders Entity Management', () => {
         await expect(orderElement).toBeVisible({ timeout: 2000 });
 
         await orderElement.click();
-        await page.waitForTimeout(1000);
+
+        // Wait for either a modal to appear or URL to change
+        await Promise.race([
+          page.locator('[data-testid="order-modal"], [role="dialog"], .modal, [data-testid="order-details"]').first().waitFor({ state: 'visible', timeout: 3000 }),
+          page.waitForURL(url => url.pathname.includes('/order') && url.pathname !== '/orders', { timeout: 3000 }),
+        ]).catch(() => {});
 
         // Check if modal or detail view opened
         const detailSelectors = [

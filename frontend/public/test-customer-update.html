@@ -94,31 +94,14 @@
         }
 
         function getAuthToken() {
-            try {
-                const stored = localStorage.getItem('auth_token');
-                if (stored && stored !== 'null') {
-                    return JSON.parse(stored);
-                }
-            } catch (e) {
-                // Fallback to cookies
-                const cookies = document.cookie.split(';');
-                for (let cookie of cookies) {
-                    const [name, value] = cookie.trim().split('=');
-                    if (name === 'token') {
-                        return value;
-                    }
-                }
-            }
-            return null;
+            // Auth tokens are in httpOnly cookies (not accessible from JS)
+            // We check for non-httpOnly indicator or just try the API call
+            // The browser sends the httpOnly cookie automatically with fetch
+            return 'cookie-auth'; // Placeholder — actual token is in httpOnly cookie
         }
 
         async function updateCustomer(customerId, customerData) {
             const API_URL = 'http://localhost:8888';
-            const token = getAuthToken();
-
-            if (!token) {
-                throw new Error('No authentication token found. Please log in first.');
-            }
 
             const entity = {
                 id: customerId,
@@ -157,9 +140,8 @@
                 headers: {
                     'Content-Type': 'application/ld+json',
                     'Accept': 'application/ld+json',
-                    'Authorization': `Bearer ${token}`,
                 },
-                credentials: 'include',
+                credentials: 'include', // Auth cookie sent automatically
                 body: JSON.stringify(saveBundle),
             });
 
@@ -289,13 +271,8 @@
         // Initialize
         log('Customer Update Test Tool loaded');
 
-        // Check authentication status
-        const token = getAuthToken();
-        if (token) {
-            log('Authentication token found', 'success');
-        } else {
-            log('No authentication token found - please log in to the main application first', 'warning');
-        }
+        // Note: httpOnly cookies cannot be checked from JavaScript
+        log('Authentication uses httpOnly cookies — log in via the main app first', 'info');
     </script>
 </body>
 </html>

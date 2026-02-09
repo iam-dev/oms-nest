@@ -31,6 +31,7 @@ interface LoginResponse {
 export class ApiClient {
   private baseUrl: string;
   private authToken: string | null = null;
+  private cookies: Map<string, string> = new Map();
   private requestTimeout: number = 30000;
   private maxRetries: number = 3;
   private retryDelay: number = 1000;
@@ -56,10 +57,11 @@ export class ApiClient {
   }
 
   /**
-   * Clear authentication token
+   * Clear authentication token and cookies
    */
   clearAuth() {
     this.authToken = null;
+    this.cookies.clear();
   }
 
   /**
@@ -81,6 +83,34 @@ export class ApiClient {
     });
 
     this.authToken = null;
+    this.cookies.clear();
+  }
+
+  /**
+   * Store cookies from Set-Cookie response headers
+   */
+  private storeCookies(response: Response) {
+    const setCookieHeaders = response.headers.getSetCookie?.() ?? [];
+    for (const header of setCookieHeaders) {
+      const [cookiePart] = header.split(';');
+      const eqIdx = cookiePart.indexOf('=');
+      if (eqIdx > 0) {
+        const name = cookiePart.substring(0, eqIdx).trim();
+        const value = cookiePart.substring(eqIdx + 1).trim();
+        this.cookies.set(name, value);
+      }
+    }
+  }
+
+  /**
+   * Get cookie header string
+   */
+  private getCookieHeader(): string {
+    const parts: string[] = [];
+    this.cookies.forEach((value, name) => {
+      parts.push(`${name}=${value}`);
+    });
+    return parts.join('; ');
   }
 
   /**
@@ -110,8 +140,17 @@ export class ApiClient {
       ...additionalHeaders
     };
 
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
+    // Send cookies via Cookie header (Node.js fetch doesn't have a cookie jar)
+    const cookieHeader = this.getCookieHeader();
+    if (cookieHeader) {
+      headers['Cookie'] = cookieHeader;
+    }
+
+    // Legacy fallback: set token as cookie if authToken was set manually
+    if (this.authToken && !this.cookies.has('token')) {
+      headers['Cookie'] = headers['Cookie']
+        ? `${headers['Cookie']}; token=${this.authToken}`
+        : `token=${this.authToken}`;
     }
 
     return headers;
@@ -189,6 +228,9 @@ export class ApiClient {
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
       this.activeRequests.delete(controller);
+
+      // Store any cookies from the response
+      this.storeCookies(response);
 
       let responseData;
       const contentType = response.headers.get('content-type');
@@ -275,6 +317,8 @@ export class ApiClient {
       credentials: 'include'
     });
 
+    this.storeCookies(response);
+
     let data: any;
     try {
       data = await response.json();
@@ -305,7 +349,7 @@ export class ApiClient {
    * Test if user is authenticated
    */
   async checkAuth(): Promise<boolean> {
-    if (!this.authToken) {
+    if (!this.authToken && !this.cookies.has('token')) {
       return false;
     }
 

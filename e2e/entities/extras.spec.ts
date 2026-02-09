@@ -15,6 +15,10 @@ test.describe('Extras Entity Management', () => {
     await authHelper.waitForPageLoad();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should load extras page and validate API response', async ({ page }) => {
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
 
@@ -48,7 +52,8 @@ test.describe('Extras Entity Management', () => {
       apiHelper.clearRequestHistory();
 
       await searchInput.fill('test extra');
-      await page.waitForTimeout(1000);
+      // Wait for debounced search API call after typing
+      await page.waitForResponse(resp => resp.url().includes('/extras') && resp.status() === 200);
 
       const searchRequest = apiHelper.getLastApiRequest('/extras');
       if (searchRequest) {
@@ -72,10 +77,11 @@ test.describe('Extras Entity Management', () => {
         const trigger = page.locator(selector).first();
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          const detailVisible = await page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]').isVisible({ timeout: 2000 });
-          expect(detailVisible).toBeTruthy();
+          // Wait for detail modal to appear
+          const detailModal = page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]');
+          await detailModal.waitFor({ state: 'visible', timeout: 3000 });
+          expect(await detailModal.isVisible()).toBeTruthy();
           break;
         }
       } catch {
@@ -100,9 +106,15 @@ test.describe('Extras Entity Management', () => {
         const trigger = page.locator(selector);
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          const formVisible = await page.locator('form, [role="dialog"], .modal').isVisible({ timeout: 2000 });
+          // Wait for form modal to appear
+          const formLocator = page.locator('form, [role="dialog"], .modal');
+          try {
+            await formLocator.waitFor({ state: 'visible', timeout: 3000 });
+          } catch {
+            // May have navigated to create page instead
+          }
+          const formVisible = await formLocator.isVisible();
           if (formVisible) {
             const nameInput = page.locator('input[name="name"], input[placeholder*="name" i]');
             expect(await nameInput.isVisible({ timeout: 2000 })).toBeTruthy();

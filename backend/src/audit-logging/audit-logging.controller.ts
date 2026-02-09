@@ -14,7 +14,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
   ApiBody,
@@ -43,7 +43,7 @@ import { PaginatedResponseDto } from "../common/dto/base-query.dto";
   path: "audit-logs",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class AuditLoggingController {

@@ -5,8 +5,8 @@ test.describe('Basic E2E Tests', () => {
     // Navigate to the application
     await page.goto('/');
 
-    // Should redirect to login or dashboard
-    await page.waitForTimeout(2000);
+    // Wait for redirect to login or dashboard
+    await page.waitForURL(/(login|dashboard)/, { timeout: 10000 });
 
     // Check that page loaded successfully
     const title = await page.title();

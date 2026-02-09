@@ -183,8 +183,8 @@ describe('JWT Token Validation', () => {
   });
 
   describe('Token Transmission Security', () => {
-    it('should transmit token in Authorization header', async () => {
-      const testToken = 'test-bearer-token';
+    it('should transmit token in Cookie header', async () => {
+      const testToken = 'test-cookie-token';
       apiClient.setAuthToken(testToken);
 
       // Mock fetch to capture the request
@@ -202,7 +202,7 @@ describe('JWT Token Validation', () => {
         // Expected to fail
       }
 
-      expect(capturedHeaders?.get('Authorization')).toBe(`Bearer ${testToken}`);
+      expect(capturedHeaders?.get('Cookie')).toContain(`token=${testToken}`);
 
       // Restore original fetch
       global.fetch = originalFetch;
