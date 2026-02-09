@@ -147,14 +147,16 @@ const ENDPOINT_ACCESS: EndpointConfig[] = [
 ];
 
 test.describe('Role-Based Access Control @security @api @readonly', () => {
-  const tokens: Record<string, string> = {};
+  const loggedInRoles: Set<string> = new Set();
   const contexts: Record<string, APIRequestContext> = {};
   const loginFailures: string[] = [];
 
   test.beforeAll(async ({ playwright }) => {
-    // Login sequentially for all roles to avoid throttle (5 req/60s on login endpoint)
+    // Login sequentially for all roles to avoid throttle (5 req/60s on login endpoint).
+    // Each role gets its own context — Playwright manages cookies automatically
+    // after the login POST receives a Set-Cookie response.
     for (const [role, creds] of Object.entries(ROLE_CREDENTIALS)) {
-      const baseContext = await playwright.request.newContext({
+      const ctx = await playwright.request.newContext({
         extraHTTPHeaders: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -164,7 +166,7 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
       });
 
       try {
-        const loginResponse = await baseContext.post(
+        const loginResponse = await ctx.post(
           `${API_URL}/api/v1/auth/email/login`,
           { data: { email: creds.email, password: creds.password } },
         );
@@ -173,37 +175,25 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
           const body = await loginResponse.text().catch(() => '(no body)');
           console.log(`Login failed for ${role} (${creds.email}): ${loginResponse.status()} - ${body.slice(0, 200)}`);
           loginFailures.push(role);
-          await baseContext.dispose();
+          await ctx.dispose();
           continue;
         }
 
-        const loginData = await loginResponse.json();
-        tokens[role] = loginData.token;
+        // Playwright automatically stores the Set-Cookie from the login response.
+        // Subsequent requests via this context will include Cookie: token=xxx.
+        contexts[role] = ctx;
+        loggedInRoles.add(role);
       } catch (err) {
         console.log(`Login error for ${role}: ${err}`);
         loginFailures.push(role);
+        await ctx.dispose();
       }
-
-      await baseContext.dispose();
 
       // Small delay between logins to avoid throttling
       await new Promise((r) => setTimeout(r, 1500));
     }
 
-    // Create authenticated contexts for each successfully logged-in role
-    for (const [role, token] of Object.entries(tokens)) {
-      contexts[role] = await playwright.request.newContext({
-        extraHTTPHeaders: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Cookie': `token=${token}`,
-          'User-Agent': 'OMS-E2E-Tests/1.0.0',
-        },
-        ignoreHTTPSErrors: true,
-      });
-    }
-
-    console.log(`Logged in roles: ${Object.keys(tokens).join(', ')}`);
+    console.log(`Logged in roles: ${[...loggedInRoles].join(', ')}`);
     if (loginFailures.length > 0) {
       console.log(`Failed logins: ${loginFailures.join(', ')} (tests for these roles will be skipped)`);
     }
@@ -222,7 +212,7 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
     for (const [role, shouldAccess] of Object.entries(endpoint.roles)) {
       if (shouldAccess) {
         test(`${role} should ACCESS ${endpointName}`, async () => {
-          test.skip(!tokens[role], `${role} login failed — skipping`);
+          test.skip(!loggedInRoles.has(role), `${role} login failed — skipping`);
 
           const response = await contexts[role].get(`${API_URL}${endpoint.path}`);
           const status = response.status();
@@ -245,7 +235,7 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
     for (const [role, shouldAccess] of Object.entries(endpoint.roles)) {
       if (!shouldAccess) {
         test(`${role} should be DENIED ${endpointName}`, async () => {
-          test.skip(!tokens[role], `${role} login failed — skipping`);
+          test.skip(!loggedInRoles.has(role), `${role} login failed — skipping`);
 
           const response = await contexts[role].get(`${API_URL}${endpoint.path}`);
           const status = response.status();

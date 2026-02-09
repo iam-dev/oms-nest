@@ -20,11 +20,12 @@ const API_URL = getApiUrl();
 
 test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   let apiContext: any;
-  let authToken: string;
 
   test.beforeAll(async ({ playwright }) => {
-    // Login once for all tests (avoid throttle: 5 req/60s on login endpoint)
-    const baseContext = await playwright.request.newContext({
+    // Create a single context — Playwright manages cookies automatically.
+    // After login, the Set-Cookie header from the server is stored internally
+    // and sent with all subsequent requests (no manual Cookie header needed).
+    apiContext = await playwright.request.newContext({
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -33,7 +34,7 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
       ignoreHTTPSErrors: true,
     });
 
-    const loginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
+    const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
         password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
@@ -46,19 +47,6 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     }
 
     expect(loginResponse.ok()).toBeTruthy();
-    const loginData = await loginResponse.json();
-    authToken = loginData.token;
-    await baseContext.dispose();
-
-    apiContext = await playwright.request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cookie': `token=${authToken}`,
-        'User-Agent': 'OMS-E2E-Tests/1.0.0'
-      },
-      ignoreHTTPSErrors: true,
-    });
   });
 
   test.afterAll(async () => {
@@ -860,8 +848,18 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   });
 
   test('should enforce role-based access control @security @api', async () => {
-    // Login as fitter user
-    const fitterLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
+    // Create a fresh context for fitter — let Playwright manage cookies automatically
+    const fitterContext = await request.newContext({
+      extraHTTPHeaders: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'OMS-E2E-Tests/1.0.0'
+      },
+      ignoreHTTPSErrors: true,
+    });
+
+    // Login as fitter user — Playwright stores the Set-Cookie automatically
+    const fitterLoginResponse = await fitterContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
         password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!'
@@ -869,16 +867,6 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
     });
 
     expect(fitterLoginResponse.ok()).toBeTruthy();
-    const fitterData = await fitterLoginResponse.json();
-    const fitterToken = fitterData.token;
-
-    const fitterContext = await request.newContext({
-      baseURL: process.env.E2E_API_URL || API_URL,
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Cookie': `token=${fitterToken}`
-      },
-    });
 
     // Fitter should not access admin-only endpoints (500 also acceptable — internal error in staging)
     const adminResponse = await fitterContext.get(`${API_URL}/api/v1/users`);
