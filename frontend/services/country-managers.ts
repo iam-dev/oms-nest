@@ -1,48 +1,10 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import type { CountryManager, CountryManagersResponse } from '@/types/CountryManager';
 import { logger } from '@/utils/logger';
 
 // Re-export types for component usage
 export type { CountryManager, CountryManagersResponse };
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        logger.log('🔑 Found token in auth_token localStorage');
-        return parsedToken;
-      }
-    } catch (e) {
-      logger.log('🔑 Failed to parse auth_token from localStorage, trying token key...');
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        logger.log('🔑 Found token in token localStorage');
-        return token;
-      }
-    } catch (e) {
-      logger.log('🔑 No token found in localStorage, trying cookies...');
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        logger.log('🔑 Found token in cookies');
-        return value;
-      }
-    }
-    logger.log('🔑 No token found anywhere');
-  }
-  return null;
-}
 
 export async function fetchCountryManagers({
   page = 1,
@@ -94,8 +56,6 @@ export async function fetchCountryManagers({
 }
 
 export async function createCountryManager(countryManagerData: Partial<CountryManager>): Promise<CountryManager> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -138,7 +98,6 @@ export async function createCountryManager(countryManagerData: Partial<CountryMa
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -179,8 +138,6 @@ export async function createCountryManager(countryManagerData: Partial<CountryMa
 }
 
 export async function updateCountryManager(id: string, countryManagerData: Partial<CountryManager>): Promise<CountryManager> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create entity with the same explicit structure as suppliers
   const entity = {
@@ -225,7 +182,6 @@ export async function updateCountryManager(id: string, countryManagerData: Parti
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -268,14 +224,10 @@ export async function updateCountryManager(id: string, countryManagerData: Parti
 }
 
 export async function deleteCountryManager(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const response = await fetch(`${API_URL}/country_managers/${id}`, {
     method: 'DELETE',
     headers: {
-      'Accept': 'application/ld+json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Accept': 'application/json',
     },
     credentials: 'include',
   });

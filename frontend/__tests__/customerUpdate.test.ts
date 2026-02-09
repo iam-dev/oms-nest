@@ -6,16 +6,6 @@ global.fetch = jest.fn();
 describe('Customer Update Functionality', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Mock localStorage for token
-    Object.defineProperty(window, 'localStorage', {
-      value: {
-        getItem: jest.fn().mockReturnValue(JSON.stringify('mock-token')),
-        setItem: jest.fn(),
-        removeItem: jest.fn(),
-        clear: jest.fn(),
-      },
-      writable: true,
-    });
   });
 
   afterEach(() => {
@@ -89,7 +79,7 @@ describe('Customer Update Functionality', () => {
     ).rejects.toThrow('Failed to update customer: 500 Internal Server Error');
   });
 
-  it('should send correct authorization headers', async () => {
+  it('should send correct credentials for cookie-based auth', async () => {
     const mockCustomer = {
       id: 'test-auth',
       name: 'Auth Test',
@@ -105,10 +95,11 @@ describe('Customer Update Functionality', () => {
     expect(fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: expect.objectContaining({
-          'Authorization': 'Bearer mock-token'
-        }),
         credentials: 'include',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        }),
       })
     );
   });

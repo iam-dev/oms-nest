@@ -25,6 +25,9 @@ import { CreateOptionItemDto } from "./dto/create-option-item.dto";
 import { UpdateOptionItemDto } from "./dto/update-option-item.dto";
 import { OptionItemDto } from "./dto/option-item.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * OptionItem REST API Controller
@@ -38,7 +41,8 @@ import { AuthGuard } from "@nestjs/passport";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OptionItemController {
   constructor(private readonly optionItemService: OptionItemService) {}
 

@@ -8,25 +8,16 @@ jest.mock('@/services/api', () => ({
 
 const mockFetchEntities = fetchEntities as jest.MockedFunction<typeof fetchEntities>;
 
-// Mock localStorage
-const mockLocalStorage = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-};
+// Fitter filtering is now handled server-side via RLS and the authenticated cookie session.
+// These tests verify the service correctly passes filters to the API without
+// client-side fitter auto-filtering (which was removed as part of the cookie-based auth migration).
 
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage,
-  writable: true,
-});
-
-describe('Enriched Orders Service - Fitter Filtering', () => {
+describe('Enriched Orders Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('Fitter-Specific Order Filtering', () => {
+  describe('Filter Passthrough', () => {
     const mockOrders = [
       {
         id: 1,
@@ -46,46 +37,7 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
       },
     ];
 
-    it('automatically applies fitter filter for ROLE_FITTER users', async () => {
-      // Mock current user as fitter in localStorage
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'jane.fitter',
-        role: 'ROLE_FITTER',
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': mockOrders.filter(order => order.fitter.username === 'jane.fitter'),
-        'hydra:totalItems': 1,
-      });
-
-      const result = await getEnrichedOrders({
-        page: 1,
-        filters: {},
-      });
-
-      expect(mockFetchEntities).toHaveBeenCalledWith({
-        entity: 'enriched_orders',
-        page: 1,
-        partial: undefined,
-        extraParams: expect.objectContaining({
-          fitterUsername: 'jane.fitter',
-        }),
-        searchTerm: undefined,
-      });
-
-      expect(result['hydra:member']).toHaveLength(1);
-      expect(result['hydra:member'][0].fitter.username).toBe('jane.fitter');
-    });
-
-    it('does not apply fitter filter for non-FITTER roles', async () => {
-      // Mock current user as admin
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'admin.user',
-        role: 'ROLE_ADMIN',
-      }));
-
+    it('passes filters directly to fetchEntities without client-side fitter auto-filtering', async () => {
       mockFetchEntities.mockResolvedValue({
         'hydra:member': mockOrders,
         'hydra:totalItems': 2,
@@ -104,28 +56,20 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
         searchTerm: undefined,
       });
 
-      // Should not include fitterUsername filter
+      // No client-side fitter filter should be applied
       const callParams = mockFetchEntities.mock.calls[0][0].extraParams;
       expect(callParams).not.toHaveProperty('fitterUsername');
 
       expect(result['hydra:member']).toHaveLength(2);
     });
 
-    it('does not override existing fitterUsername filter', async () => {
-      // Mock current user as fitter
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'jane.fitter',
-        role: 'ROLE_FITTER',
-      }));
-
+    it('passes explicit fitterUsername filter to the API', async () => {
       mockFetchEntities.mockResolvedValue({
         'hydra:member': mockOrders.filter(order => order.fitter.username === 'bob.fitter'),
         'hydra:totalItems': 1,
       });
 
-      // Pass explicit fitterUsername filter (admin might do this)
-      const result = await getEnrichedOrders({
+      await getEnrichedOrders({
         page: 1,
         filters: {
           fitterUsername: 'bob.fitter',
@@ -137,16 +81,13 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
         page: 1,
         partial: undefined,
         extraParams: expect.objectContaining({
-          fitterUsername: 'bob.fitter', // Should use provided filter, not auto-applied
+          fitterUsername: 'bob.fitter',
         }),
         searchTerm: undefined,
       });
     });
 
-    it('handles missing current user gracefully', async () => {
-      // Mock no current user
-      mockLocalStorage.getItem.mockReturnValue(null);
-
+    it('does not apply any client-side fitter filtering', async () => {
       mockFetchEntities.mockResolvedValue({
         'hydra:member': mockOrders,
         'hydra:totalItems': 2,
@@ -157,151 +98,14 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
         filters: {},
       });
 
-      expect(mockFetchEntities).toHaveBeenCalledWith({
-        entity: 'enriched_orders',
-        page: 1,
-        partial: undefined,
-        extraParams: {},
-        searchTerm: undefined,
-      });
-
-      // Should not include fitterUsername filter
+      // Should not include fitterUsername filter - server-side RLS handles this
       const callParams = mockFetchEntities.mock.calls[0][0].extraParams;
       expect(callParams).not.toHaveProperty('fitterUsername');
-    });
-
-    it('handles fitter user without username', async () => {
-      // Mock fitter user without username
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: '', // Empty username
-        role: 'ROLE_FITTER',
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': mockOrders,
-        'hydra:totalItems': 2,
-      });
-
-      const result = await getEnrichedOrders({
-        page: 1,
-        filters: {},
-      });
-
-      // Should not apply fitter filter when username is empty
-      const callParams = mockFetchEntities.mock.calls[0][0].extraParams;
-      expect(callParams).not.toHaveProperty('fitterUsername');
-    });
-
-    it('auto-applies fitter filter when fitter role is detected', async () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'jane.fitter',
-        role: 'ROLE_FITTER',
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': [],
-        'hydra:totalItems': 0,
-      });
-
-      await getEnrichedOrders({
-        page: 1,
-        filters: {},
-      });
-
-      // Verify the fitter filter was applied in the API call
-      expect(mockFetchEntities).toHaveBeenCalledWith(
-        expect.objectContaining({
-          extraParams: expect.objectContaining({
-            fitterUsername: 'jane.fitter',
-          }),
-        })
-      );
     });
   });
-
-  describe('Multiple Role Scenarios', () => {
-    it('treats SUPERVISOR with fitter background as non-fitter for filtering', async () => {
-      // User with SUPERVISOR role (highest priority) but originally was a fitter
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'jane.supervisor',
-        role: 'ROLE_SUPERVISOR', // Primary role after mapping
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': [
-          {
-            id: 1,
-            orderNumber: 'ORD-001',
-            fitter: { username: 'jane.supervisor' },
-          },
-          {
-            id: 2,
-            orderNumber: 'ORD-002',
-            fitter: { username: 'other.fitter' },
-          },
-        ],
-        'hydra:totalItems': 2,
-      });
-
-      await getEnrichedOrders({
-        page: 1,
-        filters: {},
-      });
-
-      // Should NOT apply fitter filter because role is SUPERVISOR, not FITTER
-      const callParams = mockFetchEntities.mock.calls[0][0].extraParams;
-      expect(callParams).not.toHaveProperty('fitterUsername');
-    });
-
-    it('allows admin to manually specify fitter filter', async () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'admin.user',
-        role: 'ROLE_ADMIN',
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': [
-          {
-            id: 1,
-            orderNumber: 'ORD-001',
-            fitter: { username: 'specific.fitter' },
-          },
-        ],
-        'hydra:totalItems': 1,
-      });
-
-      await getEnrichedOrders({
-        page: 1,
-        filters: {
-          fitterUsername: 'specific.fitter',
-        },
-      });
-
-      expect(mockFetchEntities).toHaveBeenCalledWith({
-        entity: 'enriched_orders',
-        page: 1,
-        partial: undefined,
-        extraParams: expect.objectContaining({
-          fitterUsername: 'specific.fitter',
-        }),
-        searchTerm: undefined,
-      });
-    });
-  });
-
 
   describe('Error Handling', () => {
     it('handles API errors gracefully', async () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'jane.fitter',
-        role: 'ROLE_FITTER',
-      }));
-
       const apiError = new Error('API Error');
       mockFetchEntities.mockRejectedValue(apiError);
 
@@ -310,38 +114,10 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
         filters: {},
       })).rejects.toThrow('API Error');
     });
-
-    it('handles malformed user data', async () => {
-      // Mock malformed user data
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        // Missing username and role
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': [],
-        'hydra:totalItems': 0,
-      });
-
-      await getEnrichedOrders({
-        page: 1,
-        filters: {},
-      });
-
-      // Should not crash and should not apply fitter filter
-      const callParams = mockFetchEntities.mock.calls[0][0].extraParams;
-      expect(callParams).not.toHaveProperty('fitterUsername');
-    });
   });
 
   describe('Filter Processing', () => {
     it('correctly formats complex filters', async () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'admin.user',
-        role: 'ROLE_ADMIN',
-      }));
-
       mockFetchEntities.mockResolvedValue({
         'hydra:member': [],
         'hydra:totalItems': 0,
@@ -377,12 +153,6 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
     });
 
     it('handles search parameter correctly', async () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'admin.user',
-        role: 'ROLE_ADMIN',
-      }));
-
       mockFetchEntities.mockResolvedValue({
         'hydra:member': [],
         'hydra:totalItems': 0,
@@ -401,82 +171,6 @@ describe('Enriched Orders Service - Fitter Filtering', () => {
         extraParams: {},
         searchTerm: 'ORD-001',
       });
-    });
-  });
-
-  describe('Security Considerations', () => {
-    it('prevents fitter from bypassing filter through direct API manipulation', async () => {
-      // This test verifies that the auto-applied filter cannot be bypassed
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({
-        id: 1,
-        username: 'jane.fitter',
-        role: 'ROLE_FITTER',
-      }));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': [],
-        'hydra:totalItems': 0,
-      });
-
-      // Even if fitter tries to pass no filters, the service should auto-apply
-      await getEnrichedOrders({
-        page: 1,
-        filters: {}, // Fitter tries to see all orders
-      });
-
-      // Should still apply fitter filter
-      expect(mockFetchEntities).toHaveBeenCalledWith({
-        entity: 'enriched_orders',
-        page: 1,
-        partial: undefined,
-        extraParams: expect.objectContaining({
-          fitterUsername: 'jane.fitter',
-        }),
-        searchTerm: undefined,
-      });
-    });
-
-    it('ensures consistent filtering across different call patterns', async () => {
-      const fitterUser = {
-        id: 1,
-        username: 'jane.fitter',
-        role: 'ROLE_FITTER',
-      };
-
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(fitterUser));
-
-      mockFetchEntities.mockResolvedValue({
-        'hydra:member': [],
-        'hydra:totalItems': 0,
-      });
-
-      // Test multiple call patterns
-      const testCases = [
-        { filters: {} },
-        { filters: { orderStatus: 'pending' } },
-        { filters: { urgent: 'true' } },
-        { searchTerm: 'test', filters: {} },
-      ];
-
-      for (const testCase of testCases) {
-        mockFetchEntities.mockClear();
-
-        await getEnrichedOrders({
-          page: 1,
-          ...testCase as any,
-        } as any);
-
-        // All calls should include fitter filter
-        expect(mockFetchEntities).toHaveBeenCalledWith({
-          entity: 'enriched_orders',
-          page: 1,
-          partial: undefined,
-          extraParams: expect.objectContaining({
-            fitterUsername: 'jane.fitter',
-          }),
-          searchTerm: (testCase as any).searchTerm,
-        });
-      }
     });
   });
 });

@@ -1,12 +1,15 @@
 import type { NextConfig } from "next";
 
+// Only relax CSP for local dev and CI test runners — staging/production stay strict
+const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   async headers() {
     return [
@@ -42,10 +45,12 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Note: eval needed for development
-              "style-src 'self' 'unsafe-inline'", // Note: inline styles needed for some components
+              // Next.js dev mode requires 'unsafe-inline' and 'unsafe-eval' for hot reload and hydration.
+              // Production builds should use nonces via middleware for stricter CSP.
+              isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'",
+              "style-src 'self' 'unsafe-inline'", // inline styles needed for component libraries (shadcn/ui, Radix)
               "img-src 'self' data: blob:",
-              "font-src 'self' data:",
+              "font-src 'self'",
               "connect-src 'self' http://localhost:3001 https://*.ordermysaddle.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",

@@ -1,36 +1,5 @@
 import { SaddleStockSearchResult } from '@/types/SaddleStock';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      // Fallback to cookies
-    }
-    const cookies = document.cookie.split(';');
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-function authHeaders() {
-  const token = getToken();
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-}
+import { API_URL } from './api-config';
 
 async function fetchSaddleStock(
   type: 'my' | 'available' | 'all',
@@ -49,7 +18,10 @@ async function fetchSaddleStock(
   }
 
   const res = await fetch(url.toString(), {
-    headers: authHeaders(),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
     credentials: 'include',
   });
 
@@ -87,7 +59,10 @@ export async function fetchAllSaddleStock({
 
 export async function getSaddleStockById(id: string): Promise<any> {
   const res = await fetch(`${API_URL}/api/v1/saddle-stock/${id}`, {
-    headers: authHeaders(),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
     credentials: 'include',
   });
 

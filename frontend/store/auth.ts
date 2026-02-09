@@ -1,58 +1,34 @@
 import { atom } from 'jotai';
-import { atomWithStorage } from 'jotai/utils';
-import { User, UserRole } from '../types/Role';
+import { User } from '../types/Role';
 import { logger } from '@/utils/logger';
 
-// Token atom - stored in localStorage for persistence
-export const tokenAtom = atomWithStorage<string | null>('auth_token', null);
-
 // User atom - stored in memory only for security (critical user data should not persist)
-// However, we need to persist basic auth state for navigation
 export const userAtom = atom<User | null>(null);
 
-// User basic info atom - stored in localStorage for service access (minimal data only)
-export const userBasicInfoAtom = atomWithStorage<{ id: number; username: string; role: string; firstName?: string; lastName?: string; email?: string } | null>('auth_user', null);
+// Loading state atom - starts as true to prevent premature redirects before auth check completes
+export const isAuthLoadingAtom = atom<boolean>(true);
 
-// Loading state atom
-export const isAuthLoadingAtom = atom<boolean>(false);
-
-// Derived atom for authentication status
+// Derived atom for authentication status - based on user presence only (token is httpOnly cookie)
 export const isAuthenticatedAtom = atom((get) => {
-  const token = get(tokenAtom);
   const user = get(userAtom);
-  const userBasicInfo = get(userBasicInfoAtom);
-
-  // Consider authenticated if we have a token and either full user data or basic user info
-  return !!(token && (user || userBasicInfo));
+  return !!user;
 });
 
 // Action atoms
 export const loginActionAtom = atom(
   null,
-  (get, set, { token, user }: { token: string; user: User }) => {
-    logger.log('🔧 loginActionAtom: Setting token and user:', { token: token ? 'present' : 'missing', user });
-    set(tokenAtom, token);
+  (get, set, { user }: { user: User }) => {
+    logger.log('loginActionAtom: Setting user:', { user });
     set(userAtom, user);
-    // Store minimal user info for service access
-    set(userBasicInfoAtom, {
-      id: Number(user.id),
-      username: user.username,
-      role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email
-    });
     set(isAuthLoadingAtom, false);
-    logger.log('✅ loginActionAtom: All atoms set');
+    logger.log('loginActionAtom: All atoms set');
   }
 );
 
 export const logoutActionAtom = atom(
   null,
   (get, set) => {
-    set(tokenAtom, null);
     set(userAtom, null);
-    set(userBasicInfoAtom, null);
     set(isAuthLoadingAtom, false);
   }
 );
@@ -61,31 +37,5 @@ export const setLoadingAtom = atom(
   null,
   (get, set, loading: boolean) => {
     set(isAuthLoadingAtom, loading);
-  }
-);
-
-// Restore user from basic info if needed
-export const restoreUserFromBasicInfoAtom = atom(
-  null,
-  (get, set) => {
-    const user = get(userAtom);
-    const userBasicInfo = get(userBasicInfoAtom);
-    const token = get(tokenAtom);
-
-    if (!user && userBasicInfo && token) {
-      logger.log('🔄 Auth Store: Restoring user from basic info:', userBasicInfo);
-      // Create a basic user object from stored info
-      const restoredUser: User = {
-        id: userBasicInfo.id,
-        username: userBasicInfo.username,
-        role: userBasicInfo.role as UserRole, // Proper type casting
-        email: userBasicInfo.email,
-        firstName: userBasicInfo.firstName,
-        lastName: userBasicInfo.lastName,
-      };
-      set(userAtom, restoredUser);
-      return restoredUser;
-    }
-    return user;
   }
 );

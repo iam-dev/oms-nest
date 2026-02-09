@@ -1,3 +1,4 @@
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Model {
@@ -56,41 +57,6 @@ interface SaddleResponse {
   pages: number;
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 /**
  * Fetch models (saddles) from the saddles endpoint
  */
@@ -108,9 +74,6 @@ export async function fetchModels({
   order?: 'asc' | 'desc';
 } = {}): Promise<ModelsResponse> {
   logger.log('fetchModels: Called with params:', { page, searchTerm, filters, orderBy, order });
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Build query parameters for the saddles endpoint
   const params = new URLSearchParams();
@@ -149,7 +112,6 @@ export async function fetchModels({
     headers: {
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
   });
@@ -196,9 +158,6 @@ export async function fetchModels({
 }
 
 export async function createModel(modelData: Partial<Model>): Promise<Model> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   // Create saddle data from model data
   const saddleData = {
     brand: modelData.brandName || '',
@@ -225,7 +184,6 @@ export async function createModel(modelData: Partial<Model>): Promise<Model> {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saddleData),
@@ -263,9 +221,6 @@ export async function createModel(modelData: Partial<Model>): Promise<Model> {
 }
 
 export async function updateModel(id: string, modelData: Partial<Model>): Promise<Model> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   // Create saddle update data from model data
   const saddleData: Record<string, unknown> = {};
 
@@ -316,7 +271,6 @@ export async function updateModel(id: string, modelData: Partial<Model>): Promis
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saddleData),
@@ -354,17 +308,11 @@ export async function updateModel(id: string, modelData: Partial<Model>): Promis
 }
 
 export async function deleteModel(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   logger.log('Deleting saddle (model):', id);
 
   const response = await fetch(`${API_URL}/api/v1/saddles/${id}`, {
     method: 'DELETE',
-    headers: {
-      'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Accept': 'application/json' },
     credentials: 'include',
   });
 
@@ -379,9 +327,6 @@ export async function deleteModel(id: string): Promise<void> {
  * Get the next available sequence number
  */
 export async function fetchNextSequence(): Promise<number> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   logger.log('fetchNextSequence: Getting next sequence number');
 
   const response = await fetch(`${API_URL}/api/v1/saddles/next-sequence`, {
@@ -389,7 +334,6 @@ export async function fetchNextSequence(): Promise<number> {
     headers: {
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
   });
@@ -411,21 +355,21 @@ export async function fetchNextSequence(): Promise<number> {
  */
 export async function fetchModelCount(): Promise<number> {
   try {
-    logger.log('📊 fetchModelCount: Getting total model count');
+    logger.log('fetchModelCount: Getting total model count');
 
     // Use fetchModels with minimal data to get total count
     const result = await fetchModels({ page: 1 });
 
     // Return the total count if available
     if (result['hydra:totalItems'] !== undefined && result['hydra:totalItems'] !== null) {
-      logger.log('📊 Got total model count from API:', result['hydra:totalItems']);
+      logger.log('Got total model count from API:', result['hydra:totalItems']);
       return result['hydra:totalItems'];
     }
 
-    logger.warn('📊 Could not get model count from API, using fallback');
+    logger.warn('Could not get model count from API, using fallback');
     return 0;
   } catch (error) {
-    logger.error('📊 Error fetching model count:', error);
+    logger.error('Error fetching model count:', error);
     return 0;
   }
 }

@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Customer {
@@ -80,49 +81,13 @@ export async function fetchCustomers({
   });
 }
 
-// Helper function to get auth token
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from Jotai store first
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      // Fallback to cookies
-    }
-
-    // Fallback to cookies for backward compatibility
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-// Helper function to get auth headers
-function getAuthHeaders() {
-  const token = getToken();
-  return {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-  };
-}
-
 export async function createCustomer(customerData: Partial<Customer>): Promise<Customer> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   logger.log('Creating customer with data:', customerData);
 
   const response = await fetch(`${API_URL}/api/v1/customers`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(customerData),
   });
@@ -139,13 +104,11 @@ export async function createCustomer(customerData: Partial<Customer>): Promise<C
 }
 
 export async function updateCustomer(id: string, customerData: Partial<Customer>): Promise<Customer> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
   logger.log('Updating customer with ID:', id, 'Data:', customerData);
 
   const response = await fetch(`${API_URL}/api/v1/customers/${id}`, {
     method: 'PUT',
-    headers: getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(customerData),
   });
@@ -163,13 +126,11 @@ export async function updateCustomer(id: string, customerData: Partial<Customer>
 
 
 export async function deleteCustomer(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
   logger.log('Deleting customer with ID:', id);
 
   const response = await fetch(`${API_URL}/api/v1/customers/${id}`, {
     method: 'DELETE',
-    headers: getAuthHeaders(),
+    headers: { 'Accept': 'application/json' },
     credentials: 'include',
   });
 

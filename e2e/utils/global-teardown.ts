@@ -2,7 +2,7 @@ import { FullConfig } from '@playwright/test';
 import axios from 'axios';
 
 /**
- * 🧹 Global E2E Test Teardown for Ralph Loop Automation
+ * 🧹 Global E2E Test Teardown
  * 🔐 Security-first cleanup with environment restoration
  * 🎯 Zero-intervention teardown for automated testing
  */
@@ -135,7 +135,7 @@ async function cleanupTestOrders(apiURL: string): Promise<void> {
 }
 
 /**
- * Generate test summary for Ralph Loop reporting
+ * Generate test summary
  */
 async function generateTestSummary(): Promise<void> {
   console.log('📊 Generating test execution summary...');
@@ -146,7 +146,7 @@ async function generateTestSummary(): Promise<void> {
       environment: process.env.ENVIRONMENT || 'local',
       browser: process.env.BROWSER || 'chromium',
       testSuite: 'E2E-Comprehensive',
-      automation: 'Ralph-Loop-Compatible',
+      automation: 'CI-Compatible',
       cleanupCompleted: true
     };
 

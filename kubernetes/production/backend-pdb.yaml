@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oms-backend-pdb
+  namespace: oms-nest-production
+  labels:
+    app: oms-backend
+    environment: production
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: oms-backend

@@ -25,6 +25,9 @@ import { CreateFactoryDto } from "./dto/create-factory.dto";
 import { UpdateFactoryDto } from "./dto/update-factory.dto";
 import { FactoryDto } from "./dto/factory.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AuditLog } from "../audit-logging/decorators";
 
 /**
@@ -39,7 +42,8 @@ import { AuditLog } from "../audit-logging/decorators";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.factory)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class FactoryController {
   constructor(private readonly factoryService: FactoryService) {}
 

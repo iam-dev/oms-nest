@@ -1,7 +1,9 @@
 // Centralized API service for Orders, Reports, Dashboard
 import { logger } from '@/utils/logger';
+import { API_URL, fetchWithRefresh } from './api-config';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Default request timeout in milliseconds (30 seconds)
+const REQUEST_TIMEOUT_MS = 30000;
 
 // Helper function to safely escape strings for OData filters
 function escapeODataString(str: string): string {
@@ -11,39 +13,6 @@ function escapeODataString(str: string): string {
   // Escape single quotes by doubling them (OData standard)
   // Also remove potentially dangerous characters
   return str.replace(/'/g, "''").replace(/[<>]/g, '');
-}
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from Jotai store first
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      // Fallback to cookies
-    }
-    
-    // Fallback to cookies for backward compatibility
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-function authHeaders() {
-  const token = getToken();
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
 }
 
 // Helper: build REST API filter parameters from filters object
@@ -147,21 +116,35 @@ export async function fetchOrders({ page = 1, partial = true, filters = {} } = {
     url.searchParams.set(key, value);
   });
 
-  const res = await fetch(url.toString(), {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Failed to fetch orders');
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(url.toString(), {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error('Failed to fetch orders');
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function fetchOrderStatusStats() {
-  const res = await fetch(`${API_URL}/api/v1/orders/stats`, {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Failed to fetch order status stats');
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(`${API_URL}/api/v1/orders/stats`, {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error('Failed to fetch order status stats');
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Placeholder for future reports API
@@ -169,12 +152,19 @@ export async function fetchReports(params: Record<string, any> = {}) {
   // Example endpoint, adjust as needed
   const url = new URL(`${API_URL}/api/v1/reports`);
   Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, String(value)));
-  const res = await fetch(url.toString(), {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Failed to fetch reports');
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(url.toString(), {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error('Failed to fetch reports');
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 interface FetchEntitiesParams {
@@ -271,181 +261,197 @@ export async function fetchEntities({
     url += `&${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`;
   }
 
-  // Add cache-busting timestamp to ensure fresh data
-  url += `&_t=${Date.now()}`;
-
   logger.log('fetchEntities: Fetching URL:', url.toString());
-  logger.log('fetchEntities: Request headers:', {
-    ...authHeaders(),
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0'
-  });
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      ...authHeaders(),
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    },
-    credentials: 'include',
-  });
-
-  logger.log(`fetchEntities: Response status for ${entity}:`, res.status, res.statusText);
-  logger.log('fetchEntities: Response headers:', Object.fromEntries(res.headers.entries()));
-
-  if (!res.ok) {
-    let errorResponseText = '';
-    try {
-      errorResponseText = await res.text();
-      logger.error(`fetchEntities: Error response body for ${entity}:`, errorResponseText);
-    } catch (e) {
-      logger.error(`fetchEntities: Could not read error response body for ${entity}:`, e);
-    }
-
-    if (res.status === 401) {
-      throw new Error(`Authentication required for ${entity}. Please log in.`);
-    } else if (res.status === 403) {
-      throw new Error(`Access denied for ${entity}. Insufficient permissions.`);
-    } else if (res.status === 500) {
-      logger.error(`fetchEntities: 500 Error Details for ${entity}:`, {
-        url,
-        status: res.status,
-        statusText: res.statusText,
-        responseBody: errorResponseText,
-        timestamp: new Date().toISOString()
-      });
-      throw new Error(`Server error when fetching ${entity}. Please try again later.`);
-    } else {
-      throw new Error(`Failed to fetch ${entity}: ${res.status} ${res.statusText}`);
-    }
-  }
-
-  const result = await res.json();
-
-  // Special handling for users entity to map name to firstName/lastName
-  if (entity === 'users' && result['hydra:member'] && Array.isArray(result['hydra:member'])) {
-    result['hydra:member'] = result['hydra:member'].map((backendUser: any) => {
-      // Split name into firstName and lastName
-      const nameParts = (backendUser.name || '').split(' ').filter((part: string) => part.length > 0);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      return {
-        ...backendUser,
-        firstName: firstName,
-        lastName: lastName,
-      };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(url.toString(), {
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'include',
+      signal: controller.signal,
     });
-  }
 
-  // Special handling for factories entity to map backend fields to Supplier interface
-  if (entity === 'factories' && result.data && Array.isArray(result.data)) {
-    // Transform NestJS response format to Hydra format with mapped fields
-    result['hydra:member'] = result.data.map((factory: any) => ({
-      ...factory,
-      name: factory.displayName || factory.name || `Factory ${factory.id}`,
-      email: factory.emailaddress || factory.email,
-      enabled: factory.isActive ?? true,
-      username: factory.emailaddress?.split('@')[0] || `factory${factory.id}`,
-    }));
-    result['hydra:totalItems'] = result.total || result.data.length;
-    // Remove the original data property to avoid confusion
-    delete result.data;
-  }
+    logger.log(`fetchEntities: Response status for ${entity}:`, res.status, res.statusText);
+    logger.log('fetchEntities: Response headers:', Object.fromEntries(res.headers.entries()));
 
-  // Special handling for fitters entity to transform NestJS response to Hydra format
-  if (entity === 'fitters' && result.data && Array.isArray(result.data)) {
-    result['hydra:member'] = result.data.map((fitter: any) => ({
-      ...fitter,
-      name: fitter.displayName || `Fitter ${fitter.id}`,
-      email: fitter.emailaddress || fitter.email,
-      enabled: fitter.isActive ?? true,
-      username: fitter.emailaddress?.split('@')[0] || `fitter${fitter.id}`,
-    }));
-    result['hydra:totalItems'] = result.total || result.data.length;
-    delete result.data;
-  }
+    if (!res.ok) {
+      let errorResponseText = '';
+      try {
+        errorResponseText = await res.text();
+        logger.error(`fetchEntities: Error response body for ${entity}:`, errorResponseText);
+      } catch (e) {
+        logger.error(`fetchEntities: Could not read error response body for ${entity}:`, e);
+      }
 
-  // Special handling for customers entity to transform NestJS response to Hydra format
-  if (entity === 'customers' && result.data && Array.isArray(result.data)) {
-    result['hydra:member'] = result.data;
-    result['hydra:totalItems'] = result.total || result.data.length;
-    delete result.data;
-  }
+      if (res.status === 401) {
+        throw new Error(`Authentication required for ${entity}. Please log in.`);
+      } else if (res.status === 403) {
+        throw new Error(`Access denied for ${entity}. Insufficient permissions.`);
+      } else if (res.status === 500) {
+        logger.error(`fetchEntities: 500 Error Details for ${entity}:`, {
+          url,
+          status: res.status,
+          statusText: res.statusText,
+          responseBody: errorResponseText,
+          timestamp: new Date().toISOString()
+        });
+        throw new Error(`Server error when fetching ${entity}. Please try again later.`);
+      } else {
+        throw new Error(`Failed to fetch ${entity}: ${res.status} ${res.statusText}`);
+      }
+    }
 
-  // Special handling for presets entity to map backend fields to frontend interface
-  if (entity === 'presets' && result.data && Array.isArray(result.data)) {
-    result['hydra:member'] = result.data.map((preset: any) => ({
-      ...preset,
-      active: preset.isActive ?? (preset.deleted === 0),
-    }));
-    result['hydra:totalItems'] = result.total || result.data.length;
-    delete result.data;
-  }
+    const result = await res.json();
 
-  // Generic transformation for any entity returning NestJS format { data: [], total, pages }
-  if (!result['hydra:member'] && result.data && Array.isArray(result.data)) {
-    result['hydra:member'] = result.data;
-    result['hydra:totalItems'] = result.total || result.data.length;
-    delete result.data;
-  }
+    // Special handling for users entity to map name to firstName/lastName
+    if (entity === 'users' && result['hydra:member'] && Array.isArray(result['hydra:member'])) {
+      result['hydra:member'] = result['hydra:member'].map((backendUser: any) => {
+        // Split name into firstName and lastName
+        const nameParts = (backendUser.name || '').split(' ').filter((part: string) => part.length > 0);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
 
-  return result;
+        return {
+          ...backendUser,
+          firstName: firstName,
+          lastName: lastName,
+        };
+      });
+    }
+
+    // Special handling for factories entity to map backend fields to Supplier interface
+    if (entity === 'factories' && result.data && Array.isArray(result.data)) {
+      // Transform NestJS response format to Hydra format with mapped fields
+      result['hydra:member'] = result.data.map((factory: any) => ({
+        ...factory,
+        name: factory.displayName || factory.name || `Factory ${factory.id}`,
+        email: factory.emailaddress || factory.email,
+        enabled: factory.isActive ?? true,
+        username: factory.emailaddress?.split('@')[0] || `factory${factory.id}`,
+      }));
+      result['hydra:totalItems'] = result.total || result.data.length;
+      // Remove the original data property to avoid confusion
+      delete result.data;
+    }
+
+    // Special handling for fitters entity to transform NestJS response to Hydra format
+    if (entity === 'fitters' && result.data && Array.isArray(result.data)) {
+      result['hydra:member'] = result.data.map((fitter: any) => ({
+        ...fitter,
+        name: fitter.displayName || `Fitter ${fitter.id}`,
+        email: fitter.emailaddress || fitter.email,
+        enabled: fitter.isActive ?? true,
+        username: fitter.emailaddress?.split('@')[0] || `fitter${fitter.id}`,
+      }));
+      result['hydra:totalItems'] = result.total || result.data.length;
+      delete result.data;
+    }
+
+    // Special handling for customers entity to transform NestJS response to Hydra format
+    if (entity === 'customers' && result.data && Array.isArray(result.data)) {
+      result['hydra:member'] = result.data;
+      result['hydra:totalItems'] = result.total || result.data.length;
+      delete result.data;
+    }
+
+    // Special handling for presets entity to map backend fields to frontend interface
+    if (entity === 'presets' && result.data && Array.isArray(result.data)) {
+      result['hydra:member'] = result.data.map((preset: any) => ({
+        ...preset,
+        active: preset.isActive ?? (preset.deleted === 0),
+      }));
+      result['hydra:totalItems'] = result.total || result.data.length;
+      delete result.data;
+    }
+
+    // Generic transformation for any entity returning NestJS format { data: [], total, pages }
+    if (!result['hydra:member'] && result.data && Array.isArray(result.data)) {
+      result['hydra:member'] = result.data;
+      result['hydra:totalItems'] = result.total || result.data.length;
+      delete result.data;
+    }
+
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Function to update an order
 export async function updateOrder(orderId: number | string, updateData: Record<string, any>) {
   const url = `${API_URL}/api/v1/orders/${orderId}`;
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: authHeaders(),
-    credentials: 'include',
-    body: JSON.stringify(updateData),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(updateData),
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to update order: ${res.status} ${errorText}`);
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Failed to update order: ${res.status} ${errorText}`);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }
 
 // Function to create a new order
 export async function createOrder(orderData: Record<string, any>) {
   const url = `${API_URL}/api/v1/orders`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: authHeaders(),
-    credentials: 'include',
-    body: JSON.stringify(orderData),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(orderData),
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to create order: ${res.status} ${errorText}`);
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Failed to create order: ${res.status} ${errorText}`);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }
 
 // Function to create a new customer
 export async function createCustomer(customerData: Record<string, any>) {
   const url = `${API_URL}/api/v1/customers`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchWithRefresh(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(customerData),
+      signal: controller.signal,
+    });
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: authHeaders(),
-    credentials: 'include',
-    body: JSON.stringify(customerData),
-  });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Failed to create customer: ${res.status} ${errorText}`);
+    }
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to create customer: ${res.status} ${errorText}`);
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }

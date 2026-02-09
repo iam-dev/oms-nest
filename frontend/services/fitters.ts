@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Fitter {
@@ -47,10 +48,10 @@ export async function fetchFitters({
   order?: 'asc' | 'desc';
 } = {}): Promise<FittersResponse> {
   logger.log('fetchFitters: Called with params:', { page, searchTerm, filters, orderBy, order });
-  
+
   // Build filter parameters for API Platform
   const extraParams: Record<string, string | number | boolean> = {};
-  
+
   // Handle individual field filters
   Object.entries(filters).forEach(([key, value]) => {
     if (value && value.trim()) {
@@ -64,7 +65,7 @@ export async function fetchFitters({
         extraParams['city[contains]'] = value;
       } else if (key === 'country') {
         extraParams['country[contains]'] = value;
-      } 
+      }
       // For status/enabled field
       else if (key === 'status') {
         extraParams['enabled'] = value === 'ACTIVE';
@@ -89,49 +90,12 @@ export async function fetchFitters({
   });
 }
 
-// Helper function to get auth token
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from localStorage first
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      // Fallback to cookies
-    }
-
-    // Fallback to cookies for backward compatibility
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-// Helper function to get auth headers
-function getAuthHeaders() {
-  const token = getToken();
-  return {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-  };
-}
-
 export async function createFitter(fitterData: Partial<Fitter>): Promise<Fitter> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
   logger.log('Creating fitter with data:', fitterData);
 
   const response = await fetch(`${API_URL}/api/v1/fitters`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(fitterData),
   });
@@ -148,13 +112,11 @@ export async function createFitter(fitterData: Partial<Fitter>): Promise<Fitter>
 }
 
 export async function updateFitter(id: number, fitterData: Partial<Fitter>): Promise<Fitter> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
   logger.log('Updating fitter with ID:', id, 'Data:', fitterData);
 
   const response = await fetch(`${API_URL}/api/v1/fitters/${id}`, {
     method: 'PUT',
-    headers: getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(fitterData),
   });
@@ -171,13 +133,11 @@ export async function updateFitter(id: number, fitterData: Partial<Fitter>): Pro
 }
 
 export async function deleteFitter(id: number): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
   logger.log('Deleting fitter with ID:', id);
 
   const response = await fetch(`${API_URL}/api/v1/fitters/${id}`, {
     method: 'DELETE',
-    headers: getAuthHeaders(),
+    headers: { 'Accept': 'application/json' },
     credentials: 'include',
   });
 
@@ -195,7 +155,7 @@ export async function deleteFitter(id: number): Promise<void> {
  */
 export async function fetchFitterCount(): Promise<number> {
   try {
-    logger.log('📊 fetchFitterCount: Getting total fitter count');
+    logger.log('fetchFitterCount: Getting total fitter count');
 
     // Get total count using minimal data transfer (limit=1) with full pagination metadata
     const result = await fetchEntities({
@@ -209,14 +169,14 @@ export async function fetchFitterCount(): Promise<number> {
 
     // Return the total count if available
     if (result['hydra:totalItems'] !== undefined && result['hydra:totalItems'] !== null) {
-      logger.log('📊 Got total fitter count from API:', result['hydra:totalItems']);
+      logger.log('Got total fitter count from API:', result['hydra:totalItems']);
       return result['hydra:totalItems'];
     }
 
-    logger.warn('📊 Could not get fitter count from API, using fallback');
+    logger.warn('Could not get fitter count from API, using fallback');
     return 0;
   } catch (error) {
-    logger.error('📊 Error fetching fitter count:', error);
+    logger.error('Error fetching fitter count:', error);
     return 0;
   }
 }

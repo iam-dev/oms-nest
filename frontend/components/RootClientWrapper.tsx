@@ -3,6 +3,7 @@ import { ReactNode } from 'react';
 import { AuthProvider } from '@/context/AuthContext';
 import { JotaiProvider } from './providers/JotaiProvider';
 import ClientLayoutWrapper from './ClientLayoutWrapper';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { logger } from '@/utils/logger';
 
 interface RootClientWrapperProps {
@@ -15,7 +16,9 @@ export default function RootClientWrapper({ children }: RootClientWrapperProps) 
   return (
     <JotaiProvider>
       <AuthProvider>
-        <ClientLayoutWrapper>{children}</ClientLayoutWrapper>
+        <ErrorBoundary>
+          <ClientLayoutWrapper>{children}</ClientLayoutWrapper>
+        </ErrorBoundary>
       </AuthProvider>
     </JotaiProvider>
   );

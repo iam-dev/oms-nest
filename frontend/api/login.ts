@@ -1,16 +1,12 @@
-import jwt from 'jsonwebtoken';
 import { logger } from '@/utils/logger';
+import { API_URL } from '@/services/api-config';
 
 export interface LoginResponse {
   success: boolean;
-  token?: string;
   userId?: string | number;
   message?: string;
   user?: any;
 }
-
-// Get the backend API URL from environment variable or fallback
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export async function login(username: string, password: string): Promise<LoginResponse> {
   try {
@@ -29,104 +25,41 @@ export async function login(username: string, password: string): Promise<LoginRe
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: errorData.message || 'Authentication failed',
       };
     }
 
-    // Get response data first
+    // Get response data - token is set as httpOnly cookie by backend
     const data = await response.json();
 
-    // Get access token from response body (NestJS format)
-    let accessToken = data.token || data.accessToken || '';
-
-    // Fallback: check Authorization header
-    if (!accessToken) {
-      const authHeader = response.headers.get('Authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        accessToken = authHeader.substring(7);
-      }
-    }
-
-    if (!accessToken) {
-      return { 
-        success: false, 
-        message: 'No authentication token received',
-      };
-    }
-
-    // Decode the token to get user info (without verification on client side)
-    let decodedToken: any;
-    try {
-      // Only decode the token, don't verify it on client side for security
-      decodedToken = jwt.decode(accessToken);
-      
-      if (!decodedToken) {
-        throw new Error('Invalid token format');
-      }
-    } catch (e) {
-      logger.error('Failed to decode token:', e);
-      return { 
-        success: false, 
-        message: 'Invalid token format',
-      };
-    }
-
-    // Store the token in localStorage for the frontend app
-    // Note: For production, consider using httpOnly cookies set by the backend
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', JSON.stringify(accessToken));
-
-      // Also store user information if available
-      if (data.user) {
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
-      }
-    }
-
-    // Get user information from token and response
-    const userId = decodedToken?.id || decodedToken?.userId || decodedToken?.sub || data.user?.id;
-    const userInfo = {
-      id: userId || decodedToken?.id,
-      username: decodedToken?.username || data.user?.username || username,
-      email: decodedToken?.email || data.user?.email,
-      firstName: data.user?.firstName,
-      lastName: data.user?.lastName,
-      role: decodedToken?.role?.type || data.user?.role?.type || 'user',
-    };
-
-    if (!userId) {
+    // Get user info from response body
+    const user = data.user;
+    if (!user || !user.id) {
       return {
         success: false,
-        message: 'No user ID found in token',
+        message: 'No user data received from server',
       };
     }
 
     return {
       success: true,
-      token: accessToken,
-      userId,
-      user: userInfo,
+      userId: user.id,
+      user,
     };
   } catch (error) {
     logger.error('Login error:', error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       message: error instanceof Error ? error.message : 'An unknown error occurred',
     };
   }
 }
 
-// Helper function to clear auth tokens
+// Helper function to clear auth state (localStorage no longer used; cookie cleared by backend)
 export function clearAuthTokens() {
-  if (typeof window !== 'undefined') {
-    // Clear localStorage
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
-
-    // Also clear any legacy cookies
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
-  }
+  // No-op: httpOnly cookies are cleared by the backend logout endpoint
 }
 
 // Logout function
@@ -142,15 +75,10 @@ export async function logout(): Promise<void> {
       credentials: 'include',
     });
 
-    // Clear local tokens regardless of backend response
-    clearAuthTokens();
-
     if (!response.ok) {
-      logger.warn('Logout endpoint failed, but tokens cleared locally');
+      logger.warn('Logout endpoint failed, but cookie should be cleared by backend');
     }
   } catch (error) {
     logger.error('Logout error:', error);
-    // Still clear local tokens even if network fails
-    clearAuthTokens();
   }
 }

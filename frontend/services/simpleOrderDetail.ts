@@ -1,5 +1,6 @@
 // Simple Order Detail API Service - Fallback for when comprehensive data isn't available
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface SimpleOrderData {
@@ -120,15 +121,13 @@ export async function saveSimpleOrder(orderId: number, orderData: any): Promise<
   
   try {
     // Use the enriched orders endpoint for updates
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/enriched_orders/${orderId}`, {
+    const response = await fetch(`${API_URL}/api/v1/enriched_orders/${orderId}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/merge-patch+json',
-        'Accept': 'application/ld+json',
-        ...(typeof window !== 'undefined' && localStorage.getItem('token') 
-          ? { Authorization: `Bearer ${localStorage.getItem('token')}` } 
-          : {}),
+        'Accept': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify(orderData),
     });
     

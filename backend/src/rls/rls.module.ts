@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
 import { RlsService } from "./rls.service";
+import { RlsGuard, EnhancedRlsGuard } from "./rls.guard";
 
 /**
  * Row Level Security Module
@@ -20,8 +20,7 @@ import { RlsService } from "./rls.service";
  * - Comprehensive audit trail protection
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([])], // No entities needed, using raw queries
-  providers: [RlsService],
-  exports: [RlsService],
+  providers: [RlsService, RlsGuard, EnhancedRlsGuard],
+  exports: [RlsService, RlsGuard, EnhancedRlsGuard],
 })
 export class RlsModule {}

@@ -184,7 +184,7 @@ done
 # Step 4: Install PostgreSQL extensions
 # =============================================================================
 echo_step "Installing PostgreSQL extensions..."
-docker exec -i $PG_CONTAINER psql -h localhost -U $DB_USER -d $DB_NAME <<EOF
+docker exec -i $PG_CONTAINER psql -U $DB_USER -d $DB_NAME <<EOF
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 EOF

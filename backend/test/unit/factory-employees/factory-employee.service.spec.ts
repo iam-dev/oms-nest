@@ -450,8 +450,8 @@ describe("FactoryEmployeeService", () => {
       // Arrange
       const employeeIds = [1, 2, 3];
       const newFactoryId = 200;
-      const consoleWarnSpy = jest
-        .spyOn(console, "warn")
+      const loggerWarnSpy = jest
+        .spyOn(service["logger"], "warn")
         .mockImplementation(() => {});
 
       repository.findById
@@ -469,9 +469,9 @@ describe("FactoryEmployeeService", () => {
 
       // Assert
       expect(result).toHaveLength(2);
-      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(loggerWarnSpy).toHaveBeenCalled();
 
-      consoleWarnSpy.mockRestore();
+      loggerWarnSpy.mockRestore();
     });
   });
 });

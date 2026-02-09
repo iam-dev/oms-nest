@@ -20,6 +20,9 @@ import {
   ApiBody,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { DatabaseQueryLogService } from "./database-query-log.service";
 import { CreateDatabaseQueryLogDto } from "./dto/create-database-query-log.dto";
 import { DatabaseQueryLogDto } from "./dto/database-query-log.dto";
@@ -41,7 +44,8 @@ import { PaginatedResponseDto } from "../common/dto/base-query.dto";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt")) // TODO: Add admin/developer role guard when implemented
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class DatabaseQueryLogController {
   constructor(
     private readonly databaseQueryLogService: DatabaseQueryLogService,
