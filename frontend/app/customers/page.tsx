@@ -1,9 +1,17 @@
 "use client";
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useUserRole } from '@/hooks/useUserRole';
 import { hasScreenPermission } from '@/utils/rolePermissions';
-import Customers from '@/components/Customers';
+
+const Customers = dynamic(() => import('@/components/Customers'), {
+  loading: () => (
+    <div className="flex items-center justify-center min-h-[200px]">
+      <p>Loading customers...</p>
+    </div>
+  ),
+});
 
 export default function CustomersPage() {
   const router = useRouter();

@@ -12,6 +12,7 @@ import redisConfig from "./config/redis.config";
 import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfigService } from "./database/typeorm-config.service";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { MailModule } from "./mail/mail.module";
 import { HomeModule } from "./home/home.module";
 import { DataSource, DataSourceOptions } from "typeorm";
@@ -48,8 +49,13 @@ import { CountryManagerModule } from "./country-managers/country-manager.module"
 import { WarehouseModule } from "./warehouses/warehouse.module";
 import { SaddleStockModule } from "./saddle-stock/saddle-stock.module";
 import { SaddleExtraModule } from "./saddle-extras/saddle-extra.module";
-import { APP_INTERCEPTOR } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { AuditLogInterceptor } from "./audit-logging/interceptors/audit-log.interceptor";
+import { RlsModule } from "./rls/rls.module";
+import { EnhancedRlsGuard } from "./rls/rls.guard";
+
+const isTestOrDev =
+  process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development";
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -73,6 +79,19 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       ],
       envFilePath: [".env"],
     }),
+    ThrottlerModule.forRoot(
+      isTestOrDev
+        ? [
+            { name: "short", ttl: 1000, limit: 10000 },
+            { name: "medium", ttl: 60000, limit: 10000 },
+            { name: "long", ttl: 3600000, limit: 10000 },
+          ]
+        : [
+            { name: "short", ttl: 1000, limit: 3 },
+            { name: "medium", ttl: 60000, limit: 100 },
+            { name: "long", ttl: 3600000, limit: 600 },
+          ],
+    ),
     infrastructureDatabaseModule,
     CacheModule,
     UsersModule,
@@ -112,8 +131,17 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     // ProductModule, // Needs implementation
     SaddleStockModule, // Saddle stock (fitter inventory) ✅ - enabled
     SaddleExtraModule, // Saddle-extra associations ✅ - enabled
+    RlsModule, // Row Level Security ✅ - enabled
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: EnhancedRlsGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditLogInterceptor,

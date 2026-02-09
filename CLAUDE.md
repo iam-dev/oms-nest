@@ -206,6 +206,7 @@ Detailed documentation in [`docs/`](./docs/):
 | [Staging Deployment](./docs/staging-deployment.md) | Staging environment on DigitalOcean DOKS |
 | [Migration Quick Start](./docs/migration-readme.md) | Legacy data import (quick reference) |
 | [Production Data Migration](./docs/production-data-migration.md) | Full migration reference (schema, scripts, validation) |
+| [Access Management](./docs/access-management.md) | Roles, API access matrix, frontend permissions, RLS, test users |
 
 Package-specific docs:
 

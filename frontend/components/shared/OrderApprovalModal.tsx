@@ -67,11 +67,11 @@ export function OrderApprovalModal({ order, isOpen, onClose, onApprove }: OrderA
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="font-semibold mb-2">Order Details</h3>
             <div className="text-sm space-y-1">
-              <p><strong>Order ID:</strong> {order.orderId || order.id}</p>
+              <p><strong>Order ID:</strong> {String(order.orderId ?? order.id)}</p>
               <p><strong>Customer:</strong> {order.customerName || getCustomerName(order) || '-'}</p>
-              <p><strong>Fitter:</strong> {order.fitterName || getFitterName(order) || '-'}</p>
+              <p><strong>Fitter:</strong> {String(order.fitterName || getFitterName(order) || '-')}</p>
               <p><strong>Reference:</strong> {order.reference || '-'}</p>
-              <p><strong>Current Status:</strong> 
+              <p><strong>Current Status:</strong>
                 <span className={`ml-1 font-medium ${isAlreadyApproved ? 'text-green-600' : 'text-yellow-600'}`}>
                   {order.orderStatus || order.status || '-'}
                 </span>

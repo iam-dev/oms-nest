@@ -811,6 +811,118 @@ export class PerformanceTestUtils {
   }
 }
 
+/**
+ * Mock factory for NestJS ExecutionContext
+ */
+const createMockExecutionContext = (
+  overrides: {
+    user?: any;
+    params?: any;
+    query?: any;
+    body?: any;
+    method?: string;
+    url?: string;
+    headers?: Record<string, string>;
+  } = {},
+): any => {
+  const request = {
+    user: overrides.user || undefined,
+    params: overrides.params || {},
+    query: overrides.query || {},
+    body: overrides.body || {},
+    method: overrides.method || "GET",
+    url: overrides.url || "/test",
+    headers: overrides.headers || {},
+  };
+
+  const response = {
+    statusCode: 200,
+    status: jest.fn().mockReturnThis(),
+    json: jest.fn().mockReturnThis(),
+    send: jest.fn().mockReturnThis(),
+  };
+
+  const handler = jest.fn();
+  const classRef = jest.fn();
+
+  return {
+    switchToHttp: jest.fn().mockReturnValue({
+      getRequest: jest.fn().mockReturnValue(request),
+      getResponse: jest.fn().mockReturnValue(response),
+      getNext: jest.fn(),
+    }),
+    getHandler: jest.fn().mockReturnValue(handler),
+    getClass: jest.fn().mockReturnValue(classRef),
+    getType: jest.fn().mockReturnValue("http"),
+    getArgs: jest.fn().mockReturnValue([request, response]),
+    getArgByIndex: jest.fn(),
+    switchToRpc: jest.fn(),
+    switchToWs: jest.fn(),
+  };
+};
+
+/**
+ * Mock factory for NestJS CallHandler (used in interceptors)
+ */
+const createMockCallHandler = (returnValue: any = {}): any => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { of } = require("rxjs");
+  return {
+    handle: jest.fn().mockReturnValue(of(returnValue)),
+  };
+};
+
+/**
+ * Mock factory for TypeORM QueryRunner
+ */
+const createMockQueryRunner = (): any => ({
+  connect: jest.fn(),
+  release: jest.fn(),
+  query: jest.fn(),
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  rollbackTransaction: jest.fn(),
+  manager: createMockEntityManager(),
+  isReleased: false,
+  isTransactionActive: false,
+});
+
+/**
+ * Mock factory for NestJS Reflector
+ */
+const createMockReflector = (metadata: Record<string, any> = {}): any => ({
+  getAllAndOverride: jest.fn().mockImplementation((key: string) => {
+    return metadata[key] !== undefined ? metadata[key] : undefined;
+  }),
+  get: jest.fn().mockImplementation((key: string) => {
+    return metadata[key] !== undefined ? metadata[key] : undefined;
+  }),
+  getAll: jest.fn().mockReturnValue([]),
+  getAllAndMerge: jest.fn().mockReturnValue([]),
+});
+
+/**
+ * Mock factory for Bull Queue
+ */
+const createMockBullQueue = (): any => ({
+  add: jest.fn().mockResolvedValue({ id: "mock-job-id" }),
+  getWaiting: jest.fn().mockResolvedValue([]),
+  getActive: jest.fn().mockResolvedValue([]),
+  getCompleted: jest.fn().mockResolvedValue([]),
+  getFailed: jest.fn().mockResolvedValue([]),
+  getDelayed: jest.fn().mockResolvedValue([]),
+  getRepeatableJobs: jest.fn().mockResolvedValue([]),
+  removeRepeatableByKey: jest.fn().mockResolvedValue(undefined),
+  clean: jest.fn().mockResolvedValue([]),
+  count: jest.fn().mockResolvedValue(0),
+  empty: jest.fn().mockResolvedValue(undefined),
+  close: jest.fn().mockResolvedValue(undefined),
+  pause: jest.fn().mockResolvedValue(undefined),
+  resume: jest.fn().mockResolvedValue(undefined),
+  process: jest.fn(),
+  on: jest.fn(),
+});
+
 // Export all utilities for easy importing
 export {
   createMockRepository,
@@ -818,4 +930,9 @@ export {
   createMockDataSource,
   createMockCacheManager,
   createMockEntityManager,
+  createMockExecutionContext,
+  createMockCallHandler,
+  createMockQueryRunner,
+  createMockReflector,
+  createMockBullQueue,
 };

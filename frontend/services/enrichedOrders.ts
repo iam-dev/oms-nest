@@ -1,22 +1,7 @@
 // Service for fetching enriched orders data from the enriched_order API resource
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
-
-// Helper function to get current user from auth context
-function getCurrentUser() {
-  if (typeof window !== 'undefined') {
-    try {
-      // Try to get user from Jotai store
-      const storedUser = localStorage.getItem('auth_user');
-      if (storedUser && storedUser !== 'null') {
-        return JSON.parse(storedUser);
-      }
-    } catch (error) {
-      logger.warn('Failed to get user from localStorage:', error);
-    }
-  }
-  return null;
-}
 
 interface GetEnrichedOrdersParams {
   page?: number;
@@ -129,13 +114,8 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   // Format filters for API Platform
   const formattedFilters = { ...params.filters };
   logger.log('enrichedOrders.ts: Initial formattedFilters:', formattedFilters);
-  
-  // Auto-apply fitter filtering for FITTER role users
-  const currentUser = getCurrentUser();
-  if (currentUser && currentUser.role === 'ROLE_FITTER' && currentUser.username && !formattedFilters.fitterUsername) {
-    logger.log('enrichedOrders.ts: Auto-applying fitter filter for user:', currentUser.username);
-    formattedFilters.fitterUsername = currentUser.username;
-  }
+
+  // Fitter filtering is handled server-side via RLS and the authenticated cookie session
   
   // Special case for orderId search - use paginated search if we have an exact orderId
   if (formattedFilters.orderId && /^\d+$/.test(formattedFilters.orderId)) {
@@ -204,37 +184,6 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
 }
 
 // ========== SINGLE ORDER DETAIL ==========
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      // Fallback to cookies
-    }
-    const cookies = document.cookie.split(';');
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-function authHeaders() {
-  const token = getToken();
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    Accept: 'application/json',
-  };
-}
 
 export interface OrderDetailData {
   id: number;
@@ -369,7 +318,9 @@ export async function fetchOrderDetail(orderId: number): Promise<OrderDetailData
   logger.log('Fetching order detail for:', orderId);
 
   const response = await fetch(`${API_URL}/api/v1/enriched_orders/detail/${orderId}`, {
-    headers: authHeaders(),
+    headers: {
+      'Accept': 'application/json',
+    },
     credentials: 'include',
   });
 

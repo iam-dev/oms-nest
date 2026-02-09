@@ -25,6 +25,9 @@ import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 import { CustomerDto } from "./dto/customer.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AuditLog } from "../audit-logging/decorators";
 
 /**
@@ -39,7 +42,8 @@ import { AuditLog } from "../audit-logging/decorators";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 

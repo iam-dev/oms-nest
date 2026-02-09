@@ -22,6 +22,9 @@ import {
   ApiQuery,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { BrandService } from "./brand.service";
 import { CreateBrandDto } from "./dto/create-brand.dto";
 import { UpdateBrandDto } from "./dto/update-brand.dto";
@@ -29,7 +32,8 @@ import { BrandDto } from "./dto/brand.dto";
 
 @ApiTags("Brands")
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller({
   path: "brands",
   version: "1",

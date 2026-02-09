@@ -1,3 +1,15 @@
+import type { Customer, Fitter, Supplier } from './ComprehensiveOrder';
+
+export interface SaddleSpecifications {
+  brand?: string;
+  model?: string;
+  seatSize?: string;
+  flaps?: string;
+  leatherType?: string;
+  color?: string;
+  [key: string]: string | undefined;
+}
+
 export interface Order {
   // Core identifiers - matching backend OrderDto (INTEGER for orders)
   id: number;
@@ -13,15 +25,7 @@ export interface Order {
   factoryId: number | null;
 
   // Saddle configuration - matching backend saddleSpecifications
-  saddleSpecifications: {
-    brand?: string;
-    model?: string;
-    seatSize?: string;
-    flaps?: string;
-    leatherType?: string;
-    color?: string;
-    [key: string]: any;
-  };
+  saddleSpecifications: SaddleSpecifications;
 
   // Instructions and notes
   specialInstructions: string | null;
@@ -39,7 +43,7 @@ export interface Order {
   paymentPercentage?: number;
 
   // Measurements - matching backend
-  measurements: Record<string, any> | null;
+  measurements: Record<string, string | number> | null;
 
   // Flags - matching backend
   isUrgent: boolean;
@@ -58,14 +62,14 @@ export interface Order {
   // Computed/convenience fields for display
   saddle?: string;
   seatSize?: string | string[];
-  customer?: string | { id: number; name?: string; email?: string; [key: string]: any; };
-  fitter?: string | { id: number; name?: string; email?: string; [key: string]: any; };
-  factory?: string | { id: number; name?: string; contactPerson?: string; [key: string]: any; };
+  customer?: string | Customer;
+  fitter?: string | Fitter;
+  factory?: string | Supplier;
   date?: string;
   orderTime?: string;
   orderStatus?: string;
   urgent?: boolean;
   reference?: string;
 
-  [key: string]: any;
+  [key: string]: unknown;
 }

@@ -20,6 +20,9 @@ import {
   ApiBearerAuth,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { FactoryEmployeeService } from "./factory-employee.service";
 import { FactoryEmployeeDtoMapper } from "./mappers/factory-employee-dto.mapper";
 import { CreateFactoryEmployeeDto } from "./dto/create-factory-employee.dto";
@@ -33,7 +36,8 @@ import { FactoryEmployeeDto } from "./dto/factory-employee.dto";
  */
 @ApiTags("Factory Employees")
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.factory)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller({
   path: "factory-employees",
   version: "1",

@@ -26,6 +26,9 @@ import { UpdateCountryManagerDto } from "./dto/update-country-manager.dto";
 import { QueryCountryManagerDto } from "./dto/query-country-manager.dto";
 import { CountryManagerDto } from "./dto/country-manager.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * Country Manager REST API Controller
@@ -38,7 +41,8 @@ import { AuthGuard } from "@nestjs/passport";
   version: "1",
 })
 @ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CountryManagerController {
   constructor(private readonly countryManagerService: CountryManagerService) {}
 

@@ -100,7 +100,7 @@ export function OrderEditModal({ order, isOpen, onClose, onSave }: OrderEditModa
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Order - #{order.orderId || order.id}</DialogTitle>
+          <DialogTitle>Edit Order - #{String(order.orderId ?? order.id)}</DialogTitle>
         </DialogHeader>
         
         <div className="grid grid-cols-2 gap-6 mt-4">

@@ -141,7 +141,7 @@ export interface ProductSaddle {
   seatSize?: string;
   treeSize?: string;
   flapLength?: string;
-  configuration?: any;
+  configuration?: Record<string, unknown>;
   basePrice?: number;
   totalPrice?: number;
   items?: ProductSaddleItem[];
@@ -292,7 +292,7 @@ export interface Preset {
   name: string;
   modelId?: number;
   model?: Model;
-  configuration?: any;
+  configuration?: Record<string, unknown>;
   isActive?: boolean;
   createdAt?: string;
   updatedAt?: string;

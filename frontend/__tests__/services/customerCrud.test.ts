@@ -4,20 +4,12 @@ import { createFitter, updateFitter, deleteFitter, fetchFitters } from '@/servic
 // Mock fetch for testing
 global.fetch = jest.fn();
 
-// Mock localStorage
-const mockLocalStorage = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  clear: jest.fn(),
-};
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage
-});
+// No localStorage mock needed - auth is cookie-based
 
 describe('Customer CRUD Operations', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLocalStorage.getItem.mockReturnValue(JSON.stringify('mock-token'));
+    // No token mock needed - auth is cookie-based
   });
 
   describe('createCustomer', () => {
@@ -45,8 +37,8 @@ describe('Customer CRUD Operations', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer mock-token',
           }),
+          credentials: 'include',
           body: JSON.stringify(customerData),
         })
       );
@@ -94,8 +86,8 @@ describe('Customer CRUD Operations', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer mock-token',
           }),
+          credentials: 'include',
           body: JSON.stringify({ name: 'Updated Customer' }),
         })
       );
@@ -117,10 +109,9 @@ describe('Customer CRUD Operations', () => {
         expect.objectContaining({
           method: 'DELETE',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer mock-token',
           }),
+          credentials: 'include',
         })
       );
     });
@@ -130,7 +121,7 @@ describe('Customer CRUD Operations', () => {
 describe('Fitter CRUD Operations', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLocalStorage.getItem.mockReturnValue(JSON.stringify('mock-token'));
+    // No token mock needed - auth is cookie-based
   });
 
   describe('createFitter', () => {
@@ -158,8 +149,8 @@ describe('Fitter CRUD Operations', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer mock-token',
           }),
+          credentials: 'include',
           body: JSON.stringify(fitterData),
         })
       );
@@ -205,8 +196,8 @@ describe('Fitter CRUD Operations', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer mock-token',
           }),
+          credentials: 'include',
           body: JSON.stringify({ name: 'Updated Fitter' }),
         })
       );
@@ -228,10 +219,9 @@ describe('Fitter CRUD Operations', () => {
         expect.objectContaining({
           method: 'DELETE',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer mock-token',
           }),
+          credentials: 'include',
         })
       );
     });
@@ -241,7 +231,7 @@ describe('Fitter CRUD Operations', () => {
 describe('Error Handling', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLocalStorage.getItem.mockReturnValue(JSON.stringify('mock-token'));
+    // No token mock needed - auth is cookie-based
   });
 
   it('should handle server errors gracefully', async () => {
