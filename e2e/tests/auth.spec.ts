@@ -10,13 +10,25 @@ import { test, expect, Page } from '@playwright/test';
  *   3. Placeholder text as last resort (may change with i18n)
  */
 
+/**
+ * Wait for the login form to render.
+ * The login page shows "Loading..." while AuthContext initializes.
+ * Webkit on CI is slower to resolve this, so we must explicitly wait
+ * for the form to appear before interacting with it.
+ */
+async function waitForLoginForm(target: Page): Promise<void> {
+  // Wait for the form element to appear (AuthContext finished loading)
+  await target.locator('form').waitFor({ state: 'visible', timeout: 30000 });
+}
+
 /** Fill login form using resilient selectors: email input, password input, submit */
 async function fillLoginForm(
   target: Page,
   email: string,
   password: string,
 ): Promise<void> {
-  // Prefer type-based selectors; fall back to placeholder if needed
+  await waitForLoginForm(target);
+
   const emailInput = target.locator('input[type="email"], input[type="text"]').first();
   const passwordInput = target.locator('input[type="password"]');
 
@@ -27,6 +39,7 @@ async function fillLoginForm(
 
 /** Submit the login form and wait for navigation away from /login (or timeout) */
 async function submitLoginAndWait(target: Page): Promise<boolean> {
+  await waitForLoginForm(target);
   await target.locator('button[type="submit"]').click();
 
   // Wait for either a redirect away from /login or an error indicator
@@ -48,6 +61,9 @@ test.describe('Authentication Flow @critical @smoke @readonly', () => {
   test('should display login page correctly @smoke @readonly', async () => {
     await page.goto('/login');
 
+    // Wait for AuthContext to finish loading (shows "Loading..." until ready)
+    await waitForLoginForm(page);
+
     // Verify login form is visible
     await expect(page.locator('form')).toBeVisible();
 
@@ -59,6 +75,9 @@ test.describe('Authentication Flow @critical @smoke @readonly', () => {
 
   test('should show validation errors for empty submission @critical @readonly', async () => {
     await page.goto('/login');
+
+    // Wait for form to render (webkit is slower with AuthContext init)
+    await waitForLoginForm(page);
 
     // Submit empty form - browser validation or Zod validation should trigger
     await page.locator('button[type="submit"]').click();

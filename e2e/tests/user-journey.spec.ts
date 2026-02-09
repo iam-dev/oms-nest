@@ -11,12 +11,23 @@ import { test, expect, Page } from '@playwright/test';
  *   3. Placeholder text as last resort (may change with i18n)
  */
 
+/**
+ * Wait for the login form to render.
+ * The login page shows "Loading..." while AuthContext initializes.
+ * Webkit on CI is slower to resolve this, so we must explicitly wait.
+ */
+async function waitForLoginForm(target: Page): Promise<void> {
+  await target.locator('form').waitFor({ state: 'visible', timeout: 30000 });
+}
+
 /** Fill login form using resilient type-based selectors */
 async function fillLoginForm(
   target: Page,
   email: string,
   password: string,
 ): Promise<void> {
+  await waitForLoginForm(target);
+
   const emailInput = target.locator('input[type="email"], input[type="text"]').first();
   const passwordInput = target.locator('input[type="password"]');
 
@@ -27,6 +38,7 @@ async function fillLoginForm(
 
 /** Submit the login form and wait for navigation away from /login */
 async function submitLoginAndWait(target: Page): Promise<boolean> {
+  await waitForLoginForm(target);
   await target.locator('button[type="submit"]').click();
 
   await Promise.race([

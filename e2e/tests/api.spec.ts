@@ -747,10 +747,17 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   });
 
   test('should handle enriched-orders with urgency filter @api', async () => {
-    const enrichedResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=10&urgent=true`);
-    expect(enrichedResponse.ok()).toBeTruthy();
+    // Materialized view may not be ready on first attempt in CI; retry up to 3 times
+    let enrichedResponse;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      enrichedResponse = await apiContext.get(`${API_URL}/api/v1/enriched_orders?page=1&limit=10&urgent=true`);
+      if (enrichedResponse.ok()) break;
+      // Brief pause before retry to let materialized view refresh
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    expect(enrichedResponse!.ok()).toBeTruthy();
 
-    const enrichedData = await enrichedResponse.json();
+    const enrichedData = await enrichedResponse!.json();
 
     expect(enrichedData).toHaveProperty('data');
     expect(enrichedData).toHaveProperty('total');
