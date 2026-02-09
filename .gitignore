@@ -142,5 +142,10 @@ backend/src/database/seeds/relational/production-data
 # AI DOCS
 ARCHIVE
 
-# Claude Code
+# Claude Code — local/sensitive files only (agents/skills/commands committed)
+.claude/settings.local.json
+.claude/backend-coverage-report.md
+.claude/improvements.md
+.claude/postgresql-migration-plan.md
+.dirigent/
 .claude/

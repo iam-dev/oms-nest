@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
 } from "@nestjs/swagger";
@@ -35,7 +35,7 @@ import { AccessFilterGroupEntity } from "./infrastructure/persistence/relational
   path: "access-filter-groups",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class AccessFilterGroupController {

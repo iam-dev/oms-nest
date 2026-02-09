@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { CommentsService } from "./comments.service";
@@ -41,7 +41,7 @@ import { RoleEnum } from "../roles/roles.enum";
   path: "comments",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CommentsController {

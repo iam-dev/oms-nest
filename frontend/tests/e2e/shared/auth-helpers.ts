@@ -117,19 +117,11 @@ export class AuthHelper {
 
   async isLoggedIn(): Promise<boolean> {
     try {
-      // Check for authentication token in localStorage
-      const token = await this.page.evaluate(() => {
-        try {
-          return localStorage.getItem('auth_token') ||
-                 localStorage.getItem('token') ||
-                 document.cookie.includes('token=');
-        } catch (e) {
-          // If localStorage is not accessible, assume not logged in
-          return null;
-        }
-      });
+      // Check for authentication cookie
+      const cookies = await this.page.context().cookies();
+      const hasTokenCookie = cookies.some(c => c.name === 'token');
 
-      if (!token) return false;
+      if (!hasTokenCookie) return false;
 
       // Check if we're not on login page
       const currentUrl = this.page.url();
@@ -146,15 +138,9 @@ export class AuthHelper {
   }
 
   async getAuthToken(): Promise<string | null> {
-    return await this.page.evaluate(() => {
-      try {
-        const stored = localStorage.getItem('auth_token');
-        return stored && stored !== 'null' ? JSON.parse(stored) : null;
-      } catch {
-        // If localStorage is not accessible or JSON parsing fails
-        return null;
-      }
-    });
+    const cookies = await this.page.context().cookies();
+    const tokenCookie = cookies.find(c => c.name === 'token');
+    return tokenCookie?.value ?? null;
   }
 
   async waitForPageLoad(): Promise<void> {

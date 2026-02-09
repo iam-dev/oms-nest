@@ -218,7 +218,7 @@ jobs:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
     - name: Setup Kubernetes context
-      run: doctl kubernetes cluster kubeconfig save ${{ vars.DOKS_CLUSTER_NAME }}
+      run: doctl kubernetes cluster kubeconfig save ${{ secrets.DOKS_CLUSTER_NAME }}
 
     - name: Create namespace if not exists
       run: |
@@ -398,7 +398,7 @@ jobs:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
     - name: Setup Kubernetes context
-      run: doctl kubernetes cluster kubeconfig save ${{ vars.DOKS_CLUSTER_NAME }}
+      run: doctl kubernetes cluster kubeconfig save ${{ secrets.DOKS_CLUSTER_NAME }}
       working-directory: .
 
     - name: Generate E2E test passwords
@@ -509,7 +509,7 @@ jobs:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
     - name: Setup Kubernetes context
-      run: doctl kubernetes cluster kubeconfig save ${{ vars.DOKS_CLUSTER_NAME }}
+      run: doctl kubernetes cluster kubeconfig save ${{ secrets.DOKS_CLUSTER_NAME }}
 
     - name: Rollback deployments
       run: |

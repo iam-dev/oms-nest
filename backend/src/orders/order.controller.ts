@@ -17,7 +17,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
   ApiBody,
@@ -48,7 +48,7 @@ import { AuditLog } from "../audit-logging/decorators";
   path: "orders",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderController {

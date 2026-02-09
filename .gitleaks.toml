@@ -1,92 +1,60 @@
-# GitLeaks Configuration for OMS Project
-# Detects secrets, passwords, API keys, and sensitive data
+title = "Dirigent Gitleaks Configuration"
 
-title = "OMS GitLeaks Configuration"
-
+# Extend the default gitleaks rules (160+ secret patterns)
 [extend]
-# Use the default GitLeaks rules
 useDefault = true
 
-[[rules]]
-description = "Database connection strings"
-id = "database-url"
-regex = '''(?i)(database_url|connection_string|db_url)\s*[=:]\s*['"]\w+://[^\s'"]+['"']'''
-tags = ["database", "url"]
+# ─── Custom Rules ──────────────────────────────────────
 
 [[rules]]
-description = "JWT secrets and keys"
-id = "jwt-secret"
-regex = '''(?i)(jwt[_-]?secret|jwt[_-]?key|access[_-]?token[_-]?secret)\s*[=:]\s*['"]\S{20,}['"']'''
-tags = ["jwt", "secret"]
+id = "anthropic-api-key"
+description = "Anthropic API Key"
+regex = '''sk-ant-[a-zA-Z0-9_\-]{20,}'''
+tags = ["anthropic", "api-key"]
 
 [[rules]]
-description = "API keys and tokens"
-id = "api-key"
-regex = '''(?i)(api[_-]?key|access[_-]?token|secret[_-]?key)\s*[=:]\s*['"]\S{20,}['"']'''
-tags = ["api", "key"]
+id = "openai-api-key"
+description = "OpenAI API Key (legacy and new formats)"
+regex = '''sk-[a-zA-Z0-9]{20,}T3BlbkFJ[a-zA-Z0-9]{20,}|sk-proj-[a-zA-Z0-9_\-]{40,}'''
+tags = ["openai", "api-key"]
 
 [[rules]]
-description = "Database passwords"
-id = "database-password"
-regex = '''(?i)(password|passwd|pwd)\s*[=:]\s*['"]\S{8,}['"']'''
-tags = ["password", "database"]
+id = "vercel-token"
+description = "Vercel Token"
+regex = '''(?i)vercel[_\s]*token\s*[:=]\s*['"]?[a-zA-Z0-9]{24,}['"]?'''
+tags = ["vercel", "token"]
 
 [[rules]]
-description = "Private keys"
-id = "private-key"
-regex = '''-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----'''
-tags = ["private", "key"]
+id = "supabase-service-role-key"
+description = "Supabase Service Role Key (detected by assignment context, not just JWT shape)"
+regex = '''(?i)(supabase|service.?role|SUPABASE_SERVICE_ROLE)[_\s]*(key|token|secret)?\s*[:=]\s*['"]?eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+['"]?'''
+tags = ["supabase", "jwt", "service-role"]
 
 [[rules]]
-description = "Kubernetes config files with embedded credentials"
-id = "kubeconfig"
-regex = '''(?i)(kubeconfig|kube-config)\s*[=:]\s*['"\/]\S{40,}'''
-path = '''.*'''
-tags = ["kubernetes", "config"]
+id = "generic-high-entropy"
+description = "High entropy string that looks like a secret"
+regex = '''(?i)(secret|password|passwd|token|api_key|apikey|auth)\s*[:=]\s*['"][a-zA-Z0-9/+=]{20,}['"]'''
+tags = ["generic", "high-entropy"]
+entropy = 4.0
 
 [[rules]]
-description = "Docker registry tokens"
-id = "docker-token"
-regex = '''(?i)(docker[_-]?token|registry[_-]?token)\s*[=:]\s*['"]\S{20,}['"']'''
-tags = ["docker", "token"]
+id = "connection-string"
+description = "Database connection string with password"
+regex = '''(?i)(postgres|mysql|mongodb|redis):\/\/[^:]+:[^@]+@'''
+tags = ["database", "connection-string"]
 
-[[rules]]
-description = "AWS credentials"
-id = "aws-credentials"
-regex = '''(?i)(aws[_-]?access[_-]?key|aws[_-]?secret)\s*[=:]\s*['"]\S{20,}['"']'''
-tags = ["aws", "credentials"]
-
-[[rules]]
-description = "Generic secrets"
-id = "generic-secret"
-regex = '''(?i)(secret|token|key|password)\s*[=:]\s*['"]\S{32,}['"']'''
-tags = ["generic", "secret"]
+# ─── Allowlist ─────────────────────────────────────────
 
 [allowlist]
-description = "Allowlist for false positives"
-regexes = [
-    '''example\.com''',
-    '''localhost''',
-    '''127\.0\.0\.1''',
-    '''test[_-]?password''',
-    '''fake[_-]?key''',
-    '''dummy[_-]?secret''',
-    '''placeholder''',
-    '''your[_-]?secret[_-]?here''',
-    '''replace[_-]?me''',
-    '''credentials\(['"][\w-]+['"]\)''',
-]
-
+description = "Allowlist for known safe patterns"
 paths = [
-    '''.*\.md$''',
-    '''.*\.txt$''',
-    '''.*\.example$''',
-    '''.*\.template$''',
-    '''.*\.sample$''',
-    '''node_modules/.*''',
-    '''.git/.*''',
-    '''docs/.*''',
-    '''README.*''',
-    '''.*sealed-secret.*\.yaml$''',
-    '''kubernetes/.*/sealed-secret\.yaml''',
+  '''\.env\.example$''',
+  '''\.env\.template$''',
+  '''\.env\.sample$''',
+  '''test[s]?/fixtures/''',
+  '''__mocks__/''',
+  '''\.gitleaks\.toml$''',
+  '''scripts/security-scan\.sh$''',
+  '''SKILL\.md$''',
+  '''\.snap$'''
 ]

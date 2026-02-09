@@ -17,7 +17,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiQuery,
-  ApiBearerAuth,
+  ApiCookieAuth,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
 import { RolesGuard } from "../roles/roles.guard";
@@ -35,7 +35,7 @@ import { FactoryEmployeeDto } from "./dto/factory-employee.dto";
  * Handles HTTP requests for factory employee operations
  */
 @ApiTags("Factory Employees")
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.factory)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller({
