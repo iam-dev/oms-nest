@@ -196,7 +196,7 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
         extraHTTPHeaders: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Cookie': `token=${token}`,
           'User-Agent': 'OMS-E2E-Tests/1.0.0',
         },
         ignoreHTTPSErrors: true,

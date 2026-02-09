@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
@@ -40,7 +40,7 @@ import { OrderProductSaddleDto } from "./dto/order-product-saddle.dto";
   path: "order_product_saddles",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderProductSaddleController {

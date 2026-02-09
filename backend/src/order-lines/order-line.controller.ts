@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
@@ -40,7 +40,7 @@ import { OrderLineDto } from "./dto/order-line.dto";
   path: "order-lines",
   version: "1",
 })
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderLineController {

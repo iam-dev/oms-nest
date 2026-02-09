@@ -17,7 +17,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
 } from "@nestjs/swagger";
@@ -31,7 +31,7 @@ import { UpdateBrandDto } from "./dto/update-brand.dto";
 import { BrandDto } from "./dto/brand.dto";
 
 @ApiTags("Brands")
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller({

@@ -248,12 +248,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack }: 
       
       // If it's an authentication error, provide clear instructions
       if (errorMessage.includes('Authentication required') || errorMessage.includes('401')) {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-        if (!token) {
-          setDataError('Authentication required. Please log in with username=laurengilbert&password=welcomeLauren!@');
-        } else {
-          setDataError('Authentication token expired or invalid. Please log in again.');
-        }
+        setDataError('Authentication required. Please log in again.');
       } else {
         // For other errors, still allow editing with minimal data
         logger.warn('Non-auth error, continuing with minimal data');

@@ -13,7 +13,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiQuery,
 } from "@nestjs/swagger";
 import { ProductionCacheService } from "./production-cache.service";
@@ -32,7 +32,7 @@ import { RoleEnum } from "../roles/roles.enum";
  */
 @ApiTags("Cache Management")
 @Controller("admin/cache")
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 export class CacheManagementController {

@@ -54,7 +54,7 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${authToken}`,
+        'Cookie': `token=${authToken}`,
         'User-Agent': 'OMS-E2E-Tests/1.0.0'
       },
       ignoreHTTPSErrors: true,
@@ -876,7 +876,7 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
       baseURL: process.env.E2E_API_URL || API_URL,
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${fitterToken}`
+        'Cookie': `token=${fitterToken}`
       },
     });
 

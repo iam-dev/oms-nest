@@ -15,7 +15,7 @@ import {
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import {
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiParam,
@@ -37,7 +37,7 @@ import { RolesGuard } from "../roles/roles.guard";
 import { infinityPagination } from "../utils/infinity-pagination";
 import { AuditLog } from "../audit-logging/decorators";
 
-@ApiBearerAuth()
+@ApiCookieAuth("token")
 @Roles(RoleEnum.admin, RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @ApiTags("Users")

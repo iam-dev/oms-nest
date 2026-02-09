@@ -35,7 +35,7 @@ Specialized for equestrian/saddle manufacturing with entities:
 - **Manufacturing**: Saddle-specific attributes like seat sizes, measurements
 
 ### Authentication & Authorization
-- **JWT-based authentication** with Bearer tokens stored in localStorage
+- **httpOnly cookie-based JWT authentication** (server sets secure cookies, browser sends automatically)
 - **Role-based access control** with middleware protection
 - **User roles**: Admin, User, Fitter, Supplier, Supervisor
 - **Route protection**: Middleware checks roles for page access

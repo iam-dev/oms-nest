@@ -49,10 +49,11 @@ import { CountryManagerModule } from "./country-managers/country-manager.module"
 import { WarehouseModule } from "./warehouses/warehouse.module";
 import { SaddleStockModule } from "./saddle-stock/saddle-stock.module";
 import { SaddleExtraModule } from "./saddle-extras/saddle-extra.module";
-import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { AuditLogInterceptor } from "./audit-logging/interceptors/audit-log.interceptor";
 import { RlsModule } from "./rls/rls.module";
 import { EnhancedRlsGuard } from "./rls/rls.guard";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 
 const isTestOrDev =
   process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development";
@@ -134,6 +135,10 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     RlsModule, // Row Level Security ✅ - enabled
   ],
   providers: [
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
