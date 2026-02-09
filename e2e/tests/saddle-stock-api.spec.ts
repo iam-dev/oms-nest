@@ -21,21 +21,23 @@ const API_URL = getApiUrl();
 test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   let adminContext: any;
   let fitterContext: any;
-  let adminToken: string;
-  let fitterToken: string;
 
   test.beforeAll(async ({ playwright }) => {
-    const baseContext = await playwright.request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'OMS-E2E-Tests/1.0.0'
-      },
+    // Create separate contexts per role — Playwright manages cookies automatically
+    // after each login POST receives a Set-Cookie response.
+    const defaultHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'User-Agent': 'OMS-E2E-Tests/1.0.0'
+    };
+
+    // Admin context + login
+    adminContext = await playwright.request.newContext({
+      extraHTTPHeaders: defaultHeaders,
       ignoreHTTPSErrors: true,
     });
 
-    // Login as admin
-    const adminLoginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
+    const adminLoginResponse = await adminContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
         password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
@@ -43,11 +45,14 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     });
 
     expect(adminLoginResponse.ok()).toBeTruthy();
-    const adminData = await adminLoginResponse.json();
-    adminToken = adminData.token;
 
-    // Login as fitter
-    const fitterLoginResponse = await baseContext.post(`${API_URL}/api/v1/auth/email/login`, {
+    // Fitter context + login
+    fitterContext = await playwright.request.newContext({
+      extraHTTPHeaders: defaultHeaders,
+      ignoreHTTPSErrors: true,
+    });
+
+    const fitterLoginResponse = await fitterContext.post(`${API_URL}/api/v1/auth/email/login`, {
       data: {
         email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
         password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!'
@@ -55,32 +60,6 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     });
 
     expect(fitterLoginResponse.ok()).toBeTruthy();
-    const fitterData = await fitterLoginResponse.json();
-    fitterToken = fitterData.token;
-
-    await baseContext.dispose();
-
-    // Create admin context
-    adminContext = await playwright.request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cookie': `token=${adminToken}`,
-        'User-Agent': 'OMS-E2E-Tests/1.0.0'
-      },
-      ignoreHTTPSErrors: true,
-    });
-
-    // Create fitter context
-    fitterContext = await playwright.request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cookie': `token=${fitterToken}`,
-        'User-Agent': 'OMS-E2E-Tests/1.0.0'
-      },
-      ignoreHTTPSErrors: true,
-    });
   });
 
   test.afterAll(async () => {
