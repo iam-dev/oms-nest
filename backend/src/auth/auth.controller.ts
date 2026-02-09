@@ -58,9 +58,9 @@ export class AuthController {
   constructor(private readonly service: AuthService) {}
 
   @Throttle({
-    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
-    medium: { limit: isTest ? 1000 : 5, ttl: 60000 },
-    long: { limit: isTest ? 1000 : 20, ttl: 3600000 },
+    short: { limit: isTest ? 1000 : 5, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 20, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 60, ttl: 3600000 },
   })
   @SerializeOptions({
     groups: ["me"],
@@ -83,9 +83,9 @@ export class AuthController {
   }
 
   @Throttle({
-    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
-    medium: { limit: isTest ? 1000 : 3, ttl: 60000 },
-    long: { limit: isTest ? 1000 : 3, ttl: 3600000 },
+    short: { limit: isTest ? 1000 : 3, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 10, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 30, ttl: 3600000 },
   })
   @Post("email/register")
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -110,9 +110,9 @@ export class AuthController {
   }
 
   @Throttle({
-    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
-    medium: { limit: isTest ? 1000 : 3, ttl: 60000 },
-    long: { limit: isTest ? 1000 : 3, ttl: 3600000 },
+    short: { limit: isTest ? 1000 : 3, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 10, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 30, ttl: 3600000 },
   })
   @Post("forgot/password")
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -123,9 +123,9 @@ export class AuthController {
   }
 
   @Throttle({
-    short: { limit: isTest ? 1000 : 1, ttl: 1000 },
-    medium: { limit: isTest ? 1000 : 3, ttl: 60000 },
-    long: { limit: isTest ? 1000 : 3, ttl: 3600000 },
+    short: { limit: isTest ? 1000 : 3, ttl: 1000 },
+    medium: { limit: isTest ? 1000 : 10, ttl: 60000 },
+    long: { limit: isTest ? 1000 : 30, ttl: 3600000 },
   })
   @Post("reset/password")
   @HttpCode(HttpStatus.NO_CONTENT)
