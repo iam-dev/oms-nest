@@ -173,6 +173,7 @@
     "testEnvironment": "node"
   },
   "overrides": {
+    "cross-spawn": ">=7.0.5",
     "tar": ">=7.5.7",
     "fast-xml-parser": ">=5.3.4",
     "lodash": ">=4.17.23",
