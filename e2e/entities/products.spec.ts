@@ -58,7 +58,7 @@ test.describe('Product Entities API @products @critical', () => {
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${authToken}`,
+        'Cookie': `token=${authToken}`,
         'User-Agent': 'OMS-E2E-Tests/1.0.0'
       },
       ignoreHTTPSErrors: true,

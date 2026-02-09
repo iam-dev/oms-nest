@@ -68,6 +68,13 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
     }
   });
 
+  test.afterEach(async () => {
+    // Clear auth state to prevent test pollution
+    await page.evaluate(() => {
+      try { localStorage.clear(); sessionStorage.clear(); } catch {}
+    }).catch(() => {});
+  });
+
   test('should display orders list page correctly @smoke @readonly', async () => {
     const response = await page.goto('/orders', { waitUntil: 'domcontentloaded' });
 

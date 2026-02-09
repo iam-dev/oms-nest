@@ -16,6 +16,10 @@ test.describe('Customers Entity Management', () => {
     await authHelper.waitForPageLoad();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should load customers page and validate API response', async ({ page }) => {
     // Verify page loads
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
@@ -57,7 +61,8 @@ test.describe('Customers Entity Management', () => {
       apiHelper.clearRequestHistory();
 
       await searchInput.fill('test customer');
-      await page.waitForTimeout(1000);
+      // Wait for debounced search API call after typing
+      await page.waitForResponse(resp => resp.url().includes('/customers') && resp.status() === 200);
 
       const searchRequest = apiHelper.getLastApiRequest('/customers');
       if (searchRequest) {
@@ -84,7 +89,6 @@ test.describe('Customers Entity Management', () => {
           apiHelper.clearRequestHistory();
 
           await filterElement.click();
-          await page.waitForTimeout(500);
 
           // Try to select an option if it's a dropdown
           const option = page.locator('[role="option"], .dropdown-item').first();
@@ -92,7 +96,8 @@ test.describe('Customers Entity Management', () => {
             await option.click();
           }
 
-          await page.waitForTimeout(1000);
+          // Wait for filter API response
+          await page.waitForResponse(resp => resp.url().includes('/customers') && resp.status() === 200);
 
           const filterRequest = apiHelper.getLastApiRequest('/customers');
           if (filterRequest) {
@@ -116,7 +121,8 @@ test.describe('Customers Entity Management', () => {
       apiHelper.clearRequestHistory();
 
       await sortableHeaders.first().click();
-      await page.waitForTimeout(1000);
+      // Wait for sort API response
+      await page.waitForResponse(resp => resp.url().includes('/customers') && resp.status() === 200);
 
       const sortRequest = apiHelper.getLastApiRequest('/customers');
       if (sortRequest) {
@@ -141,13 +147,17 @@ test.describe('Customers Entity Management', () => {
         const trigger = page.locator(selector).first();
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          // Check for modal or navigation
-          const detailVisible = await page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]').isVisible({ timeout: 2000 });
-          const urlChanged = page.url().includes('/customer') && !page.url().endsWith('/customers');
-
-          expect(detailVisible || urlChanged).toBeTruthy();
+          // Wait for either a modal to appear or URL to change
+          const detailModal = page.locator('[role="dialog"], .modal, [data-testid*="modal"], [data-testid*="details"]');
+          try {
+            await detailModal.waitFor({ state: 'visible', timeout: 3000 });
+            expect(true).toBeTruthy();
+          } catch {
+            // If no modal, check if URL changed to a detail page
+            const urlChanged = page.url().includes('/customer') && !page.url().endsWith('/customers');
+            expect(urlChanged).toBeTruthy();
+          }
           break;
         }
       } catch {
@@ -173,10 +183,15 @@ test.describe('Customers Entity Management', () => {
         const trigger = page.locator(selector);
         if (await trigger.isVisible({ timeout: 2000 })) {
           await trigger.click();
-          await page.waitForTimeout(1000);
 
-          // Check for form modal or navigation to create page
-          const formVisible = await page.locator('form, [role="dialog"], .modal').isVisible({ timeout: 2000 });
+          // Wait for form modal or navigation to create page
+          const formLocator = page.locator('form, [role="dialog"], .modal');
+          try {
+            await formLocator.waitFor({ state: 'visible', timeout: 3000 });
+          } catch {
+            // May have navigated to create page instead
+          }
+          const formVisible = await formLocator.isVisible();
           const createPageVisible = page.url().includes('/create') || page.url().includes('/new');
 
           if (formVisible || createPageVisible) {
@@ -206,7 +221,8 @@ test.describe('Customers Entity Management', () => {
       const nextButton = page.locator('button:has-text("Next"), button:has-text(">")').first();
       if (await nextButton.isVisible({ timeout: 1000 })) {
         await nextButton.click();
-        await page.waitForTimeout(1000);
+        // Wait for pagination API response
+        await page.waitForResponse(resp => resp.url().includes('/customers') && resp.status() === 200);
 
         const pageRequest = apiHelper.getLastApiRequest('/customers');
         if (pageRequest) {

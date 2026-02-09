@@ -9,9 +9,9 @@ test.describe('Simple Authentication Tests', () => {
     await page.waitForSelector('form');
 
     // Fill in the admin credentials
-    const usernameInput = page.locator('input[placeholder="Gebruikersnaam"]');
-    const passwordInput = page.locator('input[placeholder="Wachtwoord"]');
-    const submitButton = page.locator('button[type="submit"]');
+    const usernameInput = page.getByTestId('username-input');
+    const passwordInput = page.getByTestId('password-input');
+    const submitButton = page.getByTestId('login-submit');
 
     // Verify form elements are visible
     await expect(usernameInput).toBeVisible();
@@ -25,8 +25,11 @@ test.describe('Simple Authentication Tests', () => {
     // Submit the form
     await submitButton.click();
 
-    // Wait for some response (either success or error)
-    await page.waitForTimeout(3000);
+    // Wait for login response: either redirect away from login or error message appears
+    await Promise.race([
+      page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 }),
+      page.locator('.text-destructive, .error, [data-testid="error"]').first().waitFor({ state: 'visible', timeout: 10000 }),
+    ]).catch(() => {});
 
     // Check what happened
     const currentUrl = page.url();
@@ -73,9 +76,9 @@ test.describe('Simple Authentication Tests', () => {
     await page.waitForSelector('form');
 
     // Fill in invalid credentials
-    const usernameInput = page.locator('input[placeholder="Gebruikersnaam"]');
-    const passwordInput = page.locator('input[placeholder="Wachtwoord"]');
-    const submitButton = page.locator('button[type="submit"]');
+    const usernameInput = page.getByTestId('username-input');
+    const passwordInput = page.getByTestId('password-input');
+    const submitButton = page.getByTestId('login-submit');
 
     await usernameInput.fill('invalid@user.com');
     await passwordInput.fill('wrongpassword');
@@ -83,8 +86,11 @@ test.describe('Simple Authentication Tests', () => {
     // Submit the form
     await submitButton.click();
 
-    // Wait for response
-    await page.waitForTimeout(3000);
+    // Wait for login response: either error message or redirect
+    await Promise.race([
+      page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 }),
+      page.locator('.text-destructive, .error, [data-testid="error"]').first().waitFor({ state: 'visible', timeout: 10000 }),
+    ]).catch(() => {});
 
     // Should either stay on login page or show error
     const currentUrl = page.url();
