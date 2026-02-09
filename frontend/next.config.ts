@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
+// Only relax CSP for local dev and CI test runners — staging/production stay strict
+const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   eslint: {
@@ -42,7 +45,9 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self'",
+              // Next.js dev mode requires 'unsafe-inline' and 'unsafe-eval' for hot reload and hydration.
+              // Production builds should use nonces via middleware for stricter CSP.
+              isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'",
               "style-src 'self' 'unsafe-inline'", // inline styles needed for component libraries (shadcn/ui, Radix)
               "img-src 'self' data: blob:",
               "font-src 'self'",
