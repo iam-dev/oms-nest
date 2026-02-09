@@ -16,11 +16,14 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AccessFilterGroupService } from "./access-filter-group.service";
 import { CreateAccessFilterGroupDto } from "./dto/create-access-filter-group.dto";
 import { UpdateAccessFilterGroupDto } from "./dto/update-access-filter-group.dto";
@@ -32,8 +35,9 @@ import { AccessFilterGroupEntity } from "./infrastructure/persistence/relational
   path: "access-filter-groups",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class AccessFilterGroupController {
   constructor(private readonly service: AccessFilterGroupService) {}
 

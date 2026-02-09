@@ -15,10 +15,14 @@ test.describe('Warehouses Entity Management', () => {
     await authHelper.waitForPageLoad();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should list warehouses via API', async ({ page }) => {
     const response = await page.request.get('http://localhost:3001/api/v1/warehouses', {
       headers: {
-        'Authorization': `Bearer ${await authHelper.getAuthToken()}`
+        'Cookie': `token=${await authHelper.getAuthToken()}`
       }
     });
 
@@ -78,9 +82,15 @@ test.describe('Warehouses Entity Management', () => {
           const trigger = page.locator(selector);
           if (await trigger.isVisible({ timeout: 2000 })) {
             await trigger.click();
-            await page.waitForTimeout(1000);
 
-            const formVisible = await page.locator('form, [role="dialog"], .modal').isVisible({ timeout: 2000 });
+            // Wait for form modal to appear
+            const formLocator = page.locator('form, [role="dialog"], .modal');
+            try {
+              await formLocator.waitFor({ state: 'visible', timeout: 3000 });
+            } catch {
+              // May have navigated to create page instead
+            }
+            const formVisible = await formLocator.isVisible();
             if (formVisible) {
               const nameInput = page.locator('input[name="name"], input[placeholder*="name" i]');
               expect(await nameInput.isVisible({ timeout: 2000 })).toBeTruthy();

@@ -16,10 +16,13 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { OrderProductSaddleService } from "./order-product-saddle.service";
 import { CreateOrderProductSaddleDto } from "./dto/create-order-product-saddle.dto";
 import { UpdateOrderProductSaddleDto } from "./dto/update-order-product-saddle.dto";
@@ -37,8 +40,9 @@ import { OrderProductSaddleDto } from "./dto/order-product-saddle.dto";
   path: "order_product_saddles",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderProductSaddleController {
   constructor(
     private readonly orderProductSaddleService: OrderProductSaddleService,

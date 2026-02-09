@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { CommentsService } from "./comments.service";
@@ -25,6 +25,9 @@ import { UpdateCommentDto } from "./dto/update-comment.dto";
 import { QueryCommentDto } from "./dto/query-comment.dto";
 import { CommentDto } from "./dto/comment.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * Comment REST API Controller
@@ -38,8 +41,9 @@ import { AuthGuard } from "@nestjs/passport";
   path: "comments",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 

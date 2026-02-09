@@ -14,6 +14,10 @@ test.describe('Authentication Flow', () => {
     await authHelper.logout();
   });
 
+  test.afterEach(async () => {
+    await authHelper.logout();
+  });
+
   test('should login successfully with valid admin credentials', async ({ page }) => {
     // Login as admin
     await authHelper.login(TEST_USERS.admin);
@@ -34,14 +38,17 @@ test.describe('Authentication Flow', () => {
     await page.goto('/login');
 
     // Fill in invalid credentials
-    await page.fill('input[placeholder="Gebruikersnaam"]', 'invalid@user.com');
-    await page.fill('input[placeholder="Wachtwoord"]', 'wrongpassword');
+    await page.getByTestId('username-input').fill('invalid@user.com');
+    await page.getByTestId('password-input').fill('wrongpassword');
 
     // Submit form
     await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
 
-    // Should remain on login page or show error
-    await page.waitForTimeout(2000); // Give time for error to appear
+    // Wait for error to appear (invalid credentials should stay on login)
+    await Promise.race([
+      page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 5000 }),
+      page.locator('.error, .alert, [data-testid="error"]').first().waitFor({ state: 'visible', timeout: 5000 }),
+    ]).catch(() => {});
     const currentUrl = page.url();
     expect(currentUrl).toMatch(/\/login/);
 
@@ -149,7 +156,7 @@ test.describe('Authentication Flow', () => {
 
       // Fitter should have restricted access to admin pages
       await page.goto('/users');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // Fitter should be redirected away from /users
       const finalUrl = page.url();

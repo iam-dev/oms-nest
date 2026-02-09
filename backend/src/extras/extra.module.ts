@@ -1,13 +1,17 @@
 import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
 import { ExtraService } from "./extra.service";
 import { ExtraController } from "./extra.controller";
-import { ExtraEntity } from "./infrastructure/persistence/relational/entities/extra.entity";
+import { ExtraRelationalPersistenceModule } from "./infrastructure/persistence/relational/relational-persistence.module";
 
+/**
+ * Extra Module
+ *
+ * Orchestrates all extra-related functionality following hexagonal architecture.
+ */
 @Module({
-  imports: [TypeOrmModule.forFeature([ExtraEntity])],
+  imports: [ExtraRelationalPersistenceModule],
   controllers: [ExtraController],
   providers: [ExtraService],
-  exports: [ExtraService, TypeOrmModule],
+  exports: [ExtraService],
 })
 export class ExtraModule {}

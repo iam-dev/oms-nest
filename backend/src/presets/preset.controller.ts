@@ -10,9 +10,12 @@ import {
   ParseIntPipe,
   Query,
 } from "@nestjs/common";
-import { ApiTags, ApiBearerAuth } from "@nestjs/swagger";
+import { ApiTags, ApiCookieAuth } from "@nestjs/swagger";
 import { PresetService } from "./preset.service";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AuditLog } from "../audit-logging/decorators";
 
 @ApiTags("Presets")
@@ -20,8 +23,9 @@ import { AuditLog } from "../audit-logging/decorators";
   path: "presets",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class PresetController {
   constructor(private readonly presetService: PresetService) {}
 

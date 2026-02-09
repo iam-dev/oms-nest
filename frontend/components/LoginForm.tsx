@@ -85,6 +85,8 @@ export function LoginForm() {
     >
       <div className="flex flex-col gap-[18px]">
         <input
+          type="text"
+          data-testid="username-input"
           value={username}
           onChange={e => setUsername(e.target.value)}
           placeholder="Gebruikersnaam"
@@ -94,6 +96,7 @@ export function LoginForm() {
         />
         <input
           type="password"
+          data-testid="password-input"
           value={password}
           onChange={e => setPassword(e.target.value)}
           placeholder="Wachtwoord"
@@ -101,9 +104,10 @@ export function LoginForm() {
           required
           className="border-2 border-primary rounded-md px-3 py-2 text-base mb-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
-        <button 
-          type="submit" 
-          className="bg-primary text-white font-semibold border-none rounded-md py-3 text-lg mt-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+        <button
+          type="submit"
+          data-testid="login-submit"
+          className="bg-primary text-white font-semibold border-none rounded-md py-3 text-lg mt-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={loading}
         >
           {loading ? 'Inloggen...' : 'Login'}

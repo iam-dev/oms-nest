@@ -1,4 +1,5 @@
 import { fetchEntities } from './api';
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Preset {
@@ -82,44 +83,7 @@ export async function fetchPresets({
   });
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 export async function createPreset(presetData: Partial<Preset>): Promise<Preset> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -160,7 +124,6 @@ export async function createPreset(presetData: Partial<Preset>): Promise<Preset>
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -180,8 +143,6 @@ export async function createPreset(presetData: Partial<Preset>): Promise<Preset>
 }
 
 export async function updatePreset(id: string, presetData: Partial<Preset>): Promise<Preset> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Create BreezeJS-style entity with the correct format for the backend
   const entity = {
@@ -223,7 +184,6 @@ export async function updatePreset(id: string, presetData: Partial<Preset>): Pro
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(saveBundle),
@@ -243,14 +203,10 @@ export async function updatePreset(id: string, presetData: Partial<Preset>): Pro
 }
 
 export async function deletePreset(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
-
   const response = await fetch(`${API_URL}/presets/${id}`, {
     method: 'DELETE',
     headers: {
-      'Accept': 'application/ld+json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Accept': 'application/json',
     },
     credentials: 'include',
   });

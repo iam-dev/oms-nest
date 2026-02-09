@@ -492,20 +492,13 @@ let authToken: string;
 let apiContext: any;
 
 test.beforeEach(async () => {
-  const loginResponse = await apiContext.post('/auth/email/login', {
+  // Login — server sets httpOnly auth cookie via Set-Cookie header
+  await apiContext.post('/auth/email/login', {
     data: { email: 'admin@example.com', password: 'secret' }
   });
 
-  const loginData = await loginResponse.json();
-  authToken = loginData.token;
-
-  // Update context with auth header
-  apiContext = await request.newContext({
-    baseURL: 'http://localhost:3001',
-    extraHTTPHeaders: {
-      'Authorization': `Bearer ${authToken}`
-    }
-  });
+  // Playwright's APIRequestContext automatically stores and sends cookies
+  // No manual Authorization header needed
 });
 ```
 

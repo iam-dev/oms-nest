@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
 } from "@nestjs/swagger";
@@ -25,6 +25,9 @@ import { CreateOptionDto } from "./dto/create-option.dto";
 import { UpdateOptionDto } from "./dto/update-option.dto";
 import { OptionDto } from "./dto/option.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * Option REST API Controller
@@ -37,8 +40,9 @@ import { AuthGuard } from "@nestjs/passport";
   path: "options",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OptionController {
   constructor(private readonly optionService: OptionService) {}
 

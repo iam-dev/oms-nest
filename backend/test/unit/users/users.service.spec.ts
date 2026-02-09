@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { UnprocessableEntityException } from "@nestjs/common";
+import { Logger, UnprocessableEntityException } from "@nestjs/common";
 import { UsersService } from "../../../src/users/users.service";
 import { UserRepository } from "../../../src/users/infrastructure/persistence/user.repository";
 import { FilesService } from "../../../src/files/files.service";
@@ -583,34 +583,37 @@ describe("UsersService", () => {
   describe("validateLoginSecurity", () => {
     it("should validate login security", async () => {
       // Arrange
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+      const loggerSpy = jest
+        .spyOn(Logger.prototype, "log")
+        .mockImplementation();
 
       // Act
       await service.validateLoginSecurity(1, "192.168.1.1");
 
       // Assert
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringContaining("Validating login security"),
       );
-      consoleSpy.mockRestore();
+      loggerSpy.mockRestore();
     });
   });
 
   describe("recordLoginAttempt", () => {
     it("should record login attempt", async () => {
       // Arrange
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+      const loggerSpy = jest
+        .spyOn(Logger.prototype, "log")
+        .mockImplementation();
       const attemptData = { userId: 1, ipAddress: "192.168.1.1" };
 
       // Act
       await service.recordLoginAttempt(attemptData);
 
       // Assert
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringContaining("Recording login attempt"),
-        attemptData,
       );
-      consoleSpy.mockRestore();
+      loggerSpy.mockRestore();
     });
   });
 

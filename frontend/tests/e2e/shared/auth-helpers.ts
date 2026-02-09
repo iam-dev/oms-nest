@@ -34,15 +34,18 @@ export class AuthHelper {
     // Wait for login form
     await expect(this.page.locator('form')).toBeVisible();
 
-    // Fill in credentials (using placeholder text as the form doesn't use name attributes)
-    await this.page.fill('input[placeholder="Gebruikersnaam"]', user.username);
-    await this.page.fill('input[placeholder="Wachtwoord"]', user.password);
+    // Fill in credentials using data-testid attributes
+    await this.page.getByTestId('username-input').fill(user.username);
+    await this.page.getByTestId('password-input').fill(user.password);
 
     // Submit form
     await this.page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
 
-    // Wait for response (either success redirect or error message)
-    await this.page.waitForTimeout(3000);
+    // Wait for login response: either redirect away from login or error message appears
+    await Promise.race([
+      this.page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 }),
+      this.page.locator('.text-destructive, .error, [data-testid="error"]').first().waitFor({ state: 'visible', timeout: 10000 }),
+    ]).catch(() => {});
 
     // Check if login was successful (redirected away from login page)
     const currentUrl = this.page.url();
@@ -114,19 +117,11 @@ export class AuthHelper {
 
   async isLoggedIn(): Promise<boolean> {
     try {
-      // Check for authentication token in localStorage
-      const token = await this.page.evaluate(() => {
-        try {
-          return localStorage.getItem('auth_token') ||
-                 localStorage.getItem('token') ||
-                 document.cookie.includes('token=');
-        } catch (e) {
-          // If localStorage is not accessible, assume not logged in
-          return null;
-        }
-      });
+      // Check for authentication cookie
+      const cookies = await this.page.context().cookies();
+      const hasTokenCookie = cookies.some(c => c.name === 'token');
 
-      if (!token) return false;
+      if (!hasTokenCookie) return false;
 
       // Check if we're not on login page
       const currentUrl = this.page.url();
@@ -143,15 +138,9 @@ export class AuthHelper {
   }
 
   async getAuthToken(): Promise<string | null> {
-    return await this.page.evaluate(() => {
-      try {
-        const stored = localStorage.getItem('auth_token');
-        return stored && stored !== 'null' ? JSON.parse(stored) : null;
-      } catch {
-        // If localStorage is not accessible or JSON parsing fails
-        return null;
-      }
-    });
+    const cookies = await this.page.context().cookies();
+    const tokenCookie = cookies.find(c => c.name === 'token');
+    return tokenCookie?.value ?? null;
   }
 
   async waitForPageLoad(): Promise<void> {

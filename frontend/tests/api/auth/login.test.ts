@@ -121,7 +121,7 @@ describe('Authentication API', () => {
     }, TEST_TIMEOUTS.NORMAL);
 
     it('should reject requests with malformed token', async () => {
-      apiClient.setAuthToken('Bearer malformed.token.here');
+      apiClient.setAuthToken('malformed.token.here');
 
       try {
         await apiClient.get('/v1/users');

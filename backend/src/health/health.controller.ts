@@ -8,8 +8,10 @@ import {
 } from "@nestjs/terminus";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { RedisHealthIndicator } from "./redis-health.indicator";
+import { SkipRlsContext } from "../rls/rls.guard";
 
 @ApiTags("health")
+@SkipRlsContext()
 @Controller("health")
 export class HealthController {
   constructor(

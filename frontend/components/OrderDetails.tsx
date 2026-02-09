@@ -20,6 +20,7 @@ import { EditOrder } from './EditOrder';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
 import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
+import { API_URL } from '@/services/api-config';
 
 interface OrderDetailsProps {
   order: {
@@ -29,23 +30,6 @@ interface OrderDetailsProps {
     orderStatus?: string;
   };
   onClose: () => void;
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-function getToken() {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') return JSON.parse(stored);
-    } catch { /* fallback */ }
-    const cookies = document.cookie.split(';');
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') return value;
-    }
-  }
-  return null;
 }
 
 function formatOrderDate(orderTime: string | null): string {
@@ -213,13 +197,12 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
 
     setStatusChanging(true);
     try {
-      const token = getToken();
       const response = await fetch(`${API_URL}/api/v1/enriched_orders/update-status/${orderId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify({ status: orderStatus }),
       });
 
@@ -229,8 +212,8 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+          credentials: 'include',
           body: JSON.stringify({ status: orderStatus }),
         });
         if (!fallbackResponse.ok) {

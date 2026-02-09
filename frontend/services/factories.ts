@@ -1,3 +1,4 @@
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Factory {
@@ -24,49 +25,11 @@ interface NestJSFactoriesResponse {
   pages: number;
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 /**
  * Fetch all factories for dropdown/lookup
  */
 export async function fetchFactories(): Promise<FactoriesResponse> {
   logger.log('fetchFactories: Fetching factories');
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
 
   // Get all factories for dropdown
   const params = new URLSearchParams();
@@ -78,7 +41,6 @@ export async function fetchFactories(): Promise<FactoriesResponse> {
     headers: {
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
   });

@@ -14,12 +14,15 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
   ApiBody,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AuditLoggingService } from "./audit-logging.service";
 import { CreateAuditLogDto } from "./dto/create-audit-log.dto";
 import { AuditLogDto } from "./dto/audit-log.dto";
@@ -40,8 +43,9 @@ import { PaginatedResponseDto } from "../common/dto/base-query.dto";
   path: "audit-logs",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt")) // TODO: Add admin role guard when implemented
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class AuditLoggingController {
   constructor(private readonly auditLoggingService: AuditLoggingService) {}
 

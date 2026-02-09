@@ -9,9 +9,12 @@ import {
   UseGuards,
   Query,
 } from "@nestjs/common";
-import { ApiTags, ApiBearerAuth, ApiQuery } from "@nestjs/swagger";
+import { ApiTags, ApiCookieAuth, ApiQuery } from "@nestjs/swagger";
 import { ExtraService } from "./extra.service";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { CreateExtraDto } from "./dto/create-extra.dto";
 import { UpdateExtraDto } from "./dto/update-extra.dto";
 import { AuditLog } from "../audit-logging/decorators";
@@ -21,8 +24,9 @@ import { AuditLog } from "../audit-logging/decorators";
   path: "extras",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class ExtraController {
   constructor(private readonly extraService: ExtraService) {}
 

@@ -59,36 +59,20 @@ const roleMap: Record<string, string[]> = {
   '/find-saddle': ['admin', 'user', 'supervisor', 'fitter'],
 };
 
-// Use the same hardcoded JWT secret that the PHP backend uses
-// This matches the SIGNER_KEY in api/src/Security/JwtHelper.php line 28
-const JWT_SECRET = '0c5853eea5701a7c505c3915c6efab21b966db94ac04b6f127a0f2d0973cbb1aebf5a129185bf3edf3dc9d0503e7e045ff941301e0012e44daeb2bca36bcf89f';
+const JWT_SECRET = process.env.JWT_SECRET || '';
 
 export async function middleware(request: NextRequest) {
-  // Check for token in cookies first, then authorization header
-  let token = request.cookies.get('token')?.value;
-
-  // If no cookie token, check Authorization header
-  if (!token) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    }
-  }
+  // Token is stored as httpOnly cookie by the backend
+  const token = request.cookies.get('token')?.value;
 
   const { pathname } = request.nextUrl;
-  const cookies = request.cookies.getAll();
-  const cookieNames = cookies.map(c => c.name).join(', ');
 
-  logger.log('🔑 Middleware: Processing request for:', pathname);
-  logger.log('🔑 Middleware: Token present:', token ? 'YES' : 'NO');
-  logger.log('🔑 Middleware: All cookies:', cookieNames);
-  logger.log('🔑 Middleware: Request method:', request.method);
-  logger.log('🔑 Middleware: User agent:', request.headers.get('user-agent')?.substring(0, 50));
+  logger.log('Middleware: path:', pathname, '| token:', token ? 'present' : 'absent');
   
   // Public routes that don't require authentication
   const publicPaths = ['/login', '/api/login', '/_next', '/favicon.ico', '/public'];
   if (publicPaths.some(path => pathname.startsWith(path))) {
-    logger.log('🔑 Middleware: Public path, allowing access');
+    logger.log('Middleware: public path, allowing');
     return NextResponse.next();
   }
 
@@ -99,27 +83,39 @@ export async function middleware(request: NextRequest) {
   if (isClientNavigation && !token) {
     // For client navigation without cookie token, allow the request to proceed
     // The client-side AuthContext will handle the redirect if needed
-    logger.log('🔑 Middleware: Client navigation without cookie, allowing for client-side auth check');
+    logger.log('Middleware: client navigation without cookie, deferring to client auth');
     return NextResponse.next();
   }
 
   // Only check for protected routes
   const protectedPath = Object.keys(roleMap).find(path => pathname.startsWith(path));
-  logger.log('🔑 Middleware: Protected path found:', protectedPath);
+  logger.log('Middleware: protected path:', protectedPath || 'none');
   
   if (protectedPath) {
-    // Decode token to extract role (without signature verification)
-    // FIXME: Re-enable full JWT verification once signature mismatch is resolved
-    const payload = token ? decodeJwtPayload(token) : null;
+    // Verify token signature and extract role
+    let payload: JwtPayload | null = null;
+    if (token) {
+      if (JWT_SECRET) {
+        payload = await verifyJwt(token);
+        if (!payload) {
+          logger.log('Middleware: JWT verification failed, redirecting to login');
+          return NextResponse.redirect(new URL('/login', request.url));
+        }
+      } else {
+        // Fallback to decode-only when JWT_SECRET is not configured (dev without env)
+        logger.log('Middleware: JWT_SECRET not set, falling back to decode-only');
+        payload = decodeJwtPayload(token);
+      }
+    }
     const userRole = typeof payload?.role === 'object' && payload.role
       ? (payload.role as any).name?.toLowerCase()
       : undefined;
 
-    logger.log('🔑 Middleware: Decoded role:', userRole);
+    logger.log('Middleware: role:', userRole || 'none');
 
     const allowedRoles = roleMap[protectedPath];
     if (allowedRoles && userRole && !allowedRoles.includes(userRole)) {
-      logger.log('🔑 Middleware: Role not allowed for path:', protectedPath, 'role:', userRole);
+      logger.log('Middleware: access denied for path:', protectedPath);
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 

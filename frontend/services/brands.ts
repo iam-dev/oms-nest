@@ -1,3 +1,4 @@
+import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Brand {
@@ -28,41 +29,6 @@ interface NestJSBrandsResponse {
   pages: number;
 }
 
-function getToken() {
-  if (typeof window !== 'undefined') {
-    // Try to get token from auth_token first (Jotai store)
-    try {
-      const stored = localStorage.getItem('auth_token');
-      if (stored && stored !== 'null') {
-        const parsedToken = JSON.parse(stored);
-        return parsedToken;
-      }
-    } catch (e) {
-      // Fallback to token key
-    }
-
-    // Check localStorage for 'token' key
-    try {
-      const token = localStorage.getItem('token');
-      if (token && token !== 'null') {
-        return token;
-      }
-    } catch (e) {
-      // Continue to cookies
-    }
-
-    // Fallback to cookies
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'token') {
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
 /**
  * Fetch brands from the NestJS backend
  */
@@ -81,8 +47,7 @@ export async function fetchBrands({
 } = {}): Promise<BrandsResponse> {
   logger.log('fetchBrands: Called with params:', { page, searchTerm, filters, orderBy, order });
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
+
 
   // Build query parameters
   const params = new URLSearchParams();
@@ -101,7 +66,6 @@ export async function fetchBrands({
     headers: {
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
   });
@@ -131,8 +95,7 @@ export async function fetchBrands({
 }
 
 export async function createBrand(brandData: Partial<Brand>): Promise<Brand> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
+
 
   logger.log('Creating brand with data:', brandData);
 
@@ -141,7 +104,6 @@ export async function createBrand(brandData: Partial<Brand>): Promise<Brand> {
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(brandData),
@@ -164,8 +126,7 @@ export async function createBrand(brandData: Partial<Brand>): Promise<Brand> {
 }
 
 export async function updateBrand(id: string, brandData: Partial<Brand>): Promise<Brand> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
+
 
   logger.log('Updating brand with ID:', id, 'Data:', brandData);
 
@@ -174,7 +135,6 @@ export async function updateBrand(id: string, brandData: Partial<Brand>): Promis
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(brandData),
@@ -197,8 +157,7 @@ export async function updateBrand(id: string, brandData: Partial<Brand>): Promis
 }
 
 export async function deleteBrand(id: string): Promise<void> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const token = getToken();
+
 
   logger.log('Deleting brand with ID:', id);
 
@@ -206,7 +165,6 @@ export async function deleteBrand(id: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Accept': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
   });

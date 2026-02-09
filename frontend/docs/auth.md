@@ -4,20 +4,20 @@ This guide covers the authentication and authorization system in the OMS fronten
 
 ## 🔐 Authentication Overview
 
-The OMS frontend uses JWT (JSON Web Token) based authentication with role-based access control supporting five distinct user roles in the saddle manufacturing workflow.
+The OMS frontend uses JWT (JSON Web Token) based authentication with httpOnly cookies and role-based access control supporting five distinct user roles in the saddle manufacturing workflow.
 
 ### Authentication Flow
 
 ```
-1. User Login (username/password)
+1. User Login (username/password) with credentials: 'include'
         ↓
 2. Backend Validation
         ↓
 3. JWT Token Generation
         ↓
-4. Token Storage (localStorage)
+4. Server sets httpOnly secure cookie (Set-Cookie: token=...)
         ↓
-5. Automatic Header Injection
+5. Browser sends cookie automatically on subsequent requests
         ↓
 6. Route & Component Protection
 ```
@@ -81,73 +81,37 @@ const rolePermissions = {
 
 ### Authentication Atoms
 
-The authentication state is managed using Jotai atoms in `store/auth.ts`:
+The authentication state is managed using Jotai atoms in `store/auth.ts`. Since tokens are stored in httpOnly cookies (not accessible from JS), the frontend only tracks user presence in memory:
 
 ```typescript
-// Core authentication state
-export const tokenAtom = atomWithStorage<string | null>('auth_token', null);
+// Core authentication state — memory-only, no localStorage
 export const userAtom = atom<User | null>(null);
 export const isAuthLoadingAtom = atom<boolean>(false);
 
-// Persistent user info for navigation
-export const userBasicInfoAtom = atomWithStorage<{
-  id: string;
-  username: string;
-  role: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-} | null>('auth_user', null);
-
-// Derived authentication status
+// Derived authentication status — based on user presence, not token
 export const isAuthenticatedAtom = atom((get) => {
-  const token = get(tokenAtom);
   const user = get(userAtom);
-  const userBasicInfo = get(userBasicInfoAtom);
-
-  return !!(token && (user || userBasicInfo));
+  return !!user;
 });
 ```
 
 ### Authentication Actions
 
 ```typescript
-// Login action atom
+// Login action atom — stores user in memory, token is in httpOnly cookie
 export const loginActionAtom = atom(
   null,
-  (get, set, { token, user }: { token: string; user: User }) => {
-    console.log('🔧 Setting token and user:', {
-      token: token ? 'present' : 'missing',
-      user
-    });
-
-    // Store token
-    set(tokenAtom, token);
-
-    // Store full user data
+  (get, set, { user }: { user: User }) => {
     set(userAtom, user);
-
-    // Store basic info for persistence
-    set(userBasicInfoAtom, {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-    });
-
     set(isAuthLoadingAtom, false);
   }
 );
 
-// Logout action atom
+// Logout action atom — clears memory state, cookie cleared by server
 export const logoutActionAtom = atom(
   null,
   (get, set) => {
-    set(tokenAtom, null);
     set(userAtom, null);
-    set(userBasicInfoAtom, null);
     set(isAuthLoadingAtom, false);
   }
 );
@@ -170,11 +134,12 @@ export interface AuthResponse {
 }
 
 export const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/email/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
+    credentials: 'include', // Required for cookie auth
     body: JSON.stringify(credentials),
   });
 
@@ -183,97 +148,40 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
     throw new Error(error.message || 'Login failed');
   }
 
+  // Server sets httpOnly cookie automatically via Set-Cookie header
   return response.json();
 };
 
 export const logout = async (): Promise<void> => {
-  const token = localStorage.getItem('token');
-
-  if (token) {
-    try {
-      await fetch(`${API_BASE_URL}/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-    } catch (error) {
-      console.error('Logout request failed:', error);
-    }
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: 'POST',
+      credentials: 'include', // Cookie sent automatically
+    });
+  } catch (error) {
+    console.error('Logout request failed:', error);
   }
-
-  // Clear local storage regardless of API call success
-  localStorage.removeItem('token');
-  localStorage.removeItem('auth_user');
+  // Server clears the httpOnly cookie via Set-Cookie
 };
 ```
 
 ### Token Management
 
+With httpOnly cookies, the token is managed entirely by the server. The frontend cannot read or modify the JWT directly. This is more secure as it prevents XSS attacks from accessing tokens.
+
 ```typescript
-// Token utilities
-export const getToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const stored = localStorage.getItem('auth_token');
-    if (stored && stored !== 'null') {
-      return JSON.parse(stored);
-    }
-  } catch (error) {
-    console.error('Error parsing stored token:', error);
-  }
-
-  return localStorage.getItem('token');
-};
-
-export const setToken = (token: string): void => {
-  localStorage.setItem('token', token);
-  localStorage.setItem('auth_token', JSON.stringify(token));
-};
-
-export const clearToken = (): void => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('auth_user');
-};
-
-// Token validation
-export const isTokenValid = (token: string): boolean => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const currentTime = Date.now() / 1000;
-
-    return payload.exp > currentTime;
-  } catch (error) {
-    return false;
-  }
-};
-
-// Token refresh
-export const refreshToken = async (): Promise<string> => {
-  const currentToken = getToken();
-
-  if (!currentToken) {
-    throw new Error('No token to refresh');
-  }
-
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+// Token refresh — uses httpOnly refreshToken cookie
+export const refreshToken = async (): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${currentToken}`,
-      'Content-Type': 'application/json',
-    },
+    credentials: 'include', // Sends refreshToken cookie
   });
 
   if (!response.ok) {
     throw new Error('Token refresh failed');
   }
 
-  const { token } = await response.json();
-  setToken(token);
-
-  return token;
+  // Server sets new token and refreshToken cookies automatically
 };
 ```
 
@@ -487,42 +395,29 @@ export const OrderActions = ({ order }: { order: Order }) => {
 
 ### Automatic Token Refresh
 
+With httpOnly cookies, the frontend cannot inspect token expiry directly. Instead, token refresh is handled by intercepting 401 responses:
+
 ```typescript
 // hooks/useTokenRefresh.ts
 export const useTokenRefresh = () => {
-  const [token] = useAtom(tokenAtom);
-  const setLoginAction = useSetAtom(loginActionAtom);
+  const setLogoutAction = useSetAtom(logoutActionAtom);
 
   useEffect(() => {
-    if (!token) return;
-
-    const checkAndRefreshToken = async () => {
+    // Periodically call /auth/refresh to keep the session alive
+    const refreshInterval = setInterval(async () => {
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const currentTime = Date.now() / 1000;
-        const timeUntilExpiry = payload.exp - currentTime;
-
-        // Refresh token when 5 minutes remaining
-        if (timeUntilExpiry < 300) {
-          const newToken = await refreshToken();
-          // Update user data if needed
-          const userResponse = await apiRequest<User>('/auth/me', {
-            headers: { Authorization: `Bearer ${newToken}` },
-          });
-          setLoginAction({ token: newToken, user: userResponse });
-        }
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-        // Logout user on refresh failure
+        await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch {
+        // Refresh failed — user will be logged out on next 401
         setLogoutAction();
       }
-    };
+    }, 10 * 60 * 1000); // Every 10 minutes
 
-    // Check every minute
-    const interval = setInterval(checkAndRefreshToken, 60000);
-
-    return () => clearInterval(interval);
-  }, [token, setLoginAction]);
+    return () => clearInterval(refreshInterval);
+  }, [setLogoutAction]);
 };
 ```
 
@@ -531,40 +426,19 @@ export const useTokenRefresh = () => {
 ```typescript
 // utils/sessionPersistence.ts
 export const restoreSession = async (): Promise<boolean> => {
-  const token = getToken();
-
-  if (!token || !isTokenValid(token)) {
-    clearToken();
-    return false;
-  }
-
   try {
-    // Validate token with backend and get fresh user data
-    const userResponse = await apiRequest<User>('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
+    // Validate session by calling /auth/me — cookie sent automatically
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+      credentials: 'include',
     });
 
-    // Update authentication state
-    const setLoginAction = getAtomValue(loginActionAtom);
-    setLoginAction({ token, user: userResponse });
+    if (!response.ok) return false;
 
-    return true;
-  } catch (error) {
-    console.error('Session restoration failed:', error);
-    clearToken();
+    const user = await response.json();
+    return !!user;
+  } catch {
     return false;
   }
-};
-
-// Call during app initialization
-export const initializeAuth = async () => {
-  const restored = await restoreSession();
-
-  if (!restored && window.location.pathname !== '/login') {
-    window.location.href = '/login';
-  }
-
-  return restored;
 };
 ```
 
@@ -664,38 +538,27 @@ export class AuthErrorBoundary extends Component<
 
 ### Token Security
 
+Tokens are stored in httpOnly secure cookies, which provides strong XSS protection since JavaScript cannot access them.
+
 ```typescript
 // Security configurations
 const SECURITY_CONFIG = {
-  TOKEN_STORAGE: 'localStorage', // Consider httpOnly cookies for production
-  TOKEN_PREFIX: 'Bearer ',
+  TOKEN_STORAGE: 'httpOnly cookie', // Set by server, not accessible from JS
   REFRESH_THRESHOLD: 300, // 5 minutes
   MAX_RETRY_ATTEMPTS: 3,
   LOGOUT_ON_ERROR: true,
 };
 
-// Secure token handling
+// Secure API request — cookies sent automatically
 export const secureApiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
-  let token = getToken();
-
-  // Validate token before use
-  if (!token || !isTokenValid(token)) {
-    try {
-      token = await refreshToken();
-    } catch (error) {
-      clearToken();
-      throw new AuthenticationError('Authentication required');
-    }
-  }
-
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
+    credentials: 'include', // Send cookies
     headers: {
       ...options.headers,
-      'Authorization': `${SECURITY_CONFIG.TOKEN_PREFIX}${token}`,
       'Content-Type': 'application/json',
     },
   });
@@ -703,10 +566,9 @@ export const secureApiRequest = async <T>(
   if (response.status === 401) {
     // Token might be expired, try refresh once
     try {
-      token = await refreshToken();
+      await refreshToken();
       return secureApiRequest<T>(endpoint, options);
-    } catch (refreshError) {
-      clearToken();
+    } catch {
       throw new AuthenticationError('Session expired');
     }
   }

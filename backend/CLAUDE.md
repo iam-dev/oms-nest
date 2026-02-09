@@ -113,7 +113,7 @@ DATABASE_NAME=oms_legacy
 
 - **Swagger UI**: `http://localhost:3001/docs`
 - **Health Check**: `http://localhost:3001/api/health`
-- **Bearer Auth**: JWT tokens required, obtain via `POST /api/v1/auth/email/login`
+- **Cookie Auth**: httpOnly JWT cookies, set via `POST /api/v1/auth/email/login`
 
 ## Testing
 

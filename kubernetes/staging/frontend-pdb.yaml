@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oms-frontend-pdb
+  namespace: oms-staging
+  labels:
+    app: oms-frontend
+    environment: staging
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: oms-frontend

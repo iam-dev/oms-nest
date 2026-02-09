@@ -10,18 +10,21 @@ import {
   Request,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
+import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import { SaddleStockService } from "./saddle-stock.service";
 import { QuerySaddleStockDto } from "./dto/query-saddle-stock.dto";
-import { RoleEnum } from "../roles/roles.enum";
 
 @ApiTags("Saddle Stock")
 @Controller({
   path: "saddle-stock",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class SaddleStockController {
   private readonly logger = new Logger(SaddleStockController.name);
 
@@ -81,23 +84,13 @@ export class SaddleStockController {
       );
 
       return {
-        "@context": "/api/contexts/SaddleStock",
-        "@type": "hydra:Collection",
-        "@id": `/api/v1/saddle-stock?type=${type}`,
-        "hydra:member": result.data,
-        "hydra:totalItems": result.total,
-        "hydra:view": {
-          "@id": `/api/v1/saddle-stock?type=${type}&page=${result.page}`,
-          "@type": "hydra:PartialCollectionView",
-          "hydra:first": `/api/v1/saddle-stock?type=${type}&page=1`,
-          "hydra:last": `/api/v1/saddle-stock?type=${type}&page=${result.pages}`,
-          ...(result.page < result.pages && {
-            "hydra:next": `/api/v1/saddle-stock?type=${type}&page=${result.page + 1}`,
-          }),
-          ...(result.page > 1 && {
-            "hydra:previous": `/api/v1/saddle-stock?type=${type}&page=${result.page - 1}`,
-          }),
-        },
+        data: result.data,
+        total: result.total,
+        pages: result.pages,
+        page: result.page,
+        limit: limit,
+        hasNext: result.page < result.pages,
+        hasPrev: result.page > 1,
       };
     } catch (error) {
       if (error instanceof HttpException) {

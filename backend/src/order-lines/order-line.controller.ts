@@ -16,10 +16,13 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
 } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { OrderLineService } from "./order-line.service";
 import { CreateOrderLineDto } from "./dto/create-order-line.dto";
 import { UpdateOrderLineDto } from "./dto/update-order-line.dto";
@@ -37,8 +40,9 @@ import { OrderLineDto } from "./dto/order-line.dto";
   path: "order-lines",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderLineController {
   constructor(private readonly orderLineService: OrderLineService) {}
 

@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiParam,
   ApiQuery,
 } from "@nestjs/swagger";
@@ -25,6 +25,9 @@ import { CreateFitterDto } from "./dto/create-fitter.dto";
 import { UpdateFitterDto } from "./dto/update-fitter.dto";
 import { FitterDto } from "./dto/fitter.dto";
 import { AuthGuard } from "@nestjs/passport";
+import { RolesGuard } from "../roles/roles.guard";
+import { Roles } from "../roles/roles.decorator";
+import { RoleEnum } from "../roles/roles.enum";
 import { AuditLog } from "../audit-logging/decorators";
 
 /**
@@ -38,8 +41,9 @@ import { AuditLog } from "../audit-logging/decorators";
   path: "fitters",
   version: "1",
 })
-@ApiBearerAuth()
-@UseGuards(AuthGuard("jwt"))
+@ApiCookieAuth("token")
+@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 export class FitterController {
   constructor(private readonly fitterService: FitterService) {}
 

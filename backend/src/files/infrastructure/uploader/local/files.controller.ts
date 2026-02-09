@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
-  ApiBearerAuth,
+  ApiCookieAuth,
   ApiBody,
   ApiConsumes,
   ApiCreatedResponse,
@@ -32,7 +32,7 @@ export class FilesLocalController {
   @ApiCreatedResponse({
     type: FileResponseDto,
   })
-  @ApiBearerAuth()
+  @ApiCookieAuth("token")
   @UseGuards(AuthGuard("jwt"))
   @Post("upload")
   @ApiConsumes("multipart/form-data")

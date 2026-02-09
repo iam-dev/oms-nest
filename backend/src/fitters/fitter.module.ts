@@ -2,17 +2,20 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { FitterService } from "./fitter.service";
 import { FitterController } from "./fitter.controller";
-import { FitterEntity } from "./infrastructure/persistence/relational/entities/fitter.entity";
+import { FitterRelationalPersistenceModule } from "./infrastructure/persistence/relational/relational-persistence.module";
 import { UserEntity } from "../users/infrastructure/persistence/relational/entities/user.entity";
 
 /**
  * Fitter Module
  *
- * Manages fitter-related functionality with simplified architecture.
- * Uses TypeORM repository directly for data access.
+ * Orchestrates all fitter-related functionality following hexagonal architecture.
+ * Imports UserEntity for cross-entity password update operations.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([FitterEntity, UserEntity])],
+  imports: [
+    FitterRelationalPersistenceModule,
+    TypeOrmModule.forFeature([UserEntity]),
+  ],
   controllers: [FitterController],
   providers: [FitterService],
   exports: [FitterService],
