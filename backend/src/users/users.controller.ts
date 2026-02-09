@@ -11,6 +11,7 @@ import {
   HttpStatus,
   HttpCode,
   SerializeOptions,
+  Logger,
 } from "@nestjs/common";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -46,6 +47,8 @@ import { AuditLog } from "../audit-logging/decorators";
   version: "1",
 })
 export class UsersController {
+  private readonly logger = new Logger(UsersController.name);
+
   constructor(private readonly usersService: UsersService) {}
 
   @ApiCreatedResponse({
@@ -78,6 +81,10 @@ export class UsersController {
       limit = 50;
     }
 
+    this.logger.log(
+      `findAll: page=${page}, limit=${limit}, sort=${JSON.stringify(query?.sort)}, filters=${JSON.stringify(query?.filters)}`,
+    );
+
     const [users, totalCount] = await Promise.all([
       this.usersService.findManyWithPagination({
         filterOptions: query?.filters,
@@ -90,16 +97,28 @@ export class UsersController {
       this.usersService.count(query?.filters),
     ]);
 
+    this.logger.log(
+      `findAll: fetched ${users.length} users, totalCount=${totalCount}`,
+    );
+
     // Populate typeName (role) for each user
     const usersWithRoles = await Promise.all(
       users.map(async (user) => {
-        const role = await this.usersService.getUserRole(
-          user.legacyId ?? user.id,
-          user.username,
-          user.userType,
-          user.isSupervisor,
-        );
-        user.typeName = role.name;
+        try {
+          const userId = user.legacyId ?? user.id;
+          const role = await this.usersService.getUserRole(
+            userId,
+            user.username,
+            user.userType,
+            user.isSupervisor,
+          );
+          user.typeName = role.name;
+        } catch (error) {
+          this.logger.warn(
+            `getUserRole failed for user ${user.username} (id=${user.id}, legacyId=${user.legacyId}): ${error}`,
+          );
+          user.typeName = "user";
+        }
         return user;
       }),
     );
