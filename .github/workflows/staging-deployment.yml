@@ -439,8 +439,20 @@ jobs:
               'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT (user_name) DO UPDATE SET password_hash = EXCLUDED.password_hash, blocked = 0, deleted = 0',
               ['e2e-fitter@test.com', fitterHash, 'E2E Fitter', 1]
             );
+            // Create fitters table entry so getUserRole() resolves user_type=1 correctly
+            const fitterResult = await c.query(
+              'SELECT user_id FROM credentials WHERE user_name = \$1',
+              ['e2e-fitter@test.com']
+            );
+            const fitterUserId = fitterResult.rows[0].user_id;
+            await c.query(
+              \`INSERT INTO fitters (user_id, deleted, address, zipcode, state, city, country, phone_no, cell_no, currency, emailaddress)
+               VALUES (\$1, 0, '', '', '', '', '', '', '', 1, 'e2e-fitter@test.com')
+               ON CONFLICT DO NOTHING\`,
+              [fitterUserId]
+            );
             await c.end();
-            console.log('E2E test users created/updated with random passwords');
+            console.log('E2E test users created/updated with random passwords (including fitters entry)');
           })().catch(e => { console.error('Failed to create test users:', e.message); process.exit(1); });
         "
 
@@ -478,6 +490,15 @@ jobs:
           });
           (async () => {
             await c.connect();
+            // Clean up fitters entry first (references credentials.user_id)
+            const fitterResult = await c.query(
+              'SELECT user_id FROM credentials WHERE user_name = \$1',
+              ['e2e-fitter@test.com']
+            );
+            if (fitterResult.rows.length > 0) {
+              await c.query('DELETE FROM fitters WHERE user_id = \$1', [fitterResult.rows[0].user_id]);
+              console.log('Deleted fitters entry for e2e-fitter');
+            }
             const result = await c.query(
               'DELETE FROM credentials WHERE user_name IN (\$1, \$2)',
               ['e2e-admin@test.com', 'e2e-fitter@test.com']

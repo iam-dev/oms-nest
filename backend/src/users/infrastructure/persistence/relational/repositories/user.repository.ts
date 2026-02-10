@@ -1,7 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { InjectDataSource } from "@nestjs/typeorm";
 
-import { Repository, In, SelectQueryBuilder } from "typeorm";
+import { Repository, In, SelectQueryBuilder, DataSource } from "typeorm";
 import { UserEntity } from "../entities/user.entity";
 import { NullableType } from "../../../../../utils/types/nullable.type";
 import { FilterUserDto, SortUserDto } from "../../../../dto/query-user.dto";
@@ -10,11 +11,28 @@ import { UserRepository } from "../../user.repository";
 import { UserMapper } from "../mappers/user.mapper";
 import { IPaginationOptions } from "../../../../../utils/types/pagination-options";
 
+const ALLOWED_SORT_FIELDS = new Set([
+  "id",
+  "username",
+  "email",
+  "name",
+  "enabled",
+  "createdAt",
+  "updatedAt",
+  "userType",
+  "isSupervisor",
+  "legacyId",
+]);
+
 @Injectable()
 export class UsersRelationalRepository implements UserRepository {
+  private readonly logger = new Logger(UsersRelationalRepository.name);
+
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -120,14 +138,20 @@ export class UsersRelationalRepository implements UserRepository {
     if (sortOptions?.length) {
       for (const sort of sortOptions) {
         const field = sort.field ?? (sort.orderBy as string);
-        const direction = (
-          sort.direction ??
-          sort.order ??
-          "asc"
-        ).toUpperCase() as "ASC" | "DESC";
-        qb.addOrderBy(`user.${field}`, direction);
+        if (field && ALLOWED_SORT_FIELDS.has(field)) {
+          const direction = (
+            sort.direction ??
+            sort.order ??
+            "asc"
+          ).toUpperCase() as "ASC" | "DESC";
+          qb.addOrderBy(`user.${field}`, direction);
+        } else {
+          this.logger.warn(`Ignored invalid sort field: ${field}`);
+        }
       }
     }
+
+    this.logger.debug(`findManyWithPagination query: ${qb.getSql()}`);
 
     const entities = await qb.getMany();
     return entities.map((user) => UserMapper.toDomain(user));
@@ -191,22 +215,63 @@ export class UsersRelationalRepository implements UserRepository {
   }
 
   async update(id: User["id"], payload: Partial<User>): Promise<User> {
+    // The "user" entity maps to a PostgreSQL VIEW on the "credentials" table.
+    // Views are not directly updatable, so we update credentials via raw SQL.
     const entity = await this.usersRepository.findOne({
-      where: { id: id },
+      where: { id: id as unknown as number },
     });
 
     if (!entity) {
       throw new Error("User not found");
     }
 
-    const updatedEntity = await this.usersRepository.save(
-      this.usersRepository.create(
-        UserMapper.toPersistence({
-          ...UserMapper.toDomain(entity),
-          ...payload,
-        }),
-      ),
-    );
+    const legacyId = entity.legacyId;
+    if (!legacyId) {
+      throw new Error("User has no legacy_id, cannot update credentials");
+    }
+
+    // Build SET clauses mapping domain fields to credentials columns
+    const setClauses: string[] = [];
+    const params: (string | number)[] = [];
+    let paramIndex = 1;
+
+    if (payload.username !== undefined) {
+      setClauses.push(`user_name = $${paramIndex++}`);
+      params.push(payload.username);
+    }
+
+    if (payload.password != null) {
+      setClauses.push(`password_hash = $${paramIndex++}`);
+      params.push(payload.password);
+    }
+
+    if (payload.name !== undefined) {
+      setClauses.push(`full_name = $${paramIndex++}`);
+      params.push(payload.name);
+    }
+
+    if (payload.enabled !== undefined) {
+      setClauses.push(`blocked = $${paramIndex++}`);
+      params.push(payload.enabled ? 0 : 1);
+    }
+
+    if (setClauses.length > 0) {
+      params.push(legacyId);
+      const query = `UPDATE credentials SET ${setClauses.join(", ")} WHERE user_id = $${paramIndex}`;
+      this.logger.log(
+        `Updating credentials for legacy_id=${legacyId}: ${setClauses.join(", ")}`,
+      );
+      await this.dataSource.query(query, params);
+    }
+
+    // Re-read the updated user from the view
+    const updatedEntity = await this.usersRepository.findOne({
+      where: { id: id as unknown as number },
+    });
+
+    if (!updatedEntity) {
+      throw new Error("User not found after update");
+    }
 
     return UserMapper.toDomain(updatedEntity);
   }

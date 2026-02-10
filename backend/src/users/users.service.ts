@@ -5,7 +5,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { NullableType } from "../utils/types/nullable.type";
 import { FilterUserDto, SortUserDto } from "./dto/query-user.dto";
@@ -36,6 +36,74 @@ export class UsersService {
     @InjectRepository(RoleEntity)
     private readonly roleRepository: Repository<RoleEntity>,
   ) {}
+
+  /**
+   * Determine role name from userType/isSupervisor fields without DB queries.
+   * Returns null when a fitter table lookup is needed (userType=1 or no userType).
+   */
+  static getRoleNameFromFields(
+    userType?: number | null,
+    isSupervisor?: number | null,
+  ): string | null {
+    if (isSupervisor === 1) return "supervisor";
+    if (userType === 2) return "admin";
+    if (userType === 3) return "factory";
+    if (userType === 4) return "customsaddler";
+    if (userType === 1) return "fitter";
+    // userType is null/undefined — need fitter table check
+    return null;
+  }
+
+  /**
+   * Batch-resolve role names for a list of users using at most 1 DB query
+   * (for users needing fitter table verification).
+   */
+  async resolveRoleNamesForList(
+    users: User[],
+  ): Promise<Map<string | number, string>> {
+    const roleMap = new Map<string | number, string>();
+
+    // Users that need a fitter table lookup (no userType set)
+    const needsFitterCheck: number[] = [];
+
+    for (const user of users) {
+      const roleName = UsersService.getRoleNameFromFields(
+        user.userType,
+        user.isSupervisor,
+      );
+      if (roleName) {
+        roleMap.set(user.id, roleName);
+      } else {
+        // Need to check fitters table for legacy users with no userType
+        const legacyId = user.legacyId;
+        if (legacyId != null) {
+          needsFitterCheck.push(legacyId);
+        } else {
+          roleMap.set(user.id, "user");
+        }
+      }
+    }
+
+    // Single batch query for fitter verification
+    if (needsFitterCheck.length > 0) {
+      const fitters = await this.fitterRepository.find({
+        where: { userId: In(needsFitterCheck) },
+        select: ["userId"],
+      });
+      const fitterUserIds = new Set(fitters.map((f) => f.userId));
+
+      for (const user of users) {
+        if (!roleMap.has(user.id) && user.legacyId != null) {
+          roleMap.set(
+            user.id,
+            fitterUserIds.has(user.legacyId) ? "fitter" : "user",
+          );
+        }
+      }
+    }
+
+    return roleMap;
+  }
 
   /**
    * Determine user role based on database fields (user_type and supervisor)
