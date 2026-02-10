@@ -2,7 +2,7 @@ import {
   Column,
   Entity,
   Index,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
@@ -16,8 +16,8 @@ import { AuthProvidersEnum } from "../../../../../auth/auth-providers.enum";
 @Index("user_username_index", ["username"], { unique: true })
 @Index("user_email_index", ["email"], { unique: true })
 export class UserEntity {
-  @PrimaryGeneratedColumn("increment")
-  id: number;
+  @PrimaryColumn({ type: "uuid" })
+  id: string;
 
   @Column({
     type: "timestamp",

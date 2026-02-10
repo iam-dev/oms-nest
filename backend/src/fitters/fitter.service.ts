@@ -96,7 +96,7 @@ export class FitterService {
     // Update the linked user's password if provided
     if (updateFitterDto.password && fitter.userId) {
       const user = await this.userRepository.findOne({
-        where: { id: fitter.userId },
+        where: { legacyId: fitter.userId },
       });
       if (user) {
         const salt = await bcrypt.genSalt();

@@ -193,9 +193,14 @@ export class UsersRelationalRepository implements UserRepository {
   ): Promise<NullableType<User>> {
     if (!emailOrUsername) return null;
 
-    const entity = await this.usersRepository.findOne({
-      where: [{ email: emailOrUsername }, { username: emailOrUsername }],
-    });
+    // Use case-insensitive match because the DTO lowercases input
+    const entity = await this.usersRepository
+      .createQueryBuilder("user")
+      .where("LOWER(user.email) = LOWER(:value)", { value: emailOrUsername })
+      .orWhere("LOWER(user.username) = LOWER(:value)", {
+        value: emailOrUsername,
+      })
+      .getOne();
 
     return entity ? UserMapper.toDomain(entity) : null;
   }
@@ -218,7 +223,7 @@ export class UsersRelationalRepository implements UserRepository {
     // The "user" entity maps to a PostgreSQL VIEW on the "credentials" table.
     // Views are not directly updatable, so we update credentials via raw SQL.
     const entity = await this.usersRepository.findOne({
-      where: { id: id as unknown as number },
+      where: { id },
     });
 
     if (!entity) {
@@ -266,7 +271,7 @@ export class UsersRelationalRepository implements UserRepository {
 
     // Re-read the updated user from the view
     const updatedEntity = await this.usersRepository.findOne({
-      where: { id: id as unknown as number },
+      where: { id },
     });
 
     if (!updatedEntity) {
