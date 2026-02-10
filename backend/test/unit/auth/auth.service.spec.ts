@@ -34,7 +34,7 @@ describe("AuthService", () => {
   let configService: jest.Mocked<ConfigService>;
 
   const mockUser: Partial<User> = {
-    id: 1,
+    id: "550e8400-e29b-41d4-a716-446655440001",
     email: "test@example.com",
     username: "testuser",
     name: "Test User",
@@ -272,6 +272,7 @@ describe("AuthService", () => {
       expect(jwtService.signAsync).toHaveBeenCalledWith(
         {
           id: mockUser.id,
+          legacyId: mockUser.legacyId,
           role: { id: 1, name: "user" },
           roles: ["ROLE_USER"],
           username: mockUser.username,
@@ -296,7 +297,7 @@ describe("AuthService", () => {
       };
       const createdUser = {
         ...registerDto,
-        id: 2,
+        id: "550e8400-e29b-41d4-a716-446655440002",
         name: `${registerDto.firstName} ${registerDto.lastName}`,
         username: registerDto.email.split("@")[0],
         currency: "USD",
@@ -318,7 +319,7 @@ describe("AuthService", () => {
         status: { id: StatusEnum.inactive },
       });
       expect(jwtService.signAsync).toHaveBeenCalledWith(
-        { confirmEmailUserId: 2 },
+        { confirmEmailUserId: "550e8400-e29b-41d4-a716-446655440002" },
         {
           secret: "confirm-secret",
           expiresIn: "1d",
@@ -357,7 +358,9 @@ describe("AuthService", () => {
     it("should confirm email with valid hash", async () => {
       // Arrange
       const hash = "valid-confirmation-hash";
-      const jwtPayload = { confirmEmailUserId: 1 };
+      const jwtPayload = {
+        confirmEmailUserId: "550e8400-e29b-41d4-a716-446655440001",
+      };
       jwtService.verifyAsync.mockResolvedValue(jwtPayload);
       usersService.findById.mockResolvedValue({
         ...mockUser,
@@ -375,8 +378,13 @@ describe("AuthService", () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith(hash, {
         secret: "confirm-secret",
       });
-      expect(usersService.findById).toHaveBeenCalledWith(1);
-      expect(usersService.update).toHaveBeenCalledWith(1, { enabled: true });
+      expect(usersService.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
+      expect(usersService.update).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+        { enabled: true },
+      );
     });
 
     it("should throw error for invalid hash", async () => {
@@ -396,7 +404,9 @@ describe("AuthService", () => {
     it("should throw error when user not found", async () => {
       // Arrange
       const hash = "valid-hash";
-      const jwtPayload = { confirmEmailUserId: 999 };
+      const jwtPayload = {
+        confirmEmailUserId: "550e8400-e29b-41d4-a716-446655440999",
+      };
       jwtService.verifyAsync.mockResolvedValue(jwtPayload);
       usersService.findById.mockResolvedValue(null);
 
@@ -404,13 +414,17 @@ describe("AuthService", () => {
       await expect(service.confirmEmail(hash)).rejects.toThrow(
         NotFoundException,
       );
-      expect(usersService.findById).toHaveBeenCalledWith(999);
+      expect(usersService.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440999",
+      );
     });
 
     it("should throw error when user already enabled", async () => {
       // Arrange
       const hash = "valid-hash";
-      const jwtPayload = { confirmEmailUserId: 1 };
+      const jwtPayload = {
+        confirmEmailUserId: "550e8400-e29b-41d4-a716-446655440001",
+      };
       jwtService.verifyAsync.mockResolvedValue(jwtPayload);
       usersService.findById.mockResolvedValue({
         ...mockUser,
@@ -421,7 +435,9 @@ describe("AuthService", () => {
       await expect(service.confirmEmail(hash)).rejects.toThrow(
         NotFoundException,
       );
-      expect(usersService.findById).toHaveBeenCalledWith(1);
+      expect(usersService.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
     });
   });
 
@@ -472,7 +488,9 @@ describe("AuthService", () => {
       // Arrange
       const hash = "valid-reset-hash";
       const newPassword = "newpassword123";
-      const jwtPayload = { forgotUserId: 1 };
+      const jwtPayload = {
+        forgotUserId: "550e8400-e29b-41d4-a716-446655440001",
+      };
       jwtService.verifyAsync.mockResolvedValue(jwtPayload);
       usersService.findById.mockResolvedValue(mockUser as User);
       sessionService.deleteByUserId.mockResolvedValue(undefined);
@@ -488,13 +506,18 @@ describe("AuthService", () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith(hash, {
         secret: "forgot-secret",
       });
-      expect(usersService.findById).toHaveBeenCalledWith(1);
+      expect(usersService.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
       expect(sessionService.deleteByUserId).toHaveBeenCalledWith({
-        userId: 1,
+        userId: "550e8400-e29b-41d4-a716-446655440001",
       });
-      expect(usersService.update).toHaveBeenCalledWith(1, {
-        password: newPassword,
-      });
+      expect(usersService.update).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+        {
+          password: newPassword,
+        },
+      );
     });
 
     it("should throw error for invalid reset hash", async () => {
@@ -513,7 +536,9 @@ describe("AuthService", () => {
       // Arrange
       const hash = "valid-hash";
       const newPassword = "newpassword123";
-      const jwtPayload = { forgotUserId: 999 };
+      const jwtPayload = {
+        forgotUserId: "550e8400-e29b-41d4-a716-446655440999",
+      };
       jwtService.verifyAsync.mockResolvedValue(jwtPayload);
       usersService.findById.mockResolvedValue(null);
 
@@ -528,7 +553,7 @@ describe("AuthService", () => {
     it("should return current user with typeName", async () => {
       // Arrange
       const jwtPayload = {
-        id: 1,
+        id: "550e8400-e29b-41d4-a716-446655440001",
         role: { id: 1, name: "user" },
         iat: 1234567890,
         exp: 1234567990,
@@ -542,7 +567,9 @@ describe("AuthService", () => {
 
       // Assert
       expect(result).toEqual({ ...mockUser, typeName: "supervisor" });
-      expect(usersService.findById).toHaveBeenCalledWith(1);
+      expect(usersService.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
       expect(usersService.getUserRole).toHaveBeenCalledWith(
         1,
         "testuser",
@@ -554,7 +581,7 @@ describe("AuthService", () => {
     it("should return null when user not found", async () => {
       // Arrange
       const jwtPayload = {
-        id: 999,
+        id: "550e8400-e29b-41d4-a716-446655440999",
         role: { id: 1, name: "user" },
         iat: 1234567890,
         exp: 1234567990,
@@ -566,7 +593,9 @@ describe("AuthService", () => {
 
       // Assert
       expect(result).toBeNull();
-      expect(usersService.findById).toHaveBeenCalledWith(999);
+      expect(usersService.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440999",
+      );
     });
   });
 
@@ -659,7 +688,7 @@ describe("AuthService", () => {
     it("should generate access and refresh tokens", async () => {
       // Arrange
       const tokenData = {
-        id: 1,
+        id: "550e8400-e29b-41d4-a716-446655440001",
         role: { id: 1, name: "user" },
         sessionId: 123,
         hash: "session-hash",
