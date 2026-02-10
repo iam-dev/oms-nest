@@ -47,6 +47,7 @@ export class RlsGuard implements CanActivate {
     try {
       // Extract user information from JWT payload
       const userId = user.id;
+      const legacyId = user.legacyId;
       const userRole = user.role?.id || RoleEnum.user; // Default to user role
 
       // Get role-specific IDs
@@ -54,20 +55,16 @@ export class RlsGuard implements CanActivate {
       let fitterId: string | undefined;
 
       if (userRole === RoleEnum.factory) {
-        // Look up factory ID for factory users
-        // This could be cached in JWT payload or looked up here
         factoryId = user.factoryId;
       }
 
       if (userRole === RoleEnum.fitter) {
-        // Look up fitter ID for fitter users
-        // This could be cached in JWT payload or looked up here
         fitterId = user.fitterId;
       }
 
-      // Set RLS context for the current request
+      // Use legacyId (integer) for RLS context so current_user_id()::INTEGER works
       await this.rlsService.setUserContext(
-        userId,
+        legacyId ? String(legacyId) : userId,
         userRole,
         factoryId,
         fitterId,

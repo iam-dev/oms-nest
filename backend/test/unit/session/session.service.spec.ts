@@ -9,7 +9,10 @@ describe("SessionService", () => {
 
   const mockSession: Session = {
     id: 1,
-    user: { id: 1, email: "test@example.com" } as any,
+    user: {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      email: "test@example.com",
+    } as any,
     hash: "session-hash-abc123",
     createdAt: new Date("2024-01-01T00:00:00Z"),
     updatedAt: new Date("2024-01-01T00:00:00Z"),
@@ -64,7 +67,10 @@ describe("SessionService", () => {
   describe("create", () => {
     it("should delegate to repository", async () => {
       const createData = {
-        user: { id: 1, email: "test@example.com" } as any,
+        user: {
+          id: "550e8400-e29b-41d4-a716-446655440001",
+          email: "test@example.com",
+        } as any,
         hash: "new-session-hash",
       };
       sessionRepository.create.mockResolvedValue(mockSession);
@@ -114,10 +120,12 @@ describe("SessionService", () => {
     it("should delegate to repository", async () => {
       sessionRepository.deleteByUserId.mockResolvedValue(undefined);
 
-      await service.deleteByUserId({ userId: 1 });
+      await service.deleteByUserId({
+        userId: "550e8400-e29b-41d4-a716-446655440001",
+      });
 
       expect(sessionRepository.deleteByUserId).toHaveBeenCalledWith({
-        userId: 1,
+        userId: "550e8400-e29b-41d4-a716-446655440001",
       });
     });
   });
@@ -127,12 +135,12 @@ describe("SessionService", () => {
       sessionRepository.deleteByUserIdWithExclude.mockResolvedValue(undefined);
 
       await service.deleteByUserIdWithExclude({
-        userId: 1,
+        userId: "550e8400-e29b-41d4-a716-446655440001",
         excludeSessionId: 5,
       });
 
       expect(sessionRepository.deleteByUserIdWithExclude).toHaveBeenCalledWith({
-        userId: 1,
+        userId: "550e8400-e29b-41d4-a716-446655440001",
         excludeSessionId: 5,
       });
     });
