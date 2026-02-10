@@ -866,6 +866,11 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
       }
     });
 
+    if (!fitterLoginResponse.ok()) {
+      console.log('Fitter login failed. Status:', fitterLoginResponse.status());
+      console.log('Response text:', await fitterLoginResponse.text());
+    }
+
     expect(fitterLoginResponse.ok()).toBeTruthy();
 
     // Fitter should not access admin-only endpoints (500 also acceptable — internal error in staging)
