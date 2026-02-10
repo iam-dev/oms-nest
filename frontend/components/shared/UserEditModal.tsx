@@ -213,23 +213,21 @@ export function UserEditModal({ user, isOpen, onClose, onSave }: UserEditModalPr
             </Select>
           </div>
 
-          {/* Password (only for create mode) */}
-          {!user && (
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password *
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={editedUser.password || ''}
-                onChange={(e) => handleChange('password', e.target.value)}
-                placeholder="Enter password"
-                disabled={saving}
-                className="mt-1"
-              />
-            </div>
-          )}
+          {/* Password */}
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              {user ? 'New Password' : 'Password'}{!user && ' *'}
+            </label>
+            <Input
+              id="password"
+              type="password"
+              value={editedUser.password || ''}
+              onChange={(e) => handleChange('password', e.target.value)}
+              placeholder={user ? 'Leave blank to keep current password' : 'Enter password'}
+              disabled={saving}
+              className="mt-1"
+            />
+          </div>
 
           {/* Error message */}
           {error && (

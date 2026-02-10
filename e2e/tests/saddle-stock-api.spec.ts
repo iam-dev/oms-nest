@@ -3,7 +3,7 @@ import { test, expect, request } from '@playwright/test';
 /**
  * Saddle Stock API E2E Tests
  * Tests saddle-stock endpoint with different role contexts
- * Validates Hydra-compliant response format
+ * Validates paginated response format
  */
 
 const getApiUrl = () => {
@@ -79,20 +79,21 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     if (response.ok()) {
       const data = await response.json();
 
-      // Validate Hydra format
-      expect(data).toHaveProperty('@context');
-      expect(data['@context']).toContain('SaddleStock');
-      expect(data).toHaveProperty('@type', 'hydra:Collection');
-      expect(data).toHaveProperty('@id');
-      expect(data).toHaveProperty('hydra:member');
-      expect(data).toHaveProperty('hydra:totalItems');
-      expect(Array.isArray(data['hydra:member'])).toBeTruthy();
-      expect(typeof data['hydra:totalItems']).toBe('number');
+      // Validate paginated response format
+      expect(data).toHaveProperty('data');
+      expect(data).toHaveProperty('total');
+      expect(data).toHaveProperty('page');
+      expect(data).toHaveProperty('pages');
+      expect(data).toHaveProperty('limit');
+      expect(data).toHaveProperty('hasNext');
+      expect(data).toHaveProperty('hasPrev');
+      expect(Array.isArray(data.data)).toBeTruthy();
+      expect(typeof data.total).toBe('number');
 
-      console.log(`Admin - All saddle stock: ${data['hydra:member'].length} of ${data['hydra:totalItems']} total`);
+      console.log(`Admin - All saddle stock: ${data.data.length} of ${data.total} total`);
 
-      if (data['hydra:member'].length > 0) {
-        const item = data['hydra:member'][0];
+      if (data.data.length > 0) {
+        const item = data.data[0];
         expect(item).toHaveProperty('id');
       }
     } else {
@@ -100,7 +101,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     }
   });
 
-  test('should validate Hydra pagination for admin @admin @api', async () => {
+  test('should validate pagination for admin @admin @api', async () => {
     const response = await adminContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=5`);
     const status = response.status();
 
@@ -109,17 +110,18 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
 
     if (response.ok()) {
       const data = await response.json();
-      expect(data).toHaveProperty('hydra:view');
+      expect(data).toHaveProperty('page');
+      expect(data).toHaveProperty('pages');
+      expect(data).toHaveProperty('total');
+      expect(data).toHaveProperty('limit', 5);
+      expect(data).toHaveProperty('hasNext');
+      expect(data).toHaveProperty('hasPrev');
+      expect(typeof data.page).toBe('number');
+      expect(typeof data.pages).toBe('number');
 
-      const view = data['hydra:view'];
-      expect(view).toHaveProperty('@id');
-      expect(view).toHaveProperty('@type', 'hydra:PartialCollectionView');
-      expect(view).toHaveProperty('hydra:first');
-      expect(view).toHaveProperty('hydra:last');
-
-      if (data['hydra:totalItems'] > 5 && data['hydra:member'].length > 0) {
-        expect(view).toHaveProperty('hydra:next');
-        console.log(`Pagination: page 1 of ${Math.ceil(data['hydra:totalItems'] / 5)}`);
+      if (data.total > 5 && data.data.length > 0) {
+        expect(data.hasNext).toBeTruthy();
+        console.log(`Pagination: page 1 of ${data.pages}`);
       }
     } else {
       console.log(`Admin saddle stock pagination returned ${status} - database may not be fully seeded or auth/role mismatch`);
@@ -138,14 +140,14 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     if (response.ok()) {
       const data = await response.json();
 
-      // Validate Hydra format
-      expect(data).toHaveProperty('@context');
-      expect(data).toHaveProperty('@type', 'hydra:Collection');
-      expect(data).toHaveProperty('hydra:member');
-      expect(data).toHaveProperty('hydra:totalItems');
-      expect(Array.isArray(data['hydra:member'])).toBeTruthy();
+      // Validate paginated response format
+      expect(data).toHaveProperty('data');
+      expect(data).toHaveProperty('total');
+      expect(data).toHaveProperty('page');
+      expect(data).toHaveProperty('pages');
+      expect(Array.isArray(data.data)).toBeTruthy();
 
-      console.log(`Fitter - My stock: ${data['hydra:member'].length} of ${data['hydra:totalItems']} total`);
+      console.log(`Fitter - My stock: ${data.data.length} of ${data.total} total`);
     } else {
       console.log(`Fitter own stock returned ${status} - database may not be fully seeded or auth/role mismatch`);
     }
@@ -161,13 +163,13 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     if (response.ok()) {
       const data = await response.json();
 
-      expect(data).toHaveProperty('@context');
-      expect(data).toHaveProperty('@type', 'hydra:Collection');
-      expect(data).toHaveProperty('hydra:member');
-      expect(data).toHaveProperty('hydra:totalItems');
-      expect(Array.isArray(data['hydra:member'])).toBeTruthy();
+      expect(data).toHaveProperty('data');
+      expect(data).toHaveProperty('total');
+      expect(data).toHaveProperty('page');
+      expect(data).toHaveProperty('pages');
+      expect(Array.isArray(data.data)).toBeTruthy();
 
-      console.log(`Fitter - Available stock: ${data['hydra:member'].length} of ${data['hydra:totalItems']} total`);
+      console.log(`Fitter - Available stock: ${data.data.length} of ${data.total} total`);
     } else {
       console.log(`Fitter available stock returned ${status} - database may not be fully seeded or auth/role mismatch`);
     }
@@ -207,11 +209,11 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
     if (response.ok()) {
       const data = await response.json();
 
-      expect(data).toHaveProperty('hydra:member');
-      expect(data).toHaveProperty('hydra:totalItems');
-      expect(Array.isArray(data['hydra:member'])).toBeTruthy();
+      expect(data).toHaveProperty('data');
+      expect(data).toHaveProperty('total');
+      expect(Array.isArray(data.data)).toBeTruthy();
 
-      console.log(`Search results: ${data['hydra:member'].length} of ${data['hydra:totalItems']} total`);
+      console.log(`Search results: ${data.data.length} of ${data.total} total`);
     } else {
       console.log(`Saddle stock search returned ${status} - database may not be fully seeded or auth/role mismatch`);
     }
@@ -228,10 +230,11 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
 
     if (response.ok()) {
       const data = await response.json();
-      expect(data).toHaveProperty('hydra:member');
+      expect(data).toHaveProperty('data');
+      expect(data).toHaveProperty('total');
+      expect(data).toHaveProperty('page');
 
-      // The @id should contain type=my (default)
-      console.log(`Default type response @id: ${data['@id']}`);
+      console.log(`Default type response: ${data.data.length} of ${data.total} total, page ${data.page}`);
     } else {
       console.log(`Default type saddle stock returned ${status} - database may not be fully seeded or auth/role mismatch`);
     }
