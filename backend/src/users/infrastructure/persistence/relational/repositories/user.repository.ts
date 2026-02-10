@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 
 import { Repository, In, SelectQueryBuilder } from "typeorm";
@@ -10,8 +10,23 @@ import { UserRepository } from "../../user.repository";
 import { UserMapper } from "../mappers/user.mapper";
 import { IPaginationOptions } from "../../../../../utils/types/pagination-options";
 
+const ALLOWED_SORT_FIELDS = new Set([
+  "id",
+  "username",
+  "email",
+  "name",
+  "enabled",
+  "createdAt",
+  "updatedAt",
+  "userType",
+  "isSupervisor",
+  "legacyId",
+]);
+
 @Injectable()
 export class UsersRelationalRepository implements UserRepository {
+  private readonly logger = new Logger(UsersRelationalRepository.name);
+
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
@@ -120,14 +135,20 @@ export class UsersRelationalRepository implements UserRepository {
     if (sortOptions?.length) {
       for (const sort of sortOptions) {
         const field = sort.field ?? (sort.orderBy as string);
-        const direction = (
-          sort.direction ??
-          sort.order ??
-          "asc"
-        ).toUpperCase() as "ASC" | "DESC";
-        qb.addOrderBy(`user.${field}`, direction);
+        if (field && ALLOWED_SORT_FIELDS.has(field)) {
+          const direction = (
+            sort.direction ??
+            sort.order ??
+            "asc"
+          ).toUpperCase() as "ASC" | "DESC";
+          qb.addOrderBy(`user.${field}`, direction);
+        } else {
+          this.logger.warn(`Ignored invalid sort field: ${field}`);
+        }
       }
     }
+
+    this.logger.debug(`findManyWithPagination query: ${qb.getSql()}`);
 
     const entities = await qb.getMany();
     return entities.map((user) => UserMapper.toDomain(user));
