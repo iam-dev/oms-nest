@@ -31,6 +31,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Remove npm/npx/corepack (not needed at runtime, eliminates bundled CVEs)
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 

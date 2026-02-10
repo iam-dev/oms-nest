@@ -545,26 +545,3 @@ jobs:
         kubectl rollout status deployment/oms-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=300s
         echo "Rollback completed"
 
-  # Slack notification
-  notify:
-    name: Notify Deployment Status
-    runs-on: ubuntu-latest
-    needs: [deploy-staging, e2e-tests, rollback]
-    if: always()
-
-    steps:
-    - name: Notify Slack on success
-      if: needs.deploy-staging.result == 'success' && needs.e2e-tests.result == 'success'
-      uses: 8398a7/action-slack@v3
-      with:
-        status: success
-        text: '🚀 OMS Staging deployment successful! All E2E tests passed.'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-    - name: Notify Slack on failure
-      if: needs.deploy-staging.result == 'failure' || needs.e2e-tests.result == 'failure'
-      uses: 8398a7/action-slack@v3
-      with:
-        status: failure
-        text: '❌ OMS Staging deployment failed! Check logs for details.'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
