@@ -240,7 +240,7 @@ export class UsersRelationalRepository implements UserRepository {
       params.push(payload.username);
     }
 
-    if (payload.password !== undefined) {
+    if (payload.password != null) {
       setClauses.push(`password_hash = $${paramIndex++}`);
       params.push(payload.password);
     }
