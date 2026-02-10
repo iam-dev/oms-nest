@@ -198,7 +198,7 @@ describe('Users Service', () => {
   });
 
   describe('updateUser', () => {
-    test('updates user with SaveBundle format', async () => {
+    test('updates user via PATCH endpoint', async () => {
       const userId = '123';
       const updateData = {
         firstName: 'Updated',
@@ -207,12 +207,10 @@ describe('Users Service', () => {
       };
 
       const mockResponse = {
-        Entities: [{
-          id: userId,
-          username: 'testuser',
-          name: 'Updated Name',
-          email: 'updated@example.com',
-        }]
+        id: userId,
+        username: 'testuser',
+        name: 'Updated Name',
+        email: 'updated@example.com',
       };
 
       mockFetch.mockResolvedValue({
@@ -223,10 +221,9 @@ describe('Users Service', () => {
       const result = await updateUser(userId, updateData);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/save'),
+        expect.stringContaining(`/api/v1/users/${userId}`),
         expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining(userId),
+          method: 'PATCH',
         })
       );
 
@@ -241,7 +238,7 @@ describe('Users Service', () => {
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        text: async () => 'Failed',
+        json: async () => ({}),
       });
 
       await expect(updateUser(userId, updateData)).rejects.toThrow('Failed to update user');
@@ -255,15 +252,15 @@ describe('Users Service', () => {
 
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ Entities: [{ id: userId, role: UserRole.ADMIN }] }),
+        json: async () => ({ id: userId, role: UserRole.ADMIN }),
       });
 
       await updateUser(userId, updateData);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/save'),
+        expect.stringContaining(`/api/v1/users/${userId}`),
         expect.objectContaining({
-          method: 'POST',
+          method: 'PATCH',
         })
       );
     });
