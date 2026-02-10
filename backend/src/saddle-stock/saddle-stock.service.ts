@@ -19,9 +19,11 @@ export class SaddleStockService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findFitterByUserId(userId: number): Promise<number | null> {
+  async findFitterByUserId(userId: string | number): Promise<number | null> {
     const result = await this.dataSource.query(
-      `SELECT id FROM fitters WHERE user_id = $1 AND deleted = 0 LIMIT 1`,
+      `SELECT f.id FROM fitters f
+       INNER JOIN "user" u ON f.user_id = u.legacy_id
+       WHERE u.id = $1 AND f.deleted = 0 LIMIT 1`,
       [userId],
     );
     return result.length > 0 ? result[0].id : null;
@@ -29,7 +31,7 @@ export class SaddleStockService {
 
   async getSaddleStock(
     type: "my" | "available" | "all",
-    userId: number,
+    userId: string | number,
     page: number = 1,
     limit: number = 30,
     search?: string,
@@ -61,7 +63,7 @@ export class SaddleStockService {
         o.serial_number ILIKE $${paramIndex}
         OR s.brand ILIKE $${paramIndex}
         OR s.model_name ILIKE $${paramIndex}
-        OR u.name ILIKE $${paramIndex}
+        OR cr.full_name ILIKE $${paramIndex}
       )`;
       params.push(`%${search}%`);
       paramIndex++;
@@ -72,7 +74,7 @@ export class SaddleStockService {
       FROM orders o
       LEFT JOIN saddles s ON o.saddle_id = s.id
       LEFT JOIN fitters f ON o.fitter_id = f.id
-      LEFT JOIN "user" u ON f.user_id = u.id
+      LEFT JOIN credentials cr ON f.user_id = cr.user_id
       WHERE ${whereClause}
     `;
 
@@ -91,12 +93,12 @@ export class SaddleStockService {
         s.model_name AS saddle_model_name,
         lt.name AS leather_type_name,
         f.id AS fitter_id,
-        u.name AS owner_name
+        cr.full_name AS owner_name
       FROM orders o
       LEFT JOIN saddles s ON o.saddle_id = s.id
       LEFT JOIN leather_types lt ON o.leather_id = lt.id
       LEFT JOIN fitters f ON o.fitter_id = f.id
-      LEFT JOIN "user" u ON f.user_id = u.id
+      LEFT JOIN credentials cr ON f.user_id = cr.user_id
       WHERE ${whereClause}
       ORDER BY o.id DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
