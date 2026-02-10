@@ -23,7 +23,7 @@ describe("UsersService", () => {
   let roleRepository: any;
 
   const mockUser = {
-    id: 1,
+    id: "550e8400-e29b-41d4-a716-446655440001",
     email: "test@example.com",
     username: "testuser",
     name: "Test User",
@@ -33,6 +33,7 @@ describe("UsersService", () => {
     provider: AuthProvidersEnum.email,
     createdAt: new Date(),
     updatedAt: new Date(),
+    legacyId: 1,
   };
 
   beforeEach(async () => {
@@ -384,11 +385,15 @@ describe("UsersService", () => {
       usersRepository.findById.mockResolvedValue(mockUser);
 
       // Act
-      const result = await service.findById(1);
+      const result = await service.findById(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
 
       // Assert
       expect(result).toEqual(mockUser);
-      expect(usersRepository.findById).toHaveBeenCalledWith(1);
+      expect(usersRepository.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
     });
 
     it("should return null when user not found", async () => {
@@ -396,7 +401,9 @@ describe("UsersService", () => {
       usersRepository.findById.mockResolvedValue(null);
 
       // Act
-      const result = await service.findById(999);
+      const result = await service.findById(
+        "550e8400-e29b-41d4-a716-446655440999",
+      );
 
       // Assert
       expect(result).toBeNull();
@@ -409,11 +416,17 @@ describe("UsersService", () => {
       usersRepository.findByIds.mockResolvedValue([mockUser]);
 
       // Act
-      const result = await service.findByIds([1, 2]);
+      const result = await service.findByIds([
+        "550e8400-e29b-41d4-a716-446655440001",
+        "550e8400-e29b-41d4-a716-446655440002",
+      ]);
 
       // Assert
       expect(result).toEqual([mockUser]);
-      expect(usersRepository.findByIds).toHaveBeenCalledWith([1, 2]);
+      expect(usersRepository.findByIds).toHaveBeenCalledWith([
+        "550e8400-e29b-41d4-a716-446655440001",
+        "550e8400-e29b-41d4-a716-446655440002",
+      ]);
     });
   });
 
@@ -484,7 +497,10 @@ describe("UsersService", () => {
       });
 
       // Act
-      const result = await service.update(1, updateDto);
+      const result = await service.update(
+        "550e8400-e29b-41d4-a716-446655440001",
+        updateDto,
+      );
 
       // Assert
       expect(result).toMatchObject(updateDto);
@@ -501,11 +517,11 @@ describe("UsersService", () => {
       usersRepository.update.mockResolvedValue(mockUser);
 
       // Act
-      await service.update(1, updateDto);
+      await service.update("550e8400-e29b-41d4-a716-446655440001", updateDto);
 
       // Assert
       expect(usersRepository.update).toHaveBeenCalledWith(
-        1,
+        "550e8400-e29b-41d4-a716-446655440001",
         expect.objectContaining({
           password: "hashed-password",
         }),
@@ -522,11 +538,11 @@ describe("UsersService", () => {
       usersRepository.update.mockResolvedValue(mockUser);
 
       // Act
-      await service.update(1, updateDto);
+      await service.update("550e8400-e29b-41d4-a716-446655440001", updateDto);
 
       // Assert
       expect(usersRepository.update).toHaveBeenCalledWith(
-        1,
+        "550e8400-e29b-41d4-a716-446655440001",
         expect.not.objectContaining({
           password: "hashed-password",
         }),
@@ -539,13 +555,16 @@ describe("UsersService", () => {
         email: "existing@example.com",
       };
 
-      const existingUser = { ...mockUser, id: 2 };
+      const existingUser = {
+        ...mockUser,
+        id: "550e8400-e29b-41d4-a716-446655440002",
+      };
       usersRepository.findByEmail.mockResolvedValue(existingUser);
 
       // Act & Assert
-      await expect(service.update(1, updateDto)).rejects.toThrow(
-        UnprocessableEntityException,
-      );
+      await expect(
+        service.update("550e8400-e29b-41d4-a716-446655440001", updateDto),
+      ).rejects.toThrow(UnprocessableEntityException);
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
 
@@ -559,7 +578,10 @@ describe("UsersService", () => {
       usersRepository.update.mockResolvedValue(mockUser);
 
       // Act
-      const result = await service.update(1, updateDto);
+      const result = await service.update(
+        "550e8400-e29b-41d4-a716-446655440001",
+        updateDto,
+      );
 
       // Assert
       expect(result).toBeDefined();
@@ -573,10 +595,12 @@ describe("UsersService", () => {
       usersRepository.remove.mockResolvedValue(undefined);
 
       // Act
-      await service.remove(1);
+      await service.remove("550e8400-e29b-41d4-a716-446655440001");
 
       // Assert
-      expect(usersRepository.remove).toHaveBeenCalledWith(1);
+      expect(usersRepository.remove).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
     });
   });
 
@@ -588,7 +612,10 @@ describe("UsersService", () => {
         .mockImplementation();
 
       // Act
-      await service.validateLoginSecurity(1, "192.168.1.1");
+      await service.validateLoginSecurity(
+        "550e8400-e29b-41d4-a716-446655440001",
+        "192.168.1.1",
+      );
 
       // Assert
       expect(loggerSpy).toHaveBeenCalledWith(
@@ -623,12 +650,15 @@ describe("UsersService", () => {
       usersRepository.update.mockResolvedValue(mockUser);
 
       // Act
-      await service.unlockAccount(1);
+      await service.unlockAccount("550e8400-e29b-41d4-a716-446655440001");
 
       // Assert
-      expect(usersRepository.update).toHaveBeenCalledWith(1, {
-        enabled: true,
-      });
+      expect(usersRepository.update).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+        {
+          enabled: true,
+        },
+      );
     });
   });
 });

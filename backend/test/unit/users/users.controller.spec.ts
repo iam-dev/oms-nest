@@ -10,7 +10,7 @@ describe("UsersController", () => {
   let service: jest.Mocked<UsersService>;
 
   const mockUser = {
-    id: 1,
+    id: "550e8400-e29b-41d4-a716-446655440001",
     email: "test@example.com",
     username: "testuser",
     name: "Test User",
@@ -212,11 +212,15 @@ describe("UsersController", () => {
       service.findById.mockResolvedValue(mockUser as any);
 
       // Act
-      const result = await controller.findOne(1);
+      const result = await controller.findOne(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
 
       // Assert
       expect(result).toEqual(mockUser);
-      expect(service.findById).toHaveBeenCalledWith(1);
+      expect(service.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
     });
 
     it("should return null when user not found", async () => {
@@ -224,11 +228,15 @@ describe("UsersController", () => {
       service.findById.mockResolvedValue(null);
 
       // Act
-      const result = await controller.findOne(999);
+      const result = await controller.findOne(
+        "550e8400-e29b-41d4-a716-446655440999",
+      );
 
       // Assert
       expect(result).toBeNull();
-      expect(service.findById).toHaveBeenCalledWith(999);
+      expect(service.findById).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440999",
+      );
     });
   });
 
@@ -248,11 +256,17 @@ describe("UsersController", () => {
       service.update.mockResolvedValue(updatedUser as any);
 
       // Act
-      const result = await controller.update(1, updateDto);
+      const result = await controller.update(
+        "550e8400-e29b-41d4-a716-446655440001",
+        updateDto,
+      );
 
       // Assert
       expect(result).toEqual(updatedUser);
-      expect(service.update).toHaveBeenCalledWith(1, updateDto);
+      expect(service.update).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+        updateDto,
+      );
     });
 
     it("should handle partial updates", async () => {
@@ -264,10 +278,16 @@ describe("UsersController", () => {
       service.update.mockResolvedValue(mockUser as any);
 
       // Act
-      await controller.update(1, updateDto);
+      await controller.update(
+        "550e8400-e29b-41d4-a716-446655440001",
+        updateDto,
+      );
 
       // Assert
-      expect(service.update).toHaveBeenCalledWith(1, updateDto);
+      expect(service.update).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+        updateDto,
+      );
     });
 
     it("should propagate errors from service", async () => {
@@ -279,9 +299,9 @@ describe("UsersController", () => {
       service.update.mockRejectedValue(new Error("Email already exists"));
 
       // Act & Assert
-      await expect(controller.update(1, updateDto)).rejects.toThrow(
-        "Email already exists",
-      );
+      await expect(
+        controller.update("550e8400-e29b-41d4-a716-446655440001", updateDto),
+      ).rejects.toThrow("Email already exists");
     });
   });
 
@@ -291,10 +311,12 @@ describe("UsersController", () => {
       service.remove.mockResolvedValue(undefined);
 
       // Act
-      await controller.remove(1);
+      await controller.remove("550e8400-e29b-41d4-a716-446655440001");
 
       // Assert
-      expect(service.remove).toHaveBeenCalledWith(1);
+      expect(service.remove).toHaveBeenCalledWith(
+        "550e8400-e29b-41d4-a716-446655440001",
+      );
     });
 
     it("should propagate errors from service", async () => {
@@ -302,7 +324,9 @@ describe("UsersController", () => {
       service.remove.mockRejectedValue(new Error("User not found"));
 
       // Act & Assert
-      await expect(controller.remove(999)).rejects.toThrow("User not found");
+      await expect(
+        controller.remove("550e8400-e29b-41d4-a716-446655440999"),
+      ).rejects.toThrow("User not found");
     });
   });
 });

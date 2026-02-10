@@ -58,10 +58,8 @@ export class UsersService {
    * Batch-resolve role names for a list of users using at most 1 DB query
    * (for users needing fitter table verification).
    */
-  async resolveRoleNamesForList(
-    users: User[],
-  ): Promise<Map<string | number, string>> {
-    const roleMap = new Map<string | number, string>();
+  async resolveRoleNamesForList(users: User[]): Promise<Map<string, string>> {
+    const roleMap = new Map<string, string>();
 
     // Users that need a fitter table lookup (no userType set)
     const needsFitterCheck: number[] = [];

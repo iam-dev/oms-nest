@@ -120,7 +120,7 @@ export class AuthService {
 
     // Resolve user role based on database fields (user_type and supervisor)
     const userRole = await this.usersService.getUserRole(
-      user.legacyId ?? user.id,
+      user.legacyId!,
       user.username,
       user.userType,
       user.isSupervisor,
@@ -143,6 +143,7 @@ export class AuthService {
     const token = await this.jwtService.signAsync(
       {
         id: user.id,
+        legacyId: user.legacyId,
         role: userRole, // Keep original for backend use
         roles: [frontendRole], // Add array format for frontend
         username: user.username,
@@ -156,9 +157,8 @@ export class AuthService {
       },
     );
 
-    // Fire-and-forget audit log for login
-    const userId =
-      typeof user.id === "string" ? parseInt(user.id, 10) || 0 : user.id;
+    // Fire-and-forget audit log for login — use legacyId (integer) for audit
+    const userId = user.legacyId ?? 0;
     this.auditLoggingService
       .logAction(
         userId,
@@ -477,7 +477,7 @@ export class AuthService {
 
     // Get dynamically computed role based on database fields (user_type and supervisor)
     const role = await this.usersService.getUserRole(
-      user.id,
+      user.legacyId!,
       user.username,
       user.userType,
       user.isSupervisor,
