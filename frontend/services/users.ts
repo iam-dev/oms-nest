@@ -373,7 +373,8 @@ export async function updateUser(id: string, userData: UpdateUserData): Promise<
     payload.username = userData.username;
   }
 
-  if (userData.email !== undefined) {
+  // Only send email if it looks like a valid email (legacy users may have username as email)
+  if (userData.email !== undefined && userData.email.includes('@')) {
     payload.email = userData.email;
   }
 
@@ -404,6 +405,13 @@ export async function updateUser(id: string, userData: UpdateUserData): Promise<
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     logger.error('Update user error response:', errorData);
+    // Handle NestJS validation errors (422) which return { errors: { field: "message" } }
+    if (errorData.errors && typeof errorData.errors === 'object') {
+      const messages = Object.entries(errorData.errors)
+        .map(([field, msg]) => `${field}: ${msg}`)
+        .join(', ');
+      throw new Error(messages);
+    }
     throw new Error(errorData.message || `Failed to update user: ${response.statusText}`);
   }
 
