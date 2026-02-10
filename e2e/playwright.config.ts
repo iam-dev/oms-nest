@@ -112,90 +112,102 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
   },
 
-  /* Comprehensive browser matrix for thorough testing */
-  projects: [
-    // 🖥️ Desktop browsers - Primary testing targets
-    {
-      name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Chrome'
+  /* Browser matrix — staging/production use chromium only (smoke tests don't
+     need cross-browser, and a single project avoids rate-limit issues from
+     7 parallel browser contexts hitting auth endpoints simultaneously). */
+  projects: ['staging', 'production'].includes(ENVIRONMENT)
+    ? [
+        {
+          name: 'chromium',
+          use: {
+            ...devices['Desktop Chrome'],
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Chrome'
+            },
+          },
         },
-      },
-    },
+      ]
+    : [
+        {
+          name: 'chromium',
+          use: {
+            ...devices['Desktop Chrome'],
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Chrome'
+            },
+          },
+        },
 
-    {
-      name: 'firefox',
-      use: {
-        ...devices['Desktop Firefox'],
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Firefox'
+        {
+          name: 'firefox',
+          use: {
+            ...devices['Desktop Firefox'],
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Firefox'
+            },
+          },
         },
-      },
-    },
 
-    {
-      name: 'webkit',
-      use: {
-        ...devices['Desktop Safari'],
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Safari'
+        {
+          name: 'webkit',
+          use: {
+            ...devices['Desktop Safari'],
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Safari'
+            },
+          },
         },
-      },
-    },
 
-    // 📱 Mobile testing for responsive design validation
-    {
-      name: 'Mobile Chrome',
-      use: {
-        ...devices['Pixel 5'],
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Mobile-Chrome'
+        {
+          name: 'Mobile Chrome',
+          use: {
+            ...devices['Pixel 5'],
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Mobile-Chrome'
+            },
+          },
         },
-      },
-    },
 
-    {
-      name: 'Mobile Safari',
-      use: {
-        ...devices['iPhone 12'],
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Mobile-Safari'
+        {
+          name: 'Mobile Safari',
+          use: {
+            ...devices['iPhone 12'],
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Mobile-Safari'
+            },
+          },
         },
-      },
-    },
 
-    // 🖥️ Branded browsers for compatibility testing
-    {
-      name: 'Microsoft Edge',
-      use: {
-        ...devices['Desktop Edge'],
-        channel: 'msedge',
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Edge'
+        {
+          name: 'Microsoft Edge',
+          use: {
+            ...devices['Desktop Edge'],
+            channel: 'msedge',
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Edge'
+            },
+          },
         },
-      },
-    },
 
-    {
-      name: 'Google Chrome',
-      use: {
-        ...devices['Desktop Chrome'],
-        channel: 'chrome',
-        extraHTTPHeaders: {
-          'X-Test-Environment': ENVIRONMENT,
-          'X-Browser': 'Chrome-Stable'
+        {
+          name: 'Google Chrome',
+          use: {
+            ...devices['Desktop Chrome'],
+            channel: 'chrome',
+            extraHTTPHeaders: {
+              'X-Test-Environment': ENVIRONMENT,
+              'X-Browser': 'Chrome-Stable'
+            },
+          },
         },
-      },
-    },
-  ],
+      ],
 
   /* Global setup and teardown for test environment preparation */
   globalSetup: require.resolve('./utils/global-setup'),
