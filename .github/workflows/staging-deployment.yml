@@ -303,7 +303,9 @@ jobs:
           --timeout=300s
 
     - name: Deploy backend application
-      run: kubectl apply -f kubernetes/staging-v2/backend-deployment.yaml
+      run: |
+        kubectl apply -f kubernetes/staging-v2/backend-deployment.yaml
+        kubectl rollout restart deployment/oms-backend --namespace=${{ env.K8S_NAMESPACE }}
 
     - name: Wait for backend to be ready
       run: |
@@ -312,7 +314,9 @@ jobs:
           --timeout=300s
 
     - name: Deploy frontend application
-      run: kubectl apply -f kubernetes/staging-v2/frontend-deployment.yaml
+      run: |
+        kubectl apply -f kubernetes/staging-v2/frontend-deployment.yaml
+        kubectl rollout restart deployment/oms-frontend --namespace=${{ env.K8S_NAMESPACE }}
 
     - name: Wait for frontend to be ready
       run: |
