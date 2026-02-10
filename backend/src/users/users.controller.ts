@@ -101,29 +101,13 @@ export class UsersController {
       `findAll: fetched ${users.length} users, totalCount=${totalCount}`,
     );
 
-    // Populate typeName (role) for each user
-    const usersWithRoles = await Promise.all(
-      users.map(async (user) => {
-        try {
-          const userId = user.legacyId ?? user.id;
-          const role = await this.usersService.getUserRole(
-            userId,
-            user.username,
-            user.userType,
-            user.isSupervisor,
-          );
-          user.typeName = role.name;
-        } catch (error) {
-          this.logger.warn(
-            `getUserRole failed for user ${user.username} (id=${user.id}, legacyId=${user.legacyId}): ${error}`,
-          );
-          user.typeName = "user";
-        }
-        return user;
-      }),
-    );
+    // Batch-resolve role names (at most 1 DB query instead of N)
+    const roleMap = await this.usersService.resolveRoleNamesForList(users);
+    for (const user of users) {
+      user.typeName = roleMap.get(user.id) ?? "user";
+    }
 
-    return infinityPagination(usersWithRoles, { page, limit }, totalCount);
+    return infinityPagination(users, { page, limit }, totalCount);
   }
 
   @ApiOkResponse({
