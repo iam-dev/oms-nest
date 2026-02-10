@@ -63,8 +63,8 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   });
 
   test.afterAll(async () => {
-    await adminContext.dispose();
-    await fitterContext.dispose();
+    await adminContext?.dispose();
+    await fitterContext?.dispose();
   });
 
   // ==================== Admin Access (type=all) ====================
