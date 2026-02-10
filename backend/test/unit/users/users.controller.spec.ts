@@ -30,6 +30,7 @@ describe("UsersController", () => {
       remove: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
       getUserRole: jest.fn().mockResolvedValue({ id: 6, name: "user" }),
+      resolveRoleNamesForList: jest.fn().mockResolvedValue(new Map()),
     };
 
     const module: TestingModule = await Test.createTestingModule({
