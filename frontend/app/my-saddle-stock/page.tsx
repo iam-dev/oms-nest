@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchMySaddleStock } from '@/services/saddleStock';
 import { SaddleStock } from '@/types/SaddleStock';
 import { EntityTable } from '@/components/shared/EntityTable';
+import { Column } from '@/components/shared/DataTable';
+import { SaddleStockDetailModal } from '@/components/shared/SaddleStockDetailModal';
 import { useTableFilters, usePagination } from '@/hooks';
 import { PageHeader } from '@/components/shared';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,88 +32,84 @@ const formatDate = (dateString: string) => {
   });
 };
 
-const getSaddleStockColumns = () => [
+const getSaddleStockColumns = (): Column<SaddleStock>[] => [
   {
-    id: 'serial',
-    header: 'Serial',
-    accessor: (item: SaddleStock) => (
-      <span className="font-mono">{item.serial}</span>
-    ),
-    sortable: true,
+    key: 'serial',
+    title: 'Serial',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? <span className="font-mono">{row.serial}</span> : null,
   },
   {
-    id: 'name',
-    header: 'Name',
-    accessor: (item: SaddleStock) => item.name,
-    sortable: true,
+    key: 'name',
+    title: 'Name',
   },
   {
-    id: 'model',
-    header: 'Model',
-    accessor: (item: SaddleStock) => getDisplayValue(item.model),
-    sortable: false,
+    key: 'model',
+    title: 'Model',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? getDisplayValue(row.model) : '-',
   },
   {
-    id: 'leatherType',
-    header: 'Leather Type',
-    accessor: (item: SaddleStock) => getDisplayValue(item.leatherType),
-    sortable: false,
+    key: 'leatherType',
+    title: 'Leather Type',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? getDisplayValue(row.leatherType) : '-',
   },
   {
-    id: 'stock',
-    header: 'Stock',
-    accessor: (item: SaddleStock) => (
-      <Badge variant={item.stock > 5 ? 'default' : item.stock > 0 ? 'secondary' : 'destructive'}>
-        {item.stock}
-      </Badge>
-    ),
-    sortable: true,
+    key: 'stock',
+    title: 'Stock',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? (
+        <Badge variant={row.stock > 5 ? 'default' : row.stock > 0 ? 'secondary' : 'destructive'}>
+          {row.stock}
+        </Badge>
+      ) : null,
   },
   {
-    id: 'demo',
-    header: 'Demo',
-    accessor: (item: SaddleStock) => (
-      <Badge variant={item.demo ? 'outline' : 'secondary'}>
-        {item.demo ? 'Yes' : 'No'}
-      </Badge>
-    ),
-    sortable: false,
+    key: 'demo',
+    title: 'Demo',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? (
+        <Badge variant={row.demo ? 'outline' : 'secondary'}>
+          {row.demo ? 'Yes' : 'No'}
+        </Badge>
+      ) : null,
   },
   {
-    id: 'customizable',
-    header: 'Customizable',
-    accessor: (item: SaddleStock) => (
-      <Badge variant={item.customizableProduct ? 'default' : 'secondary'}>
-        {item.customizableProduct ? 'Yes' : 'No'}
-      </Badge>
-    ),
-    sortable: false,
+    key: 'customizableProduct',
+    title: 'Customizable',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? (
+        <Badge variant={row.customizableProduct ? 'default' : 'secondary'}>
+          {row.customizableProduct ? 'Yes' : 'No'}
+        </Badge>
+      ) : null,
   },
   {
-    id: 'ordered',
-    header: 'Ordered',
-    accessor: (item: SaddleStock) => (
-      <Badge variant={item.productHasBeenOrdered ? 'destructive' : 'default'}>
-        {item.productHasBeenOrdered ? 'Yes' : 'No'}
-      </Badge>
-    ),
-    sortable: false,
+    key: 'productHasBeenOrdered',
+    title: 'Ordered',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? (
+        <Badge variant={row.productHasBeenOrdered ? 'destructive' : 'default'}>
+          {row.productHasBeenOrdered ? 'Yes' : 'No'}
+        </Badge>
+      ) : null,
   },
   {
-    id: 'sponsored',
-    header: 'Sponsored',
-    accessor: (item: SaddleStock) => (
-      <Badge variant={item.sponsored ? 'outline' : 'secondary'}>
-        {item.sponsored ? 'Yes' : 'No'}
-      </Badge>
-    ),
-    sortable: false,
+    key: 'sponsored',
+    title: 'Sponsored',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? (
+        <Badge variant={row.sponsored ? 'outline' : 'secondary'}>
+          {row.sponsored ? 'Yes' : 'No'}
+        </Badge>
+      ) : null,
   },
   {
-    id: 'createdAt',
-    header: 'Created',
-    accessor: (item: SaddleStock) => formatDate(item.createdAt),
-    sortable: true,
+    key: 'createdAt',
+    title: 'Created',
+    render: (_value: unknown, row?: SaddleStock) =>
+      row ? formatDate(row.createdAt) : '-',
   },
 ];
 
@@ -120,6 +118,8 @@ export default function MySaddleStockPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSaddle, setSelectedSaddle] = useState<SaddleStock | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const { filters, updateFilter } = useTableFilters<Record<string, string>>({});
   const { pagination, setTotalItems } = usePagination(10, 1);
@@ -136,9 +136,9 @@ export default function MySaddleStockPage() {
         order: 'desc'
       });
 
-      if (result['hydra:member']) {
-        setSaddleStock(result['hydra:member']);
-        setTotalItems(result['hydra:totalItems'] || result['hydra:member'].length);
+      if (result.data) {
+        setSaddleStock(result.data);
+        setTotalItems(result.total || result.data.length);
       } else {
         setSaddleStock([]);
         setTotalItems(0);
@@ -161,13 +161,8 @@ export default function MySaddleStockPage() {
   };
 
   const handleViewSaddle = (saddle: SaddleStock) => {
-    logger.log('View saddle', saddle);
-    // Implement view logic if needed
-  };
-
-  const handleEditSaddle = (saddle: SaddleStock) => {
-    logger.log('Edit saddle', saddle);
-    // Implement edit logic if needed
+    setSelectedSaddle(saddle);
+    setIsDetailsOpen(true);
   };
 
   const handleAddStock = () => {
@@ -210,8 +205,7 @@ export default function MySaddleStockPage() {
 
       <EntityTable
         entities={saddleStock}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        columns={getSaddleStockColumns() as any}
+        columns={getSaddleStockColumns()}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}
@@ -221,12 +215,17 @@ export default function MySaddleStockPage() {
         error={error ?? undefined}
         entityType="product"
         onView={handleViewSaddle}
-        onEdit={handleEditSaddle}
         actionButtons={{
           view: true,
-          edit: true,
+          edit: false,
           delete: false
         }}
+      />
+
+      <SaddleStockDetailModal
+        saddle={selectedSaddle}
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
       />
     </div>
   );
