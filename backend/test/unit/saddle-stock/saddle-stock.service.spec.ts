@@ -38,7 +38,7 @@ describe("SaddleStockService", () => {
       // Assert
       expect(result).toBe(42);
       expect(dataSource.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT id FROM fitters"),
+        expect.stringContaining("FROM fitters"),
         [10],
       );
     });

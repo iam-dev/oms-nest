@@ -24,9 +24,11 @@ export interface SaddleStock {
 }
 
 export interface SaddleStockSearchResult {
-  '@context': string;
-  '@id': string;
-  '@type': string;
-  'hydra:member': SaddleStock[];
-  'hydra:totalItems': number;
+  data: SaddleStock[];
+  total: number;
+  pages: number;
+  page: number;
+  limit: number;
+  hasNext: boolean;
+  hasPrev: boolean;
 }
