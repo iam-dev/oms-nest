@@ -119,9 +119,9 @@ export default function AllSaddleStockPage() {
         search: searchTerm || undefined,
       });
 
-      if (result['hydra:member']) {
-        setSaddleStock(result['hydra:member']);
-        setTotalItems(result['hydra:totalItems'] || result['hydra:member'].length);
+      if (result.data) {
+        setSaddleStock(result.data);
+        setTotalItems(result.total || result.data.length);
       } else {
         setSaddleStock([]);
         setTotalItems(0);
