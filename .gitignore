@@ -84,6 +84,7 @@ tmp/
 secrets.env
 kube/secrets.env
 kube/*.sealed.yaml
+*secrets-plain.yaml
 
 # Security - NEVER COMMIT THESE
 *.pem
@@ -149,3 +150,8 @@ ARCHIVE
 .claude/postgresql-migration-plan.md
 .dirigent/
 .claude/
+
+# pnpm and turbo
+.turbo
+/frontend/.turbo
+/backend/.turbo

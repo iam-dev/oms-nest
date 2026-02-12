@@ -388,7 +388,7 @@ export async function updateOrder(orderId: number | string, updateData: Record<s
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetchWithRefresh(url, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       credentials: 'include',
       body: JSON.stringify(updateData),

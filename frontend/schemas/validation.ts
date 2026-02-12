@@ -74,6 +74,10 @@ export const orderFilterSchema = z.object({
     .max(50, 'Seat size must be less than 50 characters')
     .regex(/^[\d.,\s]*$/, 'Seat size can only contain numbers, commas, dots, and spaces')
     .optional(),
+  orderIds: z.string()
+    .max(2000, 'Order IDs must be less than 2000 characters')
+    .regex(/^[\d,\s]*$/, 'Order IDs can only contain numbers, commas, and spaces')
+    .optional(),
 });
 
 export const orderCreateSchema = z.object({

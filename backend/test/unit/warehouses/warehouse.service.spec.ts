@@ -3,35 +3,31 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { NotFoundException } from "@nestjs/common";
 import { Repository } from "typeorm";
 import { WarehouseService } from "../../../src/warehouses/warehouse.service";
-import { Warehouse } from "../../../src/warehouses/warehouse.entity";
+import { WarehouseEntity } from "../../../src/warehouses/infrastructure/persistence/relational/entities/warehouse.entity";
 
 describe("WarehouseService", () => {
   let service: WarehouseService;
-  let repository: jest.Mocked<Repository<Warehouse>>;
+  let repository: jest.Mocked<Repository<WarehouseEntity>>;
 
-  const mockWarehouse: Warehouse = {
+  const mockWarehouse = {
     id: "550e8400-e29b-41d4-a716-446655440000",
     name: "Main Warehouse",
     code: "WH001",
     address: "123 Storage St",
     city: "London",
-    state: "England",
-    postal_code: "SW1A 1AA",
     country: "United Kingdom",
-    phone: "020-1234-5678",
-    email: "warehouse@example.com",
-    is_active: true,
-    created_at: new Date("2024-01-01"),
-    updated_at: new Date("2024-01-01"),
-    deleted_at: undefined,
-  };
+    isActive: true,
+    createdAt: new Date("2024-01-01"),
+    updatedAt: new Date("2024-01-01"),
+    deletedAt: null,
+  } as WarehouseEntity;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WarehouseService,
         {
-          provide: getRepositoryToken(Warehouse),
+          provide: getRepositoryToken(WarehouseEntity),
           useValue: {
             create: jest.fn(),
             save: jest.fn(),
@@ -45,7 +41,7 @@ describe("WarehouseService", () => {
     }).compile();
 
     service = module.get<WarehouseService>(WarehouseService);
-    repository = module.get(getRepositoryToken(Warehouse));
+    repository = module.get(getRepositoryToken(WarehouseEntity));
   });
 
   afterEach(() => {
@@ -65,8 +61,8 @@ describe("WarehouseService", () => {
         city: "London",
         country: "United Kingdom",
       };
-      repository.create.mockReturnValue(mockWarehouse);
-      repository.save.mockResolvedValue(mockWarehouse);
+      repository.create.mockReturnValue(mockWarehouse as WarehouseEntity);
+      repository.save.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await service.create(createDto);
@@ -84,22 +80,18 @@ describe("WarehouseService", () => {
         code: "WH001",
         address: "123 Storage St",
         city: "London",
-        state: "England",
-        postal_code: "SW1A 1AA",
         country: "United Kingdom",
-        phone: "020-1234-5678",
-        email: "warehouse@example.com",
         is_active: true,
       };
-      repository.create.mockReturnValue(mockWarehouse);
-      repository.save.mockResolvedValue(mockWarehouse);
+      repository.create.mockReturnValue(mockWarehouse as WarehouseEntity);
+      repository.save.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await service.create(createDto);
 
       // Assert
       expect(repository.save).toHaveBeenCalled();
-      expect(result.email).toBe("warehouse@example.com");
+      expect(result.name).toBe("Main Warehouse");
     });
   });
 
@@ -112,7 +104,10 @@ describe("WarehouseService", () => {
         sortBy: "name",
         sortOrder: "ASC" as const,
       };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 1]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        1,
+      ]);
 
       // Act
       const result = await service.findAll(query);
@@ -132,7 +127,10 @@ describe("WarehouseService", () => {
     it("should filter by name", async () => {
       // Arrange
       const query = { name: "Main" };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 1]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        1,
+      ]);
 
       // Act
       const result = await service.findAll(query);
@@ -151,7 +149,10 @@ describe("WarehouseService", () => {
     it("should filter by city", async () => {
       // Arrange
       const query = { city: "London" };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 1]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        1,
+      ]);
 
       // Act
       const result = await service.findAll(query);
@@ -170,7 +171,10 @@ describe("WarehouseService", () => {
     it("should filter by country", async () => {
       // Arrange
       const query = { country: "United Kingdom" };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 1]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        1,
+      ]);
 
       // Act
       const result = await service.findAll(query);
@@ -189,7 +193,10 @@ describe("WarehouseService", () => {
     it("should filter by active status", async () => {
       // Arrange
       const query = { is_active: true };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 1]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        1,
+      ]);
 
       // Act
       const result = await service.findAll(query);
@@ -197,7 +204,7 @@ describe("WarehouseService", () => {
       // Assert
       expect(repository.findAndCount).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { is_active: true },
+          where: { isActive: true },
         }),
       );
       expect(result.data).toHaveLength(1);
@@ -206,7 +213,10 @@ describe("WarehouseService", () => {
     it("should handle pagination correctly", async () => {
       // Arrange
       const query = { page: 3, limit: 10 };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 25]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        25,
+      ]);
 
       // Act
       const result = await service.findAll(query);
@@ -224,7 +234,10 @@ describe("WarehouseService", () => {
     it("should support custom sorting", async () => {
       // Arrange
       const query = { sortBy: "city", sortOrder: "DESC" as const };
-      repository.findAndCount.mockResolvedValue([[mockWarehouse], 1]);
+      repository.findAndCount.mockResolvedValue([
+        [mockWarehouse as WarehouseEntity],
+        1,
+      ]);
 
       // Act
       await service.findAll(query);
@@ -255,7 +268,7 @@ describe("WarehouseService", () => {
     it("should find a warehouse by id", async () => {
       // Arrange
       const id = "550e8400-e29b-41d4-a716-446655440000";
-      repository.findOne.mockResolvedValue(mockWarehouse);
+      repository.findOne.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await service.findOne(id);
@@ -291,8 +304,10 @@ describe("WarehouseService", () => {
         name: "Updated Warehouse",
         city: "Manchester",
       };
-      repository.findOne.mockResolvedValue({ ...mockWarehouse });
-      repository.save.mockResolvedValue(updatedWarehouse);
+      repository.findOne.mockResolvedValue({
+        ...mockWarehouse,
+      } as WarehouseEntity);
+      repository.save.mockResolvedValue(updatedWarehouse as WarehouseEntity);
 
       // Act
       const result = await service.update(id, updateDto);
@@ -319,15 +334,17 @@ describe("WarehouseService", () => {
       // Arrange
       const id = "550e8400-e29b-41d4-a716-446655440000";
       const updateDto = { is_active: false };
-      const updatedWarehouse = { ...mockWarehouse, is_active: false };
-      repository.findOne.mockResolvedValue({ ...mockWarehouse });
-      repository.save.mockResolvedValue(updatedWarehouse);
+      const updatedWarehouse = { ...mockWarehouse, isActive: false };
+      repository.findOne.mockResolvedValue({
+        ...mockWarehouse,
+      } as WarehouseEntity);
+      repository.save.mockResolvedValue(updatedWarehouse as WarehouseEntity);
 
       // Act
       const result = await service.update(id, updateDto);
 
       // Assert
-      expect(result.is_active).toBe(false);
+      expect(result.isActive).toBe(false);
       expect(result.name).toBe("Main Warehouse");
     });
   });
@@ -336,8 +353,8 @@ describe("WarehouseService", () => {
     it("should soft delete a warehouse", async () => {
       // Arrange
       const id = "550e8400-e29b-41d4-a716-446655440000";
-      repository.findOne.mockResolvedValue(mockWarehouse);
-      repository.softRemove.mockResolvedValue(mockWarehouse);
+      repository.findOne.mockResolvedValue(mockWarehouse as WarehouseEntity);
+      repository.softRemove.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       await service.remove(id);
@@ -363,10 +380,10 @@ describe("WarehouseService", () => {
       const id = "550e8400-e29b-41d4-a716-446655440000";
       const deletedWarehouse = {
         ...mockWarehouse,
-        deleted_at: new Date("2024-01-02"),
+        deletedAt: new Date("2024-01-02"),
       };
-      repository.findOne.mockResolvedValue(deletedWarehouse);
-      repository.recover.mockResolvedValue(mockWarehouse);
+      repository.findOne.mockResolvedValue(deletedWarehouse as WarehouseEntity);
+      repository.recover.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await service.restore(id);

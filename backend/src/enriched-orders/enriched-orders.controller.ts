@@ -121,6 +121,47 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Patch("bulk-update-status")
+  async bulkUpdateOrderStatus(
+    @Body() body: { orderIds: number[]; status: string },
+  ) {
+    try {
+      if (!Array.isArray(body.orderIds) || body.orderIds.length === 0) {
+        throw new HttpException(
+          { message: "orderIds must be a non-empty array" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (body.orderIds.length > 100) {
+        throw new HttpException(
+          { message: "Maximum 100 orders per bulk update" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      this.logger.log(
+        `Bulk updating ${body.orderIds.length} orders to status: ${body.status}`,
+      );
+      const result = await this.enrichedOrdersService.bulkUpdateOrderStatus(
+        body.orderIds,
+        body.status,
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.logger.error("Failed to bulk update order statuses", error);
+      throw new HttpException(
+        {
+          message: "Failed to bulk update order statuses",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Patch("update-status/:id")
   async updateOrderStatus(
     @Param("id", ParseIntPipe) id: number,
@@ -174,6 +215,7 @@ export class EnrichedOrdersController {
       // Order ID filters
       id: this.parsePositiveInt(query.id),
       orderId: this.parsePositiveInt(query.orderId),
+      orderIds: query.orderIds ? String(query.orderIds).trim() : undefined,
       // Urgency filters (accepts multiple formats)
       urgency: query.urgency ? String(query.urgency).trim() : undefined,
       urgent: query.urgent,

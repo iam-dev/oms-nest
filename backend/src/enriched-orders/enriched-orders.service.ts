@@ -45,6 +45,8 @@ export interface EnrichedOrdersQueryDto {
   customerCountry?: string;
   // Filter by repair flag (0/1 or true/false)
   repair?: string | boolean;
+  // Comma-separated order IDs for bulk search
+  orderIds?: string;
 }
 
 export interface PaginationMetadata {
@@ -160,6 +162,8 @@ export class EnrichedOrdersService {
         o.special_notes,
         COALESCE(c.name, o.name, '') as customer_name,
         o.customer_id,
+        o.demo,
+        o.sponsored,
         fc.full_name as fitter_name,
         o.fitter_id,
         s.brand as brand_name,
@@ -276,6 +280,20 @@ export class EnrichedOrdersService {
       conditions.push(`o.id = $${paramIndex}`);
       params.push(orderId);
       paramIndex++;
+    }
+
+    // Filter by multiple order IDs (bulk search)
+    if (!orderId && query.orderIds) {
+      const idsArray = query.orderIds
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => /^\d+$/.test(id))
+        .map((id) => parseInt(id, 10));
+      if (idsArray.length > 0) {
+        conditions.push(`o.id = ANY($${paramIndex}::int[])`);
+        params.push(idsArray);
+        paramIndex++;
+      }
     }
 
     // General search term (searches multiple fields)
@@ -523,6 +541,7 @@ export class EnrichedOrdersService {
     // Order ID filters
     if (query.id) keyParts.push(`id:${query.id}`);
     if (query.orderId) keyParts.push(`orderId:${query.orderId}`);
+    if (query.orderIds) keyParts.push(`orderIds:${query.orderIds}`);
     // Urgency filters
     if (query.urgency) keyParts.push(`urgency:${query.urgency}`);
     if (query.urgent) keyParts.push(`urgent:${query.urgent}`);
@@ -933,6 +952,8 @@ export class EnrichedOrdersService {
         `Successfully updated order ${orderId} to status ${statusName} (id: ${statusId})`,
       );
 
+      await this.invalidateCache();
+
       return {
         success: true,
         orderId,
@@ -947,17 +968,123 @@ export class EnrichedOrdersService {
     }
   }
 
-  async invalidateCache(pattern?: string): Promise<void> {
-    await Promise.resolve();
+  async bulkUpdateOrderStatus(
+    orderIds: number[],
+    statusName: string,
+  ): Promise<{
+    success: boolean;
+    updated: number;
+    failed: number;
+    results: Array<{ orderId: number; success: boolean; error?: string }>;
+  }> {
+    this.logger.log(
+      `Bulk updating ${orderIds.length} orders to status: ${statusName}`,
+    );
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    const results: Array<{
+      orderId: number;
+      success: boolean;
+      error?: string;
+    }> = [];
+
     try {
-      if (pattern) {
-        // Redis-style pattern invalidation would go here
-        // For now, we'll clear specific keys
-        this.logger.debug(`Invalidating cache pattern: ${pattern}`);
-      } else {
-        // Clear all enriched orders cache
-        this.logger.debug("Clearing all enriched orders cache");
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      // Look up the status ID from the statuses table
+      const statusResult = await queryRunner.query(
+        `SELECT id FROM statuses WHERE name = $1`,
+        [statusName],
+      );
+
+      if (!statusResult || statusResult.length === 0) {
+        throw new Error(`Unknown status: ${statusName}`);
       }
+
+      const statusId = statusResult[0].id;
+
+      for (const orderId of orderIds) {
+        try {
+          // Get the old status before updating
+          const oldStatusResult = await queryRunner.query(
+            `SELECT order_status, fitter_id FROM orders WHERE id = $1`,
+            [orderId],
+          );
+
+          if (!oldStatusResult || oldStatusResult.length === 0) {
+            results.push({
+              orderId,
+              success: false,
+              error: `Order ${orderId} not found`,
+            });
+            continue;
+          }
+
+          const oldStatusId = oldStatusResult[0].order_status;
+          const fitterId = oldStatusResult[0].fitter_id;
+
+          // Update the order's status
+          await queryRunner.query(
+            `UPDATE orders SET order_status = $1 WHERE id = $2`,
+            [statusId, orderId],
+          );
+
+          // Log the status change
+          try {
+            await queryRunner.query(
+              `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
+               VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, $4, $5)`,
+              [
+                fitterId || 0,
+                orderId,
+                `Changed the order status to '${statusName}' (bulk update)`,
+                oldStatusId,
+                statusId,
+              ],
+            );
+          } catch (logErr) {
+            this.logger.warn(
+              `Failed to log status change for order ${orderId}: ${logErr.message}`,
+            );
+          }
+
+          results.push({ orderId, success: true });
+        } catch (err) {
+          results.push({
+            orderId,
+            success: false,
+            error: err.message,
+          });
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      await this.invalidateCache();
+
+      const updated = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).length;
+
+      this.logger.log(
+        `Bulk update complete: ${updated} updated, ${failed} failed`,
+      );
+
+      return { success: failed === 0, updated, failed, results };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error("Failed to bulk update order statuses", error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async invalidateCache(): Promise<void> {
+    try {
+      await this.cacheManager.clear();
+      this.logger.debug("Cleared all enriched orders cache");
     } catch (error) {
       this.logger.warn("Failed to invalidate cache", error);
     }

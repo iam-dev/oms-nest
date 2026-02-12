@@ -129,8 +129,7 @@ run_migrations() {
     DATABASE_NAME=$DB_NAME \
     DATABASE_TYPE=postgres \
     NODE_ENV=test \
-    npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js \
-        --dataSource=src/database/data-source.ts migration:run
+    npx typeorm-ts-node-commonjs --dataSource=src/database/data-source.ts migration:run
 
     echo_info "Migrations complete"
 }

@@ -1,0 +1,17 @@
+{
+  "name": "oms-nest",
+  "private": true,
+  "scripts": {
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "test:cov": "turbo run test:cov",
+    "dev:local": "turbo run dev:local",
+    "e2e": "./scripts/run-e2e-local.sh",
+    "build": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  },
+  "packageManager": "pnpm@10.11.0"
+}

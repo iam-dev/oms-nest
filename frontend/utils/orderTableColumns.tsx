@@ -27,6 +27,32 @@ export function getOrderTableColumns(
       render: (_: any, row: any) => row?.id || '-',
     },
     {
+      key: 'icons',
+      title: '',
+      render: (_: unknown, row?: Record<string, unknown>) => {
+        if (!row) return null;
+        const badges: React.ReactNode[] = [];
+        if (row.sponsored) {
+          badges.push(
+            <span key="s" style={{ display: 'inline-block', background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: '10px', lineHeight: '16px', width: '16px', textAlign: 'center', borderRadius: '3px', marginRight: '2px' }}>S</span>
+          );
+        }
+        if (row.demo) {
+          badges.push(
+            <span key="d" style={{ display: 'inline-block', background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: '10px', lineHeight: '16px', width: '16px', textAlign: 'center', borderRadius: '3px', marginRight: '2px' }}>D</span>
+          );
+        }
+        const urgentValue = row.urgency ?? row.isUrgent ?? row.urgent;
+        if (urgentValue === 1 || urgentValue === true || urgentValue === 'true' || urgentValue === 'Yes') {
+          badges.push(
+            <span key="u" style={{ display: 'inline-block', color: '#d97706', fontSize: '14px', lineHeight: '16px', marginRight: '2px' }} title="Urgent">{'\u26A1'}</span>
+          );
+        }
+        if (badges.length === 0) return null;
+        return <span style={{ display: 'flex', alignItems: 'center', gap: '1px', whiteSpace: 'nowrap' }}>{badges}</span>;
+      },
+    },
+    {
       key: 'saddleSpecifications',
       title: (
         <TableHeaderFilter

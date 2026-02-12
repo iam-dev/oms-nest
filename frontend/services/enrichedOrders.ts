@@ -117,18 +117,8 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
 
   // Fitter filtering is handled server-side via RLS and the authenticated cookie session
   
-  // Special case for orderId search - use paginated search if we have an exact orderId
-  if (formattedFilters.orderId && /^\d+$/.test(formattedFilters.orderId)) {
-    try {
-      logger.log('Detected specific order ID search:', formattedFilters.orderId);
-      
-      // Use paginated search to find the specific order
-      return await searchForOrderByPages(formattedFilters.orderId);
-    } catch (error) {
-      logger.warn('Failed to find order through paginated search, falling back to regular search:', error);
-      // Fall back to regular search if the paginated search fails
-    }
-  }
+  // Order ID search: pass orderId directly to the backend API which supports exact match filtering
+  // (Previously used searchForOrderByPages which was limited to scanning 10 pages client-side)
   
   // Extract searchTerm from filters to pass as top-level parameter
   // This ensures it gets converted to the 'search' parameter the backend expects
@@ -181,6 +171,32 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   logger.log('enrichedOrders.ts: Server-side filtering should handle the request properly');
   
   return response;
+}
+
+// ========== BULK STATUS UPDATE ==========
+
+export async function bulkUpdateOrderStatus(
+  orderIds: number[],
+  status: string,
+): Promise<{ success: boolean; updated: number; failed: number; results: Array<{ orderId: number; success: boolean; error?: string }> }> {
+  logger.log('Bulk updating order statuses:', { orderIds, status });
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/bulk-update-status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ orderIds, status }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to bulk update statuses: ${response.status}`);
+  }
+
+  return response.json();
 }
 
 // ========== SINGLE ORDER DETAIL ==========

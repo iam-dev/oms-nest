@@ -112,6 +112,8 @@ export function buildOrderFilters(headerFilters: HeaderFilters): Record<string, 
         // Don't set filter if empty/undefined to show all records
       } else if (key === 'seatSize') {
         filters.seatSizes = value;
+      } else if (key === 'orderIds') {
+        filters.orderIds = value;
       }
     }
   });
