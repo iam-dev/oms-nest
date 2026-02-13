@@ -1,6 +1,7 @@
 name: 🚀 OMS DevSecOps Pipeline
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, staging]
   pull_request:
