@@ -56,5 +56,24 @@ paths = [
   '''\.gitleaks\.toml$''',
   '''scripts/security-scan\.sh$''',
   '''SKILL\.md$''',
-  '''\.snap$'''
+  '''\.snap$''',
+  # Bitnami SealedSecrets — values are asymmetrically encrypted ciphertext, not plaintext
+  '''kubernetes/staging/sealed-secret\.yaml$''',
+  '''kubernetes/staging-v2/sealed-secret\.yaml$''',
+  # CI/CD workflows — contain only localhost test credentials (oms:test_password)
+  '''\.github/workflows/ci-cd\.yml$''',
+  '''\.github/workflows/pr-checks\.yml$''',
+  '''\.github/workflows/staging-deployment\.yml$''',
+  # Documentation — example curl commands and placeholder API keys
+  '''docs/api-reference\.md$''',
+  '''README\.md$''',
+  '''QUICK_START\.md$''',
+  '''IMPLEMENTATION_SUMMARY\.md$''',
+  '''backend/docs/installing-and-running\.md$''',
+  # Test files — mock/test tokens
+  '''frontend/middleware\.ts$''',
+  '''frontend/tests/''',
+  # E2E and test scripts — local test credentials only
+  '''scripts/run-e2e-local\.sh$''',
+  '''backend/test/e2e-api/scripts/'''
 ]
