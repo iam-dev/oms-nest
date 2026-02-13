@@ -82,6 +82,12 @@
     <script>
         let testLog = [];
 
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         function log(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
             testLog.push(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
@@ -89,8 +95,11 @@
         }
 
         function updateTestLog() {
-            document.getElementById('testLog').innerHTML =
-                '<pre>' + testLog.slice(-20).join('\n') + '</pre>';
+            const pre = document.createElement('pre');
+            pre.textContent = testLog.slice(-20).join('\n');
+            const logEl = document.getElementById('testLog');
+            logEl.innerHTML = '';
+            logEl.appendChild(pre);
         }
 
         function getAuthToken() {
@@ -199,21 +208,19 @@
                 const result = await updateCustomer(testCustomerId, testData);
 
                 resultDiv.className = 'test-section success';
-                resultDiv.innerHTML = `
-                    <h3>✅ Quick Test Passed!</h3>
-                    <p>Customer update functionality is working correctly.</p>
-                    <pre>${JSON.stringify(result, null, 2)}</pre>
-                `;
+                resultDiv.innerHTML = '<h3>Quick Test Passed!</h3><p>Customer update functionality is working correctly.</p>';
+                const pre1 = document.createElement('pre');
+                pre1.textContent = JSON.stringify(result, null, 2);
+                resultDiv.appendChild(pre1);
 
                 log('Quick test completed successfully', 'success');
 
             } catch (error) {
                 resultDiv.className = 'test-section error';
-                resultDiv.innerHTML = `
-                    <h3>❌ Quick Test Failed</h3>
-                    <p>Error: ${error.message}</p>
-                    <p>Check the test log for details.</p>
-                `;
+                resultDiv.innerHTML = '<h3>Quick Test Failed</h3><p>Check the test log for details.</p>';
+                const errP1 = document.createElement('p');
+                errP1.textContent = 'Error: ' + error.message;
+                resultDiv.appendChild(errP1);
 
                 log(`Quick test failed: ${error.message}`, 'error');
             }
@@ -250,19 +257,19 @@
                 const result = await updateCustomer(customerId, customerData);
 
                 resultDiv.className = 'test-section success';
-                resultDiv.innerHTML = `
-                    <h3>✅ Customer Updated Successfully!</h3>
-                    <pre>${JSON.stringify(result, null, 2)}</pre>
-                `;
+                resultDiv.innerHTML = '<h3>Customer Updated Successfully!</h3>';
+                const pre2 = document.createElement('pre');
+                pre2.textContent = JSON.stringify(result, null, 2);
+                resultDiv.appendChild(pre2);
 
                 log(`Customer ${customerId} updated successfully`, 'success');
 
             } catch (error) {
                 resultDiv.className = 'test-section error';
-                resultDiv.innerHTML = `
-                    <h3>❌ Update Failed</h3>
-                    <p>Error: ${error.message}</p>
-                `;
+                resultDiv.innerHTML = '<h3>Update Failed</h3>';
+                const errP2 = document.createElement('p');
+                errP2.textContent = 'Error: ' + error.message;
+                resultDiv.appendChild(errP2);
 
                 log(`Customer update failed: ${error.message}`, 'error');
             }
