@@ -351,15 +351,99 @@ describe('OrdersTable', () => {
         setMockRole(UserRole.FITTER);
       });
 
-      it('renders only view buttons for fitter', () => {
+      it('renders view and edit buttons for fitter on non-restricted orders', () => {
         renderTable();
 
-        // FITTER has ORDER_VIEW permission only (not EDIT, APPROVE, DELETE)
+        // FITTER has ORDER_VIEW + ORDER_EDIT (status-based).
+        // Mock orders have status 'pending' and 'approved' (lowercase) which don't
+        // match restricted statuses (case-sensitive), so edit buttons are enabled.
         const actionButtons = screen.getAllByRole('button').filter(
           (btn) => btn.className.includes('h-8') && btn.className.includes('w-8')
         );
-        // 1 button (view) per row * 2 rows = 2
-        expect(actionButtons).toHaveLength(2);
+        // 2 buttons (view + edit) per row * 2 rows = 4
+        expect(actionButtons).toHaveLength(4);
+      });
+
+      it('shows disabled edit button for orders with restricted status', () => {
+        const restrictedOrders = [
+          {
+            ...mockOrders[0],
+            orderStatus: 'Approved',
+            status: 'Approved',
+          },
+          {
+            ...mockOrders[1],
+            orderStatus: 'In Production P1',
+            status: 'In Production P1',
+          },
+        ] as any;
+
+        renderTable({ orders: restrictedOrders });
+
+        // Fitter should see view buttons (enabled) + edit buttons (disabled) for restricted orders
+        const allActionButtons = screen.getAllByRole('button').filter(
+          (btn) => btn.className.includes('h-8') && btn.className.includes('w-8')
+        );
+        // 2 buttons per row (view + disabled edit) * 2 rows = 4
+        expect(allActionButtons).toHaveLength(4);
+
+        // Disabled edit buttons should have the disabled attribute
+        const disabledButtons = allActionButtons.filter((btn) => btn.hasAttribute('disabled'));
+        expect(disabledButtons).toHaveLength(2);
+      });
+
+      it('shows enabled edit button for orders with non-restricted status', () => {
+        const editableOrders = [
+          {
+            ...mockOrders[0],
+            orderStatus: 'Unordered',
+            status: 'Unordered',
+          },
+          {
+            ...mockOrders[1],
+            orderStatus: 'Ordered',
+            status: 'Ordered',
+          },
+        ] as any;
+
+        renderTable({ orders: editableOrders });
+
+        const allActionButtons = screen.getAllByRole('button').filter(
+          (btn) => btn.className.includes('h-8') && btn.className.includes('w-8')
+        );
+        // 2 buttons (view + enabled edit) per row * 2 rows = 4
+        expect(allActionButtons).toHaveLength(4);
+
+        // No disabled buttons — all edit buttons should be enabled
+        const disabledButtons = allActionButtons.filter((btn) => btn.hasAttribute('disabled'));
+        expect(disabledButtons).toHaveLength(0);
+      });
+
+      it('shows mixed enabled/disabled edit buttons based on order status', () => {
+        const mixedOrders = [
+          {
+            ...mockOrders[0],
+            orderStatus: 'Ordered',
+            status: 'Ordered',
+          },
+          {
+            ...mockOrders[1],
+            orderStatus: 'Approved',
+            status: 'Approved',
+          },
+        ] as any;
+
+        renderTable({ orders: mixedOrders });
+
+        const allActionButtons = screen.getAllByRole('button').filter(
+          (btn) => btn.className.includes('h-8') && btn.className.includes('w-8')
+        );
+        // 2 buttons per row * 2 rows = 4
+        expect(allActionButtons).toHaveLength(4);
+
+        // Only the 'Approved' order's edit button should be disabled
+        const disabledButtons = allActionButtons.filter((btn) => btn.hasAttribute('disabled'));
+        expect(disabledButtons).toHaveLength(1);
       });
     });
 

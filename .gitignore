@@ -155,3 +155,6 @@ ARCHIVE
 .turbo
 /frontend/.turbo
 /backend/.turbo
+
+
+docs/git-and-sessions-activity-log.md

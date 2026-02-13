@@ -103,9 +103,9 @@ describe('Role Permissions Configuration', () => {
         expect(hasScreenPermission(UserRole.ADMIN, 'ORDER_CREATE')).toBe(true);
         expect(hasScreenPermission(UserRole.SUPERVISOR, 'ORDER_CREATE')).toBe(true);
 
-        // ORDER_EDIT (Admin only)
+        // ORDER_EDIT (Admin, Supervisor, Fitter — fitters have status-based restrictions via canEditOrder)
         expect(hasScreenPermission(UserRole.USER, 'ORDER_EDIT')).toBe(false);
-        expect(hasScreenPermission(UserRole.FITTER, 'ORDER_EDIT')).toBe(false);
+        expect(hasScreenPermission(UserRole.FITTER, 'ORDER_EDIT')).toBe(true);
         expect(hasScreenPermission(UserRole.SUPPLIER, 'ORDER_EDIT')).toBe(false);
         expect(hasScreenPermission(UserRole.ADMIN, 'ORDER_EDIT')).toBe(true);
         expect(hasScreenPermission(UserRole.SUPERVISOR, 'ORDER_EDIT')).toBe(true);

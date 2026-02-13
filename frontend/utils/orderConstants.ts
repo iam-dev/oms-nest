@@ -25,5 +25,17 @@ export const orderStatuses = [
   'Inventory HOLLAND'
 ];
 
+// Statuses where fitters are NOT allowed to edit orders
+// Admins and Supervisors can edit orders in any status
+export const FITTER_RESTRICTED_STATUSES = [
+  'Approved',
+  'In Production P1',
+  'In Production P2',
+  'In Production P3',
+  'Shipped to Fitter',
+  'Shipped to Customer',
+  'Completed sale',
+];
+
 // Legacy statuses for compatibility
 export const statuses = ['Ordered', 'In Production P1', 'Approved'];

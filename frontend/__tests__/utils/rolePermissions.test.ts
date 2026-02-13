@@ -1,11 +1,13 @@
 import {
   hasScreenPermission,
+  canEditOrder,
   getRoleDisplayName,
   SCREEN_PERMISSIONS,
   NAVIGATION_ITEMS,
   SADDLE_MODELING_ITEMS,
 } from '@/utils/rolePermissions';
 import { UserRole } from '@/types/Role';
+import { FITTER_RESTRICTED_STATUSES } from '@/utils/orderConstants';
 
 // Define test constants based on actual implementation
 const Screen = {
@@ -358,6 +360,91 @@ describe('Role Permissions System', () => {
     });
   });
 
+
+  describe('canEditOrder - Status-based Edit Restrictions', () => {
+    describe('Admin role', () => {
+      it('can edit orders in any status', () => {
+        FITTER_RESTRICTED_STATUSES.forEach(status => {
+          expect(canEditOrder(UserRole.ADMIN, status)).toBe(true);
+        });
+        expect(canEditOrder(UserRole.ADMIN, 'Unordered')).toBe(true);
+        expect(canEditOrder(UserRole.ADMIN, 'Ordered')).toBe(true);
+        expect(canEditOrder(UserRole.ADMIN, 'On hold')).toBe(true);
+      });
+
+      it('can edit when status is undefined', () => {
+        expect(canEditOrder(UserRole.ADMIN, undefined)).toBe(true);
+      });
+    });
+
+    describe('Supervisor role', () => {
+      it('can edit orders in any status', () => {
+        FITTER_RESTRICTED_STATUSES.forEach(status => {
+          expect(canEditOrder(UserRole.SUPERVISOR, status)).toBe(true);
+        });
+        expect(canEditOrder(UserRole.SUPERVISOR, 'Unordered')).toBe(true);
+        expect(canEditOrder(UserRole.SUPERVISOR, 'Ordered')).toBe(true);
+      });
+
+      it('can edit when status is undefined', () => {
+        expect(canEditOrder(UserRole.SUPERVISOR, undefined)).toBe(true);
+      });
+    });
+
+    describe('Fitter role', () => {
+      it('can edit orders in non-restricted statuses', () => {
+        expect(canEditOrder(UserRole.FITTER, 'Unordered')).toBe(true);
+        expect(canEditOrder(UserRole.FITTER, 'Ordered')).toBe(true);
+        expect(canEditOrder(UserRole.FITTER, 'On hold')).toBe(true);
+        expect(canEditOrder(UserRole.FITTER, 'On trial')).toBe(true);
+        expect(canEditOrder(UserRole.FITTER, 'Changed')).toBe(true);
+        expect(canEditOrder(UserRole.FITTER, 'Awaiting Client Confirmation')).toBe(true);
+      });
+
+      it('cannot edit orders in restricted statuses', () => {
+        FITTER_RESTRICTED_STATUSES.forEach(status => {
+          expect(canEditOrder(UserRole.FITTER, status)).toBe(false);
+        });
+      });
+
+      it('can edit when status is undefined', () => {
+        expect(canEditOrder(UserRole.FITTER, undefined)).toBe(true);
+      });
+
+      it('has base ORDER_EDIT screen permission', () => {
+        expect(hasScreenPermission(UserRole.FITTER, 'ORDER_EDIT')).toBe(true);
+      });
+    });
+
+    describe('Other roles', () => {
+      it('USER cannot edit orders regardless of status', () => {
+        expect(canEditOrder(UserRole.USER, 'Unordered')).toBe(false);
+        expect(canEditOrder(UserRole.USER, 'Approved')).toBe(false);
+      });
+
+      it('SUPPLIER cannot edit orders regardless of status', () => {
+        expect(canEditOrder(UserRole.SUPPLIER, 'Unordered')).toBe(false);
+        expect(canEditOrder(UserRole.SUPPLIER, 'Approved')).toBe(false);
+      });
+    });
+
+    describe('Edge cases', () => {
+      it('returns false for null role', () => {
+        expect(canEditOrder(null, 'Unordered')).toBe(false);
+      });
+
+      it('restricted statuses list contains expected statuses', () => {
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Approved');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('In Production P1');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('In Production P2');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('In Production P3');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Shipped to Fitter');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Shipped to Customer');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Completed sale');
+        expect(FITTER_RESTRICTED_STATUSES).toHaveLength(7);
+      });
+    });
+  });
 
   describe('Edge Cases and Error Handling', () => {
     it('should handle null role gracefully', () => {

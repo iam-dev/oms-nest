@@ -120,6 +120,8 @@ export default function Reports() {
           filters.seatSizes = headerFilters[key];
         } else if (key === 'customerCountry') {
           filters.customerCountry = headerFilters[key];
+        } else if (key === 'saddle') {
+          filters.saddleName = headerFilters[key];
         }
       }
     });
@@ -235,7 +237,12 @@ export default function Reports() {
     })(order) === headerFilters.urgent);
     const matchesCustomer = !headerFilters.customer || getCustomerName(order).toLowerCase().includes(headerFilters.customer.toLowerCase());
     const matchesSupplier = !headerFilters.supplier || (order.supplier || '').toLowerCase().includes(headerFilters.supplier.toLowerCase());
-    const matchesSaddle = !headerFilters.saddle || (order.modelName || order.model || '').toLowerCase().includes(headerFilters.saddle.toLowerCase());
+    const matchesSaddle = !headerFilters.saddle || (() => {
+      const brand = order.brand_name || order.brandName || '';
+      const model = order.model_name || order.modelName || '';
+      const saddleName = [brand, model].filter(Boolean).join(' - ');
+      return saddleName.toLowerCase().includes(headerFilters.saddle.toLowerCase());
+    })();
     const matchesCustomerCountry = !headerFilters.customerCountry || (order.customerCountry || order.customer_country || order.customer?.country || '').toLowerCase().includes(headerFilters.customerCountry.toLowerCase());
 
     let matchesDate = true;

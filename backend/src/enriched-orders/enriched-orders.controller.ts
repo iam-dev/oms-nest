@@ -6,11 +6,13 @@ import {
   Param,
   ParseIntPipe,
   Query,
+  Req,
   UseGuards,
   Logger,
   HttpException,
   HttpStatus,
   NotFoundException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { RolesGuard } from "../roles/roles.guard";
@@ -20,6 +22,7 @@ import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import {
   EnrichedOrdersService,
   EnrichedOrdersQueryDto,
+  UpdateOrderDto,
 } from "./enriched-orders.service";
 
 @ApiTags("Enriched Orders")
@@ -190,6 +193,42 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Patch("update/:id")
+  async updateOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateOrderDto,
+    @Req() req: { user?: { legacyId?: number; role?: { id: number } } },
+  ) {
+    try {
+      this.logger.log(`Updating order ${id}`);
+      const userId = req.user?.legacyId;
+      const userRoleId = req.user?.role?.id;
+      const result = await this.enrichedOrdersService.updateOrder(
+        id,
+        body,
+        userId,
+        userRoleId,
+      );
+      return result;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+      this.logger.error(`Failed to update order ${id}`, error);
+      throw new HttpException(
+        {
+          message: "Failed to update order",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get("health")
   async getHealth() {
     await Promise.resolve();
@@ -233,6 +272,9 @@ export class EnrichedOrdersController {
       customer: query.customer ? String(query.customer).trim() : undefined,
       // Brand/saddle filter
       brandId: this.parsePositiveInt(query.brandId),
+      saddleName: query.saddleName
+        ? String(query.saddleName).trim()
+        : undefined,
       // Status filters
       orderStatus: query.orderStatus
         ? String(query.orderStatus).trim()

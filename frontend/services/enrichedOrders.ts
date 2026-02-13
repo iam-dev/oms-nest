@@ -199,6 +199,79 @@ export async function bulkUpdateOrderStatus(
   return response.json();
 }
 
+// ========== UPDATE ORDER ==========
+
+export interface UpdateOrderPayload {
+  fitterId?: number;
+  saddleId?: number;
+  leatherId?: number;
+  fitterStock?: boolean;
+  demo?: boolean;
+  repair?: boolean;
+  rushed?: boolean;
+  sponsored?: boolean;
+  customOrder?: boolean;
+  specialNotes?: string;
+  horseName?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  customerCity?: string;
+  customerState?: string;
+  customerZipcode?: string;
+  customerCountry?: string;
+  customerPhone?: string;
+  customerCell?: string;
+  customerId?: number;
+  shipName?: string;
+  shipAddress?: string;
+  shipCity?: string;
+  shipState?: string;
+  shipZipcode?: string;
+  shipCountry?: string;
+  orderReference?: string;
+  orderStatus?: string;
+  priceSaddle?: number;
+  priceTradein?: number;
+  priceDeposit?: number;
+  priceDiscount?: number;
+  priceFittingeval?: number;
+  priceCallfee?: number;
+  priceGirth?: number;
+  priceShipping?: number;
+  priceTax?: number;
+  priceAdditional?: number;
+  saddleOptions?: Array<{
+    optionId: number;
+    optionItemId: number;
+    custom?: string;
+  }>;
+}
+
+export async function updateOrder(
+  orderId: number,
+  payload: UpdateOrderPayload,
+): Promise<{ success: boolean; orderId: number }> {
+  logger.log('Updating order:', orderId);
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/update/${orderId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to update order: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 // ========== SINGLE ORDER DETAIL ==========
 
 export interface OrderDetailData {
@@ -212,6 +285,7 @@ export interface OrderDetailData {
   repair: boolean;
   demo: boolean;
   sponsored: boolean;
+  fitterStock: boolean;
   orderStep: number | null;
   currency: string | null;
   fitterReference: string | null;
