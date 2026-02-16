@@ -1,4 +1,5 @@
 import { UserRole } from '@/types/Role';
+import { FITTER_RESTRICTED_STATUSES } from '@/utils/orderConstants';
 
 /**
  * Screen/Feature permissions configuration
@@ -34,7 +35,7 @@ export const SCREEN_PERMISSIONS = {
   
   // Order Actions
   ORDER_CREATE: [UserRole.USER, UserRole.FITTER, UserRole.ADMIN, UserRole.SUPERVISOR],
-  ORDER_EDIT: [UserRole.ADMIN, UserRole.SUPERVISOR],
+  ORDER_EDIT: [UserRole.FITTER, UserRole.ADMIN, UserRole.SUPERVISOR],
   ORDER_DELETE: [UserRole.ADMIN, UserRole.SUPERVISOR],
   ORDER_APPROVE: [UserRole.ADMIN, UserRole.SUPERVISOR],
   ORDER_VIEW: [UserRole.USER, UserRole.FITTER, UserRole.SUPPLIER, UserRole.ADMIN, UserRole.SUPERVISOR],
@@ -160,6 +161,33 @@ export function canPerformAction(
   }
 
   return false;
+}
+
+/**
+ * Check if a user role can edit a specific order based on its status.
+ * - Admin/Supervisor: always allowed
+ * - Fitter: allowed only if the order status is NOT in the restricted list
+ * - Other roles: not allowed (no ORDER_EDIT permission)
+ */
+export function canEditOrder(
+  userRole: UserRole | null,
+  orderStatus: string | undefined,
+): boolean {
+  if (!userRole) return false;
+
+  // Admin and Supervisor can always edit
+  if (userRole === UserRole.ADMIN || userRole === UserRole.SUPERVISOR) {
+    return true;
+  }
+
+  // Fitter can edit only if status is not restricted
+  if (userRole === UserRole.FITTER) {
+    if (!orderStatus) return true;
+    return !FITTER_RESTRICTED_STATUSES.includes(orderStatus);
+  }
+
+  // Other roles: defer to base ORDER_EDIT permission
+  return hasScreenPermission(userRole, 'ORDER_EDIT');
 }
 
 /**

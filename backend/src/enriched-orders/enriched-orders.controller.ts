@@ -6,11 +6,13 @@ import {
   Param,
   ParseIntPipe,
   Query,
+  Req,
   UseGuards,
   Logger,
   HttpException,
   HttpStatus,
   NotFoundException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { RolesGuard } from "../roles/roles.guard";
@@ -20,6 +22,7 @@ import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import {
   EnrichedOrdersService,
   EnrichedOrdersQueryDto,
+  UpdateOrderDto,
 } from "./enriched-orders.service";
 
 @ApiTags("Enriched Orders")
@@ -121,6 +124,47 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Patch("bulk-update-status")
+  async bulkUpdateOrderStatus(
+    @Body() body: { orderIds: number[]; status: string },
+  ) {
+    try {
+      if (!Array.isArray(body.orderIds) || body.orderIds.length === 0) {
+        throw new HttpException(
+          { message: "orderIds must be a non-empty array" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (body.orderIds.length > 100) {
+        throw new HttpException(
+          { message: "Maximum 100 orders per bulk update" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      this.logger.log(
+        `Bulk updating ${body.orderIds.length} orders to status: ${body.status}`,
+      );
+      const result = await this.enrichedOrdersService.bulkUpdateOrderStatus(
+        body.orderIds,
+        body.status,
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.logger.error("Failed to bulk update order statuses", error);
+      throw new HttpException(
+        {
+          message: "Failed to bulk update order statuses",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Patch("update-status/:id")
   async updateOrderStatus(
     @Param("id", ParseIntPipe) id: number,
@@ -141,6 +185,42 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to update order status",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Patch("update/:id")
+  async updateOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateOrderDto,
+    @Req() req: { user?: { legacyId?: number; role?: { id: number } } },
+  ) {
+    try {
+      this.logger.log(`Updating order ${id}`);
+      const userId = req.user?.legacyId;
+      const userRoleId = req.user?.role?.id;
+      const result = await this.enrichedOrdersService.updateOrder(
+        id,
+        body,
+        userId,
+        userRoleId,
+      );
+      return result;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+      this.logger.error(`Failed to update order ${id}`, error);
+      throw new HttpException(
+        {
+          message: "Failed to update order",
           details: error.message,
           timestamp: new Date().toISOString(),
         },
@@ -174,6 +254,7 @@ export class EnrichedOrdersController {
       // Order ID filters
       id: this.parsePositiveInt(query.id),
       orderId: this.parsePositiveInt(query.orderId),
+      orderIds: query.orderIds ? String(query.orderIds).trim() : undefined,
       // Urgency filters (accepts multiple formats)
       urgency: query.urgency ? String(query.urgency).trim() : undefined,
       urgent: query.urgent,
@@ -191,6 +272,9 @@ export class EnrichedOrdersController {
       customer: query.customer ? String(query.customer).trim() : undefined,
       // Brand/saddle filter
       brandId: this.parsePositiveInt(query.brandId),
+      saddleName: query.saddleName
+        ? String(query.saddleName).trim()
+        : undefined,
       // Status filters
       orderStatus: query.orderStatus
         ? String(query.orderStatus).trim()

@@ -8,7 +8,9 @@ import React from 'react';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { logger } from '@/utils/logger';
 import { useUserRole } from '@/hooks/useUserRole';
-import { hasScreenPermission } from '@/utils/rolePermissions';
+import { hasScreenPermission, canEditOrder } from '@/utils/rolePermissions';
+import { FITTER_RESTRICTED_STATUSES } from '@/utils/orderConstants';
+import { UserRole } from '@/types/Role';
 
 export type OrdersTableColumn = Column;
 
@@ -93,21 +95,72 @@ export function OrdersTable({
                   <TooltipContent>View Order</TooltipContent>
                 </Tooltip>
               )}
-              {onEditOrder && row && (hasScreenPermission(role, 'ORDER_EDIT') || role === null) && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => onEditOrder(row)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit Order</TooltipContent>
-                </Tooltip>
-              )}
+              {onEditOrder && row && (() => {
+                // Null role fallback: show edit button (matches view/approve/delete pattern)
+                if (role === null) {
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => onEditOrder(row)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit Order</TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                const orderStatus = (row.orderStatus || row.status) as string | undefined;
+                const canEdit = canEditOrder(role, orderStatus);
+                const isFitterRestricted = role === UserRole.FITTER
+                  && orderStatus
+                  && FITTER_RESTRICTED_STATUSES.includes(orderStatus);
+
+                if (canEdit) {
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => onEditOrder(row)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit Order</TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                if (isFitterRestricted) {
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 opacity-40 cursor-not-allowed"
+                          disabled
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Orders with status &quot;{orderStatus}&quot; cannot be edited
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                return null;
+              })()}
               {onApproveOrder && row && (hasScreenPermission(role, 'ORDER_APPROVE') || role === null) && (
                 <Tooltip>
                   <TooltipTrigger asChild>

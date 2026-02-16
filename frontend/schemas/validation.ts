@@ -74,6 +74,10 @@ export const orderFilterSchema = z.object({
     .max(50, 'Seat size must be less than 50 characters')
     .regex(/^[\d.,\s]*$/, 'Seat size can only contain numbers, commas, dots, and spaces')
     .optional(),
+  orderIds: z.string()
+    .max(2000, 'Order IDs must be less than 2000 characters')
+    .regex(/^[\d,\s]*$/, 'Order IDs can only contain numbers, commas, and spaces')
+    .optional(),
 });
 
 export const orderCreateSchema = z.object({
@@ -211,12 +215,18 @@ export function validateData<T>(schema: z.ZodSchema<T>, data: unknown): { succes
 
 // Helper function to sanitize string input
 export function sanitizeString(input: string): string {
-  return input
-    .trim()
-    .replace(/[<>]/g, '') // Remove potential HTML/XML tags
-    .replace(/javascript:/gi, '') // Remove javascript: protocols
-    .replace(/on\w+=/gi, '') // Remove event handlers
-    .slice(0, 10000); // Limit length to prevent DoS
+  let result = input.trim().slice(0, 10000); // Limit length to prevent DoS
+  result = result.replace(/[<>]/g, ''); // Remove potential HTML/XML tags
+  result = result.replace(/javascript:/gi, ''); // Remove javascript: protocols
+  result = result.replace(/data:/gi, ''); // Remove data: URIs
+  result = result.replace(/vbscript:/gi, ''); // Remove vbscript: protocols
+  // Loop to prevent bypass via nested patterns (e.g. "oonnclick=" → "onclick=")
+  let previous = '';
+  while (previous !== result) {
+    previous = result;
+    result = result.replace(/on\w+\s*=/gi, ''); // Remove event handlers
+  }
+  return result;
 }
 
 // Helper function to sanitize object with string values

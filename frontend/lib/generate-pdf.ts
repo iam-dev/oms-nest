@@ -6,7 +6,7 @@ interface SaddleSpec {
   displayValue: string;
 }
 
-interface OrderData {
+export interface OrderData {
   orderId: number | string;
   saddle: Record<string, string>;
   saddleSpecs: SaddleSpec[];
@@ -105,8 +105,8 @@ function addHeader(doc: jsPDF, title: string) {
 /**
  * Generate the "Print order" PDF matching production format.
  */
-export function generateOrderPDF(orderData: OrderData) {
-  const doc = new jsPDF();
+export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
+  const doc = existingDoc || new jsPDF();
   const margin = 20;
   const pageWidth = doc.internal.pageSize.getWidth();
   const contentWidth = pageWidth - margin * 2;
@@ -188,7 +188,7 @@ export function generateOrderPDF(orderData: OrderData) {
     doc.setFont('helvetica', 'normal');
     drawCheckbox(doc, valueX, y);
     doc.text(lines, valueX + 6, y);
-    y += Math.max(lineHeight, 5) + 1;
+    y += Math.max(lineHeight, 5);
   }
 
   // Ungrouped specs (Seat Size, Tree Size, Billets, Outer Reinforcement)
@@ -215,12 +215,42 @@ export function generateOrderPDF(orderData: OrderData) {
     }
   }
 
+  // --- Special Notes ---
+  if (orderData.notes) {
+    y += 5;
+    checkPageBreak(14);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Special Notes:', labelX, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const noteLines = doc.splitTextToSize(orderData.notes, contentWidth - 10);
+    checkPageBreak(noteLines.length * 5 + 2);
+    doc.text(noteLines, labelX, y);
+    y += noteLines.length * 5;
+  }
+
   // Draw border box
-  const boxHeight = y - boxStartY + 10;
+  const boxHeight = y - boxStartY + 5;
   doc.setDrawColor(0);
   doc.setLineWidth(0.5);
   doc.rect(margin, boxStartY, contentWidth, boxHeight);
 
+  return doc;
+}
+
+/**
+ * Generate a combined PDF for multiple orders (one order per page section).
+ */
+export function generateBulkOrderPDF(ordersData: OrderData[]): jsPDF {
+  const doc = new jsPDF();
+  for (let i = 0; i < ordersData.length; i++) {
+    if (i > 0) {
+      doc.addPage();
+    }
+    generateOrderPDF(ordersData[i], doc);
+  }
   return doc;
 }
 

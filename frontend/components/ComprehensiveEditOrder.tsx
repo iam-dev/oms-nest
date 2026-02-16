@@ -13,8 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
+import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
-import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
+import { fetchOrderDetail, updateOrder, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
 
 interface EditFormOptions {
@@ -153,7 +154,7 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
       setFitterId(String(detail.fitterId || ''));
       setSaddleId(String(detail.saddleId || ''));
       setLeatherId(String(detail.leatherId || ''));
-      setIsStock(false); // fitter_stock column
+      setIsStock(!!detail.fitterStock);
       setIsDemo(detail.demo);
       setIsRepair(detail.repair);
       setIsUrgent(detail.urgent);
@@ -288,18 +289,92 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
   const handleSubmit = async () => {
     if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
-    } else {
-      // Save the order
-      setSaving(true);
-      try {
-        // TODO: Implement save via backend endpoint
-        logger.log('Saving order...');
-        alert('Order save not yet implemented.');
-      } catch (error) {
-        logger.error('Error saving order:', error);
-      } finally {
-        setSaving(false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Build saddle options array from current selections merged with original specs
+      const saddleOptions: UpdateOrderPayload['saddleOptions'] = [];
+      if (orderDetail) {
+        const allOptionIds = new Set<number>();
+        // Collect IDs from original specs
+        for (const spec of orderDetail.saddleSpecs) {
+          allOptionIds.add(spec.optionId);
+        }
+        // Collect IDs from user selections
+        for (const key of Object.keys(optionSelections)) {
+          allOptionIds.add(Number(key));
+        }
+        for (const optId of allOptionIds) {
+          const selectedItemId = optionSelections[optId];
+          const originalSpec = orderDetail.saddleSpecs.find(s => s.optionId === optId);
+          const itemId = selectedItemId
+            ? parseInt(selectedItemId, 10)
+            : originalSpec?.optionItemId;
+          if (itemId) {
+            saddleOptions.push({
+              optionId: optId,
+              optionItemId: itemId,
+              custom: optionCustom[optId] || originalSpec?.custom || '',
+            });
+          }
+        }
       }
+
+      const payload: UpdateOrderPayload = {
+        fitterId: fitterId ? parseInt(fitterId, 10) : undefined,
+        saddleId: saddleId ? parseInt(saddleId, 10) : undefined,
+        leatherId: leatherId ? parseInt(leatherId, 10) : undefined,
+        fitterStock: isStock,
+        demo: isDemo,
+        repair: isRepair,
+        rushed: isUrgent,
+        sponsored: isSponsored,
+        specialNotes,
+        // Customer fields
+        customerName: selectedCustomer?.name || undefined,
+        customerEmail: selectedCustomer?.email || undefined,
+        customerAddress: selectedCustomer?.address || undefined,
+        customerCity: selectedCustomer?.city || undefined,
+        customerState: selectedCustomer?.state || undefined,
+        customerZipcode: selectedCustomer?.zipcode || undefined,
+        customerCountry: selectedCustomer?.country || undefined,
+        customerPhone: selectedCustomer?.phone || undefined,
+        customerCell: selectedCustomer?.cell || undefined,
+        customerId: selectedCustomer?.id || undefined,
+        // Shipping fields
+        shipName: shipName || undefined,
+        shipAddress: shipAddress || undefined,
+        shipCity: shipCity || undefined,
+        shipZipcode: shipZipcode || undefined,
+        shipCountry: shipCountry || undefined,
+        // Order overview
+        orderReference: orderReference || undefined,
+        orderStatus: orderStatus || undefined,
+        // Pricing (as floats - server converts to cents)
+        priceSaddle: parseFloat(priceSaddle) || 0,
+        priceTradein: parseFloat(priceTradein) || 0,
+        priceDeposit: parseFloat(priceDeposit) || 0,
+        priceDiscount: parseFloat(priceDiscount) || 0,
+        priceFittingeval: parseFloat(priceFittingeval) || 0,
+        priceCallfee: parseFloat(priceCallfee) || 0,
+        priceGirth: parseFloat(priceGirth) || 0,
+        priceShipping: parseFloat(priceShipping) || 0,
+        priceTax: parseFloat(priceTax) || 0,
+        priceAdditional: parseFloat(priceAdditional) || 0,
+        saddleOptions,
+      };
+
+      await updateOrder(orderId, payload);
+      toast.success(`Order #${orderId} updated successfully`);
+      onClose();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to save order';
+      logger.error('Error saving order:', error);
+      toast.error(msg);
+    } finally {
+      setSaving(false);
     }
   };
 

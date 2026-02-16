@@ -424,6 +424,14 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
                     ))}
                   </div>
                 </div>
+
+                {/* Special Notes section - only shown when notes exist */}
+                {specialNotes && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold text-sm mb-4">Special Notes</h3>
+                    <p className="text-sm text-gray-900 italic whitespace-pre-wrap">{specialNotes}</p>
+                  </div>
+                )}
               </div>
 
               {/* Middle Column - Fitter Information & Customer Information & Order Status */}

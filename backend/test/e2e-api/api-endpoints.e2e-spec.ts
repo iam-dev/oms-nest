@@ -484,6 +484,185 @@ describe("API Endpoints (E2E)", () => {
         );
       }
     });
+
+    describe("Edit Form Options (Saddle Details)", () => {
+      it("GET /api/v1/enriched_orders/edit-options - should require authentication", async () => {
+        const response = await request(app.getHttpServer()).get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+        expect(response.status).toBe(401);
+      });
+
+      it("GET /api/v1/enriched_orders/edit-options - should return all option categories", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty("fitters");
+        expect(response.body).toHaveProperty("saddles");
+        expect(response.body).toHaveProperty("leatherTypes");
+        expect(response.body).toHaveProperty("options");
+        expect(response.body).toHaveProperty("optionItems");
+        expect(response.body).toHaveProperty("statuses");
+
+        expect(Array.isArray(response.body.fitters)).toBe(true);
+        expect(Array.isArray(response.body.saddles)).toBe(true);
+        expect(Array.isArray(response.body.leatherTypes)).toBe(true);
+        expect(Array.isArray(response.body.options)).toBe(true);
+        expect(Array.isArray(response.body.optionItems)).toBe(true);
+        expect(Array.isArray(response.body.statuses)).toBe(true);
+      });
+
+      it("should return saddles with brand and model details", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.saddles.length).toBeGreaterThan(0);
+
+        const saddle = response.body.saddles[0];
+        expect(saddle).toHaveProperty("id");
+        expect(saddle).toHaveProperty("brand");
+        expect(saddle).toHaveProperty("modelName");
+        expect(saddle).toHaveProperty("displayName");
+        expect(saddle.displayName).toContain(saddle.brand);
+
+        console.log(`Saddles returned: ${response.body.saddles.length}`);
+      });
+
+      it("should return saddle specification options (Seat Size, Flap Length, etc.)", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.options.length).toBeGreaterThan(0);
+
+        const option = response.body.options[0];
+        expect(option).toHaveProperty("optionId");
+        expect(option).toHaveProperty("optionName");
+        expect(option).toHaveProperty("sequence");
+        expect(option).toHaveProperty("group");
+
+        console.log(
+          `Saddle spec options returned: ${response.body.options.length}`,
+          response.body.options.map(
+            (o: { optionName: string }) => o.optionName,
+          ),
+        );
+      });
+
+      it("should return option items linked to options", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.optionItems.length).toBeGreaterThan(0);
+
+        const item = response.body.optionItems[0];
+        expect(item).toHaveProperty("id");
+        expect(item).toHaveProperty("name");
+        expect(item).toHaveProperty("optionId");
+
+        // Every optionItem should reference an existing option
+        const optionIds = new Set(
+          response.body.options.map((o: { optionId: number }) => o.optionId),
+        );
+        for (const oi of response.body.optionItems) {
+          expect(optionIds.has(oi.optionId)).toBe(true);
+        }
+
+        console.log(
+          `Option items returned: ${response.body.optionItems.length}`,
+        );
+      });
+
+      it("should return fitters with username and fullName", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.fitters.length).toBeGreaterThan(0);
+
+        const fitter = response.body.fitters[0];
+        expect(fitter).toHaveProperty("id");
+        expect(fitter).toHaveProperty("username");
+        expect(fitter).toHaveProperty("fullName");
+
+        console.log(`Fitters returned: ${response.body.fitters.length}`);
+      });
+
+      it("should return leather types", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.leatherTypes.length).toBeGreaterThan(0);
+
+        const leatherType = response.body.leatherTypes[0];
+        expect(leatherType).toHaveProperty("id");
+        expect(leatherType).toHaveProperty("name");
+
+        console.log(
+          `Leather types returned: ${response.body.leatherTypes.length}`,
+        );
+      });
+
+      it("should return statuses", async () => {
+        if (!authToken) {
+          console.warn("Skipping test - no auth token");
+          return;
+        }
+
+        const response = await authRequest().get(
+          "/api/v1/enriched_orders/edit-options",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.statuses.length).toBeGreaterThan(0);
+
+        const status = response.body.statuses[0];
+        expect(status).toHaveProperty("id");
+        expect(status).toHaveProperty("name");
+
+        console.log(`Statuses returned: ${response.body.statuses.length}`);
+      });
+    });
   });
 
   describe("API Response Times", () => {

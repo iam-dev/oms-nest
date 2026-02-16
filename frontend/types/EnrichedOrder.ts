@@ -16,6 +16,10 @@ export interface EnrichedOrder {
   shipmentTarget?: string;
   urgent?: boolean;
   legacyRepair?: boolean;
+  repair?: boolean;
+  fitterStock?: boolean;
+  demo?: boolean;
+  sponsored?: boolean;
   orderStatus?: string;
   payment?: string;
   orderAddress?: string;

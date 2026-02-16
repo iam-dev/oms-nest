@@ -1,7 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { WarehouseController } from "../../../src/warehouses/warehouse.controller";
 import { WarehouseService } from "../../../src/warehouses/warehouse.service";
-import { Warehouse } from "../../../src/warehouses/warehouse.entity";
+import { WarehouseEntity } from "../../../src/warehouses/infrastructure/persistence/relational/entities/warehouse.entity";
 import { CreateWarehouseDto } from "../../../src/warehouses/dto/create-warehouse.dto";
 import { UpdateWarehouseDto } from "../../../src/warehouses/dto/update-warehouse.dto";
 import { QueryWarehouseDto } from "../../../src/warehouses/dto/query-warehouse.dto";
@@ -10,22 +10,18 @@ describe("WarehouseController", () => {
   let controller: WarehouseController;
   let service: jest.Mocked<WarehouseService>;
 
-  const mockWarehouse: Warehouse = {
+  const mockWarehouse = {
     id: "550e8400-e29b-41d4-a716-446655440000",
     name: "Main Warehouse",
     code: "WH001",
     address: "123 Storage St",
     city: "London",
-    state: "England",
-    postal_code: "SW1A 1AA",
     country: "United Kingdom",
-    phone: "020-1234-5678",
-    email: "warehouse@example.com",
-    is_active: true,
-    created_at: new Date("2024-01-01"),
-    updated_at: new Date("2024-01-01"),
-    deleted_at: undefined,
-  };
+    isActive: true,
+    createdAt: new Date("2024-01-01"),
+    updatedAt: new Date("2024-01-01"),
+    deletedAt: null,
+  } as WarehouseEntity;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -66,7 +62,7 @@ describe("WarehouseController", () => {
         city: "London",
         country: "United Kingdom",
       };
-      service.create.mockResolvedValue(mockWarehouse);
+      service.create.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await controller.create(createDto);
@@ -195,7 +191,7 @@ describe("WarehouseController", () => {
     it("should return a warehouse by id", async () => {
       // Arrange
       const id = "550e8400-e29b-41d4-a716-446655440000";
-      service.findOne.mockResolvedValue(mockWarehouse);
+      service.findOne.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await controller.findOne(id);
@@ -219,7 +215,7 @@ describe("WarehouseController", () => {
         name: "Updated Warehouse",
         city: "Manchester",
       };
-      service.update.mockResolvedValue(updatedWarehouse);
+      service.update.mockResolvedValue(updatedWarehouse as WarehouseEntity);
 
       // Act
       const result = await controller.update(id, updateDto);
@@ -234,14 +230,14 @@ describe("WarehouseController", () => {
       // Arrange
       const id = "550e8400-e29b-41d4-a716-446655440000";
       const updateDto: UpdateWarehouseDto = { is_active: false };
-      const updatedWarehouse = { ...mockWarehouse, is_active: false };
-      service.update.mockResolvedValue(updatedWarehouse);
+      const updatedWarehouse = { ...mockWarehouse, isActive: false };
+      service.update.mockResolvedValue(updatedWarehouse as WarehouseEntity);
 
       // Act
       const result = await controller.update(id, updateDto);
 
       // Assert
-      expect(result.is_active).toBe(false);
+      expect(result.isActive).toBe(false);
       expect(result.name).toBe("Main Warehouse");
     });
   });
@@ -264,7 +260,7 @@ describe("WarehouseController", () => {
     it("should restore a soft-deleted warehouse", async () => {
       // Arrange
       const id = "550e8400-e29b-41d4-a716-446655440000";
-      service.restore.mockResolvedValue(mockWarehouse);
+      service.restore.mockResolvedValue(mockWarehouse as WarehouseEntity);
 
       // Act
       const result = await controller.restore(id);

@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { HttpException, NotFoundException } from "@nestjs/common";
+import {
+  HttpException,
+  NotFoundException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { EnrichedOrdersController } from "../../../src/enriched-orders/enriched-orders.controller";
 import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 
@@ -38,6 +42,7 @@ describe("EnrichedOrdersController", () => {
     const mockService = {
       getEnrichedOrders: jest.fn(),
       getOrderDetail: jest.fn(),
+      updateOrder: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -320,6 +325,77 @@ describe("EnrichedOrdersController", () => {
         version: "1.0.0",
       });
       expect(result.timestamp).toBeDefined();
+    });
+  });
+
+  describe("updateOrder", () => {
+    it("should pass user legacyId and role id to service", async () => {
+      // Arrange
+      const body = { specialNotes: "Updated" };
+      const req = { user: { legacyId: 42, role: { id: 1 } } };
+      service.updateOrder.mockResolvedValue({ success: true, orderId: 1 });
+
+      // Act
+      const result = await controller.updateOrder(1, body, req);
+
+      // Assert
+      expect(service.updateOrder).toHaveBeenCalledWith(1, body, 42, 1);
+      expect(result).toEqual({ success: true, orderId: 1 });
+    });
+
+    it("should pass undefined role when user has no role", async () => {
+      // Arrange
+      const body = { specialNotes: "Updated" };
+      const req = { user: { legacyId: 42 } };
+      service.updateOrder.mockResolvedValue({ success: true, orderId: 1 });
+
+      // Act
+      await controller.updateOrder(1, body, req);
+
+      // Assert
+      expect(service.updateOrder).toHaveBeenCalledWith(1, body, 42, undefined);
+    });
+
+    it("should propagate ForbiddenException from service", async () => {
+      // Arrange
+      const body = { specialNotes: "Updated" };
+      const req = { user: { legacyId: 42, role: { id: 1 } } };
+      service.updateOrder.mockRejectedValue(
+        new ForbiddenException(
+          "Fitters cannot edit orders with status: Approved",
+        ),
+      );
+
+      // Act & Assert
+      await expect(controller.updateOrder(1, body, req)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it("should wrap generic errors as HttpException", async () => {
+      // Arrange
+      const body = { specialNotes: "Updated" };
+      const req = { user: { legacyId: 42, role: { id: 2 } } };
+      service.updateOrder.mockRejectedValue(new Error("Database error"));
+
+      // Act & Assert
+      await expect(controller.updateOrder(1, body, req)).rejects.toThrow(
+        HttpException,
+      );
+    });
+
+    it("should propagate NotFoundException from service", async () => {
+      // Arrange
+      const body = { specialNotes: "Updated" };
+      const req = { user: { legacyId: 42, role: { id: 2 } } };
+      service.updateOrder.mockRejectedValue(
+        new NotFoundException("Order not found"),
+      );
+
+      // Act & Assert
+      await expect(controller.updateOrder(1, body, req)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

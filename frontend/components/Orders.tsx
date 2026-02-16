@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus } from 'lucide-react';
+import { BulkOrderSearch } from './BulkOrderSearch';
+import { BulkActionsToolbar } from './BulkActionsToolbar';
 import { Dialog } from '@/components/ui/dialog';
 import { OrderDetails } from './OrderDetails';
 import { EditOrder } from './EditOrder';
@@ -13,6 +15,16 @@ import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { fetchCompleteOrderData } from '../utils/orderProcessing';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
 import { logger } from '@/utils/logger';
+import type { Column } from '@/components/shared/DataTable';
+
+// Enriched order customer/fitter/supplier can be a string name or an object with id+name
+interface OrderRelatedEntity {
+  id?: number;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  '@id'?: string;
+}
 
 // Enriched order customer/fitter/supplier can be a string name or an object with id+name
 interface OrderRelatedEntity {
@@ -65,6 +77,7 @@ export default function Orders() {
     searchMessage,
     isSearching,
     handleSearch,
+    handleBulkSearch,
     processedOrders,
     loading,
     error,
@@ -79,6 +92,73 @@ export default function Orders() {
     pagination,
     fetchAndSetOrders,
   } = useOrderFilters();
+
+  // --- Checkbox selection state ---
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
+
+  // Clear selection when page or filters change
+  useEffect(() => {
+    setSelectedOrderIds(new Set());
+  }, [page, headerFilters]);
+
+  const handleToggleSelect = useCallback((orderId: number) => {
+    setSelectedOrderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleSelectAll = useCallback(() => {
+    const visibleIds = processedOrders.map((o: Record<string, unknown>) => Number(o.id)).filter((id: number) => !isNaN(id));
+    setSelectedOrderIds(prev => {
+      const allSelected = visibleIds.length > 0 && visibleIds.every((id: number) => prev.has(id));
+      if (allSelected) {
+        return new Set();
+      }
+      return new Set(visibleIds);
+    });
+  }, [processedOrders]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedOrderIds(new Set());
+  }, []);
+
+  // Build checkbox column
+  const visibleIds = useMemo(
+    () => processedOrders.map((o: Record<string, unknown>) => Number(o.id)).filter((id: number) => !isNaN(id)),
+    [processedOrders],
+  );
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id: number) => selectedOrderIds.has(id));
+
+  const checkboxColumn: Column<Record<string, unknown>> = useMemo(() => ({
+    key: '_select' as string,
+    title: (
+      <input
+        type="checkbox"
+        checked={allSelected}
+        onChange={handleToggleSelectAll}
+        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+      />
+    ),
+    render: (_: unknown, row?: Record<string, unknown>) => {
+      const orderId = Number(row?.id);
+      if (isNaN(orderId)) return null;
+      return (
+        <input
+          type="checkbox"
+          checked={selectedOrderIds.has(orderId)}
+          onChange={() => handleToggleSelect(orderId)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+        />
+      );
+    },
+  }), [allSelected, selectedOrderIds, handleToggleSelectAll, handleToggleSelect]);
 
   // Use shared fetchCompleteOrderData utility
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -126,6 +206,7 @@ export default function Orders() {
               Reset Filters
             </button>
           ] : []),
+          <BulkOrderSearch key="bulk-search" onSearch={handleBulkSearch} />,
           <button
             key="create-order"
             onClick={() => {
@@ -141,10 +222,16 @@ export default function Orders() {
 
       <OrderSearchMessage searchMessage={searchMessage} isSearching={isSearching} />
 
+      <BulkActionsToolbar
+        selectedOrderIds={selectedOrderIds}
+        onClearSelection={handleClearSelection}
+        onStatusUpdated={fetchAndSetOrders}
+      />
+
       <div className="space-y-4">
         <EntityTable
           entities={processedOrders}
-          columns={getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes)}
+          columns={[checkboxColumn, ...getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes)]}
           onView={(order) => handleViewDetails(order as unknown as Order)}
           onEdit={(order) => handleEditOrder(order as unknown as Order)}
           onDelete={(order) => handleDeleteOrder(order as unknown as Order)}

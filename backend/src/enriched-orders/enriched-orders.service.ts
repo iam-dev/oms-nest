@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from "@nestjs/common";
+import { Injectable, Inject, Logger, ForbiddenException } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
@@ -6,6 +6,10 @@ import { Cache } from "cache-manager";
 import { ConfigService } from "@nestjs/config";
 import { AllConfigType } from "../config/config.type";
 import { ProductionCacheService } from "../cache/production-cache.service";
+
+// Status IDs where fitters (role 1) are NOT allowed to edit orders
+const FITTER_RESTRICTED_STATUS_IDS = [2, 3, 5, 7, 9, 10, 11];
+const FITTER_ROLE_ID = 1;
 
 export interface EnrichedOrdersQueryDto {
   page?: number;
@@ -31,6 +35,7 @@ export interface EnrichedOrdersQueryDto {
   customer?: string;
   // Filter by brand/saddle
   brandId?: number;
+  saddleName?: string;
   // Filter by status
   orderStatus?: string;
   status?: string;
@@ -45,6 +50,8 @@ export interface EnrichedOrdersQueryDto {
   customerCountry?: string;
   // Filter by repair flag (0/1 or true/false)
   repair?: string | boolean;
+  // Comma-separated order IDs for bulk search
+  orderIds?: string;
 }
 
 export interface PaginationMetadata {
@@ -64,6 +71,58 @@ export interface EnrichedOrdersResponse {
     cached: boolean;
     processingTimeMs: number;
   };
+}
+
+export interface UpdateOrderDto {
+  fitterId?: number;
+  saddleId?: number;
+  leatherId?: number;
+  fitterStock?: boolean;
+  demo?: boolean;
+  repair?: boolean;
+  rushed?: boolean;
+  sponsored?: boolean;
+  customOrder?: boolean;
+  specialNotes?: string;
+  horseName?: string;
+  // Customer fields (written to orders table)
+  customerName?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  customerCity?: string;
+  customerState?: string;
+  customerZipcode?: string;
+  customerCountry?: string;
+  customerPhone?: string;
+  customerCell?: string;
+  customerId?: number;
+  // Shipping fields
+  shipName?: string;
+  shipAddress?: string;
+  shipCity?: string;
+  shipState?: string;
+  shipZipcode?: string;
+  shipCountry?: string;
+  // Order reference & status
+  orderReference?: string;
+  orderStatus?: string;
+  // Pricing (in dollars, converted to cents server-side)
+  priceSaddle?: number;
+  priceTradein?: number;
+  priceDeposit?: number;
+  priceDiscount?: number;
+  priceFittingeval?: number;
+  priceCallfee?: number;
+  priceGirth?: number;
+  priceShipping?: number;
+  priceTax?: number;
+  priceAdditional?: number;
+  // Saddle options (replaces orders_info rows)
+  saddleOptions?: Array<{
+    optionId: number;
+    optionItemId: number;
+    custom?: string;
+  }>;
 }
 
 @Injectable()
@@ -160,6 +219,8 @@ export class EnrichedOrdersService {
         o.special_notes,
         COALESCE(c.name, o.name, '') as customer_name,
         o.customer_id,
+        o.demo,
+        o.sponsored,
         fc.full_name as fitter_name,
         o.fitter_id,
         s.brand as brand_name,
@@ -278,6 +339,20 @@ export class EnrichedOrdersService {
       paramIndex++;
     }
 
+    // Filter by multiple order IDs (bulk search)
+    if (!orderId && query.orderIds) {
+      const idsArray = query.orderIds
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => /^\d+$/.test(id))
+        .map((id) => parseInt(id, 10));
+      if (idsArray.length > 0) {
+        conditions.push(`o.id = ANY($${paramIndex}::int[])`);
+        params.push(idsArray);
+        paramIndex++;
+      }
+    }
+
     // General search term (searches multiple fields)
     const searchTermValue = query.searchTerm || query.search;
     if (searchTermValue) {
@@ -360,6 +435,27 @@ export class EnrichedOrdersService {
       conditions.push(`o.saddle_id = $${paramIndex}`);
       params.push(query.brandId);
       paramIndex++;
+    }
+
+    // Filter by saddle name (brand - model format)
+    if (query.saddleName) {
+      const parts = query.saddleName.split(" - ");
+      if (parts.length >= 2) {
+        const brand = parts[0].trim();
+        const model = parts.slice(1).join(" - ").trim();
+        conditions.push(
+          `(s.brand ILIKE $${paramIndex} AND s.model_name ILIKE $${paramIndex + 1})`,
+        );
+        params.push(`%${brand}%`);
+        params.push(`%${model}%`);
+        paramIndex += 2;
+      } else {
+        conditions.push(
+          `(s.brand ILIKE $${paramIndex} OR s.model_name ILIKE $${paramIndex})`,
+        );
+        params.push(`%${query.saddleName}%`);
+        paramIndex++;
+      }
     }
 
     // Filter by order status (supports both integer ID and string name)
@@ -523,6 +619,7 @@ export class EnrichedOrdersService {
     // Order ID filters
     if (query.id) keyParts.push(`id:${query.id}`);
     if (query.orderId) keyParts.push(`orderId:${query.orderId}`);
+    if (query.orderIds) keyParts.push(`orderIds:${query.orderIds}`);
     // Urgency filters
     if (query.urgency) keyParts.push(`urgency:${query.urgency}`);
     if (query.urgent) keyParts.push(`urgent:${query.urgent}`);
@@ -536,6 +633,7 @@ export class EnrichedOrdersService {
     if (query.customer) keyParts.push(`customer:${query.customer}`);
     // Other filters
     if (query.brandId) keyParts.push(`brand:${query.brandId}`);
+    if (query.saddleName) keyParts.push(`saddleName:${query.saddleName}`);
     if (query.orderStatus) keyParts.push(`status:${query.orderStatus}`);
     if (query.status) keyParts.push(`statusAlt:${query.status}`);
     // Factory filters
@@ -582,6 +680,7 @@ export class EnrichedOrdersService {
           o.repair,
           o.demo,
           o.sponsored,
+          o.fitter_stock as "fitterStock",
           o.order_step as "orderStep",
           o.currency,
           o.fitter_reference as "fitterReference",
@@ -815,11 +914,11 @@ export class EnrichedOrdersService {
 
       // Fetch available fitters
       const fitters = await queryRunner.query(`
-        SELECT f.id, c.username, CONCAT(c.first_name, ' ', c.last_name) as "fullName"
+        SELECT f.id, c.user_name as "username", c.full_name as "fullName"
         FROM fitters f
-        LEFT JOIN credentials c ON f.id = c.user_id AND c.user_type = 1
-        WHERE f.active = 1
-        ORDER BY c.first_name, c.last_name
+        LEFT JOIN credentials c ON f.user_id = c.user_id AND c.user_type = 1
+        WHERE f.deleted = 0
+        ORDER BY c.full_name
       `);
 
       // Fetch available saddle models (brand + model)
@@ -834,7 +933,7 @@ export class EnrichedOrdersService {
       // Fetch available leather types
       const leatherTypes = await queryRunner.query(`
         SELECT id, name FROM leather_types
-        WHERE active = 1
+        WHERE deleted = 0
         ORDER BY name
       `);
 
@@ -933,6 +1032,8 @@ export class EnrichedOrdersService {
         `Successfully updated order ${orderId} to status ${statusName} (id: ${statusId})`,
       );
 
+      await this.invalidateCache();
+
       return {
         success: true,
         orderId,
@@ -947,17 +1048,323 @@ export class EnrichedOrdersService {
     }
   }
 
-  async invalidateCache(pattern?: string): Promise<void> {
-    await Promise.resolve();
+  async bulkUpdateOrderStatus(
+    orderIds: number[],
+    statusName: string,
+  ): Promise<{
+    success: boolean;
+    updated: number;
+    failed: number;
+    results: Array<{ orderId: number; success: boolean; error?: string }>;
+  }> {
+    this.logger.log(
+      `Bulk updating ${orderIds.length} orders to status: ${statusName}`,
+    );
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    const results: Array<{
+      orderId: number;
+      success: boolean;
+      error?: string;
+    }> = [];
+
     try {
-      if (pattern) {
-        // Redis-style pattern invalidation would go here
-        // For now, we'll clear specific keys
-        this.logger.debug(`Invalidating cache pattern: ${pattern}`);
-      } else {
-        // Clear all enriched orders cache
-        this.logger.debug("Clearing all enriched orders cache");
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      // Look up the status ID from the statuses table
+      const statusResult = await queryRunner.query(
+        `SELECT id FROM statuses WHERE name = $1`,
+        [statusName],
+      );
+
+      if (!statusResult || statusResult.length === 0) {
+        throw new Error(`Unknown status: ${statusName}`);
       }
+
+      const statusId = statusResult[0].id;
+
+      for (const orderId of orderIds) {
+        try {
+          // Get the old status before updating
+          const oldStatusResult = await queryRunner.query(
+            `SELECT order_status, fitter_id FROM orders WHERE id = $1`,
+            [orderId],
+          );
+
+          if (!oldStatusResult || oldStatusResult.length === 0) {
+            results.push({
+              orderId,
+              success: false,
+              error: `Order ${orderId} not found`,
+            });
+            continue;
+          }
+
+          const oldStatusId = oldStatusResult[0].order_status;
+          const fitterId = oldStatusResult[0].fitter_id;
+
+          // Update the order's status
+          await queryRunner.query(
+            `UPDATE orders SET order_status = $1 WHERE id = $2`,
+            [statusId, orderId],
+          );
+
+          // Log the status change
+          try {
+            await queryRunner.query(
+              `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
+               VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, $4, $5)`,
+              [
+                fitterId || 0,
+                orderId,
+                `Changed the order status to '${statusName}' (bulk update)`,
+                oldStatusId,
+                statusId,
+              ],
+            );
+          } catch (logErr) {
+            this.logger.warn(
+              `Failed to log status change for order ${orderId}: ${logErr.message}`,
+            );
+          }
+
+          results.push({ orderId, success: true });
+        } catch (err) {
+          results.push({
+            orderId,
+            success: false,
+            error: err.message,
+          });
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      await this.invalidateCache();
+
+      const updated = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).length;
+
+      this.logger.log(
+        `Bulk update complete: ${updated} updated, ${failed} failed`,
+      );
+
+      return { success: failed === 0, updated, failed, results };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error("Failed to bulk update order statuses", error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async updateOrder(
+    orderId: number,
+    dto: UpdateOrderDto,
+    userId?: number,
+    userRoleId?: number,
+  ): Promise<{ success: boolean; orderId: number }> {
+    this.logger.log(`Updating order ${orderId}`);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      // Verify order exists and get old status for audit
+      const existing = await queryRunner.query(
+        `SELECT order_status, fitter_id FROM orders WHERE id = $1`,
+        [orderId],
+      );
+      if (!existing || existing.length === 0) {
+        throw new Error(`Order ${orderId} not found`);
+      }
+      const oldStatusId = existing[0].order_status;
+      const existingFitterId = existing[0].fitter_id;
+
+      // Fitter role-based status restriction
+      if (
+        userRoleId === FITTER_ROLE_ID &&
+        FITTER_RESTRICTED_STATUS_IDS.includes(oldStatusId)
+      ) {
+        const statusNameResult = await queryRunner.query(
+          `SELECT name FROM statuses WHERE id = $1`,
+          [oldStatusId],
+        );
+        const statusName = statusNameResult?.[0]?.name || `ID ${oldStatusId}`;
+        throw new ForbiddenException(
+          `Fitters cannot edit orders with status: ${statusName}`,
+        );
+      }
+
+      // Resolve status name to integer ID if provided
+      let statusId: number | undefined;
+      if (dto.orderStatus) {
+        const statusResult = await queryRunner.query(
+          `SELECT id FROM statuses WHERE name = $1`,
+          [dto.orderStatus],
+        );
+        if (!statusResult || statusResult.length === 0) {
+          throw new Error(`Unknown status: ${dto.orderStatus}`);
+        }
+        statusId = statusResult[0].id;
+      }
+
+      // Convert dollar prices to cents
+      const toCents = (val: number | undefined): number | undefined =>
+        val !== undefined ? Math.round(val * 100) : undefined;
+
+      // Build SET clause dynamically
+      const setClauses: string[] = [];
+      const setParams: unknown[] = [];
+      let paramIdx = 1;
+
+      const addField = (column: string, value: unknown) => {
+        if (value !== undefined) {
+          setClauses.push(`${column} = $${paramIdx}`);
+          setParams.push(value);
+          paramIdx++;
+        }
+      };
+
+      addField("fitter_id", dto.fitterId);
+      addField("saddle_id", dto.saddleId);
+      addField("leather_id", dto.leatherId);
+      addField(
+        "fitter_stock",
+        dto.fitterStock !== undefined ? (dto.fitterStock ? 1 : 0) : undefined,
+      );
+      addField("demo", dto.demo !== undefined ? (dto.demo ? 1 : 0) : undefined);
+      addField(
+        "repair",
+        dto.repair !== undefined ? (dto.repair ? 1 : 0) : undefined,
+      );
+      addField(
+        "rushed",
+        dto.rushed !== undefined ? (dto.rushed ? 1 : 0) : undefined,
+      );
+      addField(
+        "sponsored",
+        dto.sponsored !== undefined ? (dto.sponsored ? 1 : 0) : undefined,
+      );
+      addField(
+        "custom_order",
+        dto.customOrder !== undefined ? (dto.customOrder ? 1 : 0) : undefined,
+      );
+      addField("special_notes", dto.specialNotes);
+      addField("horse_name", dto.horseName);
+
+      // Customer fields on orders table
+      addField("name", dto.customerName);
+      addField("email", dto.customerEmail);
+      addField("address", dto.customerAddress);
+      addField("city", dto.customerCity);
+      addField("state", dto.customerState);
+      addField("zipcode", dto.customerZipcode);
+      addField("country", dto.customerCountry);
+      addField("phone_no", dto.customerPhone);
+      addField("cell_no", dto.customerCell);
+      addField("customer_id", dto.customerId);
+
+      // Shipping fields
+      addField("ship_name", dto.shipName);
+      addField("ship_address", dto.shipAddress);
+      addField("ship_city", dto.shipCity);
+      addField("ship_state", dto.shipState);
+      addField("ship_zipcode", dto.shipZipcode);
+      addField("ship_country", dto.shipCountry);
+
+      // Order reference
+      addField("fitter_reference", dto.orderReference);
+
+      // Status
+      addField("order_status", statusId);
+
+      // Pricing (cents)
+      addField("price_saddle", toCents(dto.priceSaddle));
+      addField("price_tradein", toCents(dto.priceTradein));
+      addField("price_deposit", toCents(dto.priceDeposit));
+      addField("price_discount", toCents(dto.priceDiscount));
+      addField("price_fittingeval", toCents(dto.priceFittingeval));
+      addField("price_callfee", toCents(dto.priceCallfee));
+      addField("price_girth", toCents(dto.priceGirth));
+      addField("price_shipping", toCents(dto.priceShipping));
+      addField("price_tax", toCents(dto.priceTax));
+      addField("price_additional", toCents(dto.priceAdditional));
+
+      // Always update changed timestamp
+      setClauses.push(`changed = EXTRACT(EPOCH FROM NOW())::integer`);
+
+      if (setClauses.length > 0) {
+        const updateSql = `UPDATE orders SET ${setClauses.join(", ")} WHERE id = $${paramIdx}`;
+        setParams.push(orderId);
+        await queryRunner.query(updateSql, setParams);
+      }
+
+      // Replace saddle options (orders_info) if provided
+      if (dto.saddleOptions && dto.saddleOptions.length > 0) {
+        await queryRunner.query(`DELETE FROM orders_info WHERE order_id = $1`, [
+          orderId,
+        ]);
+        for (const opt of dto.saddleOptions) {
+          await queryRunner.query(
+            `INSERT INTO orders_info (order_id, option_id, option_item_id, custom)
+             VALUES ($1, $2, $3, $4)`,
+            [orderId, opt.optionId, opt.optionItemId, opt.custom || ""],
+          );
+        }
+      }
+
+      // Insert audit log entry
+      try {
+        const logText =
+          statusId && statusId !== oldStatusId
+            ? `Order updated. Status changed to '${dto.orderStatus}'.`
+            : `Order updated.`;
+        await queryRunner.query(
+          `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
+           VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, $4, $5)`,
+          [
+            userId || dto.fitterId || existingFitterId || 0,
+            orderId,
+            logText,
+            oldStatusId,
+            statusId || oldStatusId,
+          ],
+        );
+      } catch (logErr) {
+        this.logger.warn(
+          `Failed to log order update for ${orderId}: ${logErr.message}`,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      await this.invalidateCache();
+
+      this.logger.log(`Successfully updated order ${orderId}`);
+      return { success: true, orderId };
+    } catch (error) {
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rbErr) {
+        this.logger.warn(`Rollback failed: ${rbErr.message}`);
+      }
+      this.logger.error(`Failed to update order ${orderId}`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async invalidateCache(): Promise<void> {
+    try {
+      await this.cacheManager.clear();
+      this.logger.debug("Cleared all enriched orders cache");
     } catch (error) {
       this.logger.warn("Failed to invalidate cache", error);
     }

@@ -197,6 +197,9 @@ echo_step "Running TypeORM migrations..."
 cd "$BACKEND_DIR"
 
 # Bypass env-cmd — pass E2E database config directly (same pattern as setup-e2e.sh)
+# Use typeorm-ts-node-commonjs (TypeORM's official ts-node CJS entry point)
+# instead of "ts-node ./node_modules/typeorm/cli.js" which breaks decorator
+# compilation under Node 22 + TypeScript 5.x.
 DATABASE_HOST=$DB_HOST \
 DATABASE_PORT=$DB_PORT \
 DATABASE_USERNAME=$DB_USER \
@@ -204,8 +207,7 @@ DATABASE_PASSWORD=$DB_PASSWORD \
 DATABASE_NAME=$DB_NAME \
 DATABASE_TYPE=postgres \
 NODE_ENV=test \
-npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js \
-    --dataSource=src/database/data-source.ts migration:run
+npx typeorm-ts-node-commonjs --dataSource=src/database/data-source.ts migration:run
 
 echo_info "Migrations complete"
 

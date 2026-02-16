@@ -116,20 +116,10 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   logger.log('enrichedOrders.ts: Initial formattedFilters:', formattedFilters);
 
   // Fitter filtering is handled server-side via RLS and the authenticated cookie session
-  
-  // Special case for orderId search - use paginated search if we have an exact orderId
-  if (formattedFilters.orderId && /^\d+$/.test(formattedFilters.orderId)) {
-    try {
-      logger.log('Detected specific order ID search:', formattedFilters.orderId);
-      
-      // Use paginated search to find the specific order
-      return await searchForOrderByPages(formattedFilters.orderId);
-    } catch (error) {
-      logger.warn('Failed to find order through paginated search, falling back to regular search:', error);
-      // Fall back to regular search if the paginated search fails
-    }
-  }
-  
+
+  // Order ID search: pass orderId directly to the backend API which supports exact match filtering
+  // (Previously used searchForOrderByPages which was limited to scanning 10 pages client-side)
+
   // Extract searchTerm from filters to pass as top-level parameter
   // This ensures it gets converted to the 'search' parameter the backend expects
   const searchTermFromFilters = formattedFilters.searchTerm;
@@ -183,6 +173,105 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   return response;
 }
 
+// ========== BULK STATUS UPDATE ==========
+
+export async function bulkUpdateOrderStatus(
+  orderIds: number[],
+  status: string,
+): Promise<{ success: boolean; updated: number; failed: number; results: Array<{ orderId: number; success: boolean; error?: string }> }> {
+  logger.log('Bulk updating order statuses:', { orderIds, status });
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/bulk-update-status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ orderIds, status }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to bulk update statuses: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+// ========== UPDATE ORDER ==========
+
+export interface UpdateOrderPayload {
+  fitterId?: number;
+  saddleId?: number;
+  leatherId?: number;
+  fitterStock?: boolean;
+  demo?: boolean;
+  repair?: boolean;
+  rushed?: boolean;
+  sponsored?: boolean;
+  customOrder?: boolean;
+  specialNotes?: string;
+  horseName?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  customerCity?: string;
+  customerState?: string;
+  customerZipcode?: string;
+  customerCountry?: string;
+  customerPhone?: string;
+  customerCell?: string;
+  customerId?: number;
+  shipName?: string;
+  shipAddress?: string;
+  shipCity?: string;
+  shipState?: string;
+  shipZipcode?: string;
+  shipCountry?: string;
+  orderReference?: string;
+  orderStatus?: string;
+  priceSaddle?: number;
+  priceTradein?: number;
+  priceDeposit?: number;
+  priceDiscount?: number;
+  priceFittingeval?: number;
+  priceCallfee?: number;
+  priceGirth?: number;
+  priceShipping?: number;
+  priceTax?: number;
+  priceAdditional?: number;
+  saddleOptions?: Array<{
+    optionId: number;
+    optionItemId: number;
+    custom?: string;
+  }>;
+}
+
+export async function updateOrder(
+  orderId: number,
+  payload: UpdateOrderPayload,
+): Promise<{ success: boolean; orderId: number }> {
+  logger.log('Updating order:', orderId);
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/update/${orderId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to update order: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 // ========== SINGLE ORDER DETAIL ==========
 
 export interface OrderDetailData {
@@ -196,6 +285,7 @@ export interface OrderDetailData {
   repair: boolean;
   demo: boolean;
   sponsored: boolean;
+  fitterStock: boolean;
   orderStep: number | null;
   currency: string | null;
   fitterReference: string | null;

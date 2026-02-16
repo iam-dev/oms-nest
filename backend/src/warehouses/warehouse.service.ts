@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, FindOptionsWhere } from "typeorm";
-import { Warehouse } from "./warehouse.entity";
+import { WarehouseEntity } from "./infrastructure/persistence/relational/entities/warehouse.entity";
 import { CreateWarehouseDto } from "./dto/create-warehouse.dto";
 import { UpdateWarehouseDto } from "./dto/update-warehouse.dto";
 import { QueryWarehouseDto } from "./dto/query-warehouse.dto";
@@ -9,11 +9,13 @@ import { QueryWarehouseDto } from "./dto/query-warehouse.dto";
 @Injectable()
 export class WarehouseService {
   constructor(
-    @InjectRepository(Warehouse)
-    private readonly warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(WarehouseEntity)
+    private readonly warehouseRepository: Repository<WarehouseEntity>,
   ) {}
 
-  async create(createWarehouseDto: CreateWarehouseDto): Promise<Warehouse> {
+  async create(
+    createWarehouseDto: CreateWarehouseDto,
+  ): Promise<WarehouseEntity> {
     const warehouse = this.warehouseRepository.create(createWarehouseDto);
     return this.warehouseRepository.save(warehouse);
   }
@@ -30,7 +32,7 @@ export class WarehouseService {
       sortOrder = "ASC",
     } = query;
 
-    const where: FindOptionsWhere<Warehouse> = {};
+    const where: FindOptionsWhere<WarehouseEntity> = {};
 
     if (name) {
       where.name = Like(`%${name}%`);
@@ -42,7 +44,7 @@ export class WarehouseService {
       where.country = Like(`%${country}%`);
     }
     if (is_active !== undefined) {
-      where.is_active = is_active;
+      where.isActive = is_active;
     }
 
     const [data, total] = await this.warehouseRepository.findAndCount({
@@ -63,7 +65,7 @@ export class WarehouseService {
     };
   }
 
-  async findOne(id: string): Promise<Warehouse> {
+  async findOne(id: string): Promise<WarehouseEntity> {
     const warehouse = await this.warehouseRepository.findOne({ where: { id } });
     if (!warehouse) {
       throw new NotFoundException(`Warehouse with ID ${id} not found`);
@@ -74,7 +76,7 @@ export class WarehouseService {
   async update(
     id: string,
     updateWarehouseDto: UpdateWarehouseDto,
-  ): Promise<Warehouse> {
+  ): Promise<WarehouseEntity> {
     const warehouse = await this.findOne(id);
     Object.assign(warehouse, updateWarehouseDto);
     return this.warehouseRepository.save(warehouse);
@@ -85,7 +87,7 @@ export class WarehouseService {
     await this.warehouseRepository.softRemove(warehouse);
   }
 
-  async restore(id: string): Promise<Warehouse> {
+  async restore(id: string): Promise<WarehouseEntity> {
     const warehouse = await this.warehouseRepository.findOne({
       where: { id },
       withDeleted: true,

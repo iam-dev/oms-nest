@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: oms-backend-monitor
+  namespace: oms-staging
+  labels:
+    app: oms-backend
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: oms-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

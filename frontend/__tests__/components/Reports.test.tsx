@@ -27,6 +27,17 @@ jest.mock('@/services/api', () => ({
   }),
 }));
 
+// Mock generate-pdf to avoid jsPDF ESM import issues in Jest
+jest.mock('@/lib/generate-pdf', () => ({
+  generateOrderPDF: jest.fn(),
+  generateLabelPDF: jest.fn(),
+}));
+
+// Mock exportXlsx to avoid exceljs/uuid ESM import issues in Jest
+jest.mock('@/utils/exportXlsx', () => ({
+  exportToXlsx: jest.fn(),
+}));
+
 // Mock OrdersTable component
 jest.mock('@/components/shared/OrdersTable', () => ({
   OrdersTable: ({ 

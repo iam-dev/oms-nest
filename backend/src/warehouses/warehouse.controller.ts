@@ -25,7 +25,8 @@ import { WarehouseService } from "./warehouse.service";
 import { CreateWarehouseDto } from "./dto/create-warehouse.dto";
 import { UpdateWarehouseDto } from "./dto/update-warehouse.dto";
 import { QueryWarehouseDto } from "./dto/query-warehouse.dto";
-import { Warehouse } from "./warehouse.entity";
+import { WarehouseDto } from "./dto/warehouse.dto";
+import { WarehouseEntity } from "./infrastructure/persistence/relational/entities/warehouse.entity";
 
 @ApiTags("Warehouses")
 @ApiCookieAuth("token")
@@ -43,9 +44,11 @@ export class WarehouseController {
   @ApiResponse({
     status: 201,
     description: "Warehouse created successfully",
-    type: Warehouse,
+    type: WarehouseDto,
   })
-  create(@Body() createWarehouseDto: CreateWarehouseDto): Promise<Warehouse> {
+  create(
+    @Body() createWarehouseDto: CreateWarehouseDto,
+  ): Promise<WarehouseEntity> {
     return this.warehouseService.create(createWarehouseDto);
   }
 
@@ -65,13 +68,13 @@ export class WarehouseController {
   @ApiResponse({
     status: 200,
     description: "Warehouse details",
-    type: Warehouse,
+    type: WarehouseDto,
   })
   @ApiResponse({
     status: 404,
     description: "Warehouse not found",
   })
-  findOne(@Param("id", ParseUUIDPipe) id: string): Promise<Warehouse> {
+  findOne(@Param("id", ParseUUIDPipe) id: string): Promise<WarehouseEntity> {
     return this.warehouseService.findOne(id);
   }
 
@@ -81,12 +84,12 @@ export class WarehouseController {
   @ApiResponse({
     status: 200,
     description: "Warehouse updated successfully",
-    type: Warehouse,
+    type: WarehouseDto,
   })
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() updateWarehouseDto: UpdateWarehouseDto,
-  ): Promise<Warehouse> {
+  ): Promise<WarehouseEntity> {
     return this.warehouseService.update(id, updateWarehouseDto);
   }
 
@@ -107,9 +110,9 @@ export class WarehouseController {
   @ApiResponse({
     status: 200,
     description: "Warehouse restored successfully",
-    type: Warehouse,
+    type: WarehouseDto,
   })
-  restore(@Param("id", ParseUUIDPipe) id: string): Promise<Warehouse> {
+  restore(@Param("id", ParseUUIDPipe) id: string): Promise<WarehouseEntity> {
     return this.warehouseService.restore(id);
   }
 }

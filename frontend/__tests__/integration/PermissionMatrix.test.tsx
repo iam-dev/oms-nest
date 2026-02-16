@@ -96,7 +96,7 @@ describe('Comprehensive Permission Matrix Validation', () => {
       test('FITTER has customer management permissions', () => {
         expect(hasScreenPermission(fitterRole, 'ORDER_CREATE')).toBe(true);
         expect(hasScreenPermission(fitterRole, 'ORDER_VIEW')).toBe(true);
-        expect(hasScreenPermission(fitterRole, 'ORDER_EDIT')).toBe(false);
+        expect(hasScreenPermission(fitterRole, 'ORDER_EDIT')).toBe(true); // Fitters can edit (status-based restrictions via canEditOrder)
         expect(hasScreenPermission(fitterRole, 'ORDER_DELETE')).toBe(false);
         
         expect(hasScreenPermission(fitterRole, 'CUSTOMER_CREATE')).toBe(true);
@@ -333,9 +333,9 @@ describe('Comprehensive Permission Matrix Validation', () => {
       expect(hasScreenPermission(UserRole.USER, 'ORDER_DELETE')).toBe(false);
       expect(hasScreenPermission(UserRole.USER, 'ORDER_APPROVE')).toBe(false);
 
-      // Fitters can create but not manage orders
+      // Fitters can create and edit orders (edit has status-based restrictions via canEditOrder)
       expect(hasScreenPermission(UserRole.FITTER, 'ORDER_CREATE')).toBe(true);
-      expect(hasScreenPermission(UserRole.FITTER, 'ORDER_EDIT')).toBe(false);
+      expect(hasScreenPermission(UserRole.FITTER, 'ORDER_EDIT')).toBe(true);
       expect(hasScreenPermission(UserRole.FITTER, 'ORDER_DELETE')).toBe(false);
       expect(hasScreenPermission(UserRole.FITTER, 'ORDER_APPROVE')).toBe(false);
 

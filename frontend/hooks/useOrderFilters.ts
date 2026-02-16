@@ -6,6 +6,7 @@ import {
   extractDynamicFactories,
   processOrdersTableData,
 } from '../utils/orderProcessing';
+import { MIN_ORDER_ID } from '@/utils/orderConstants';
 import { getEnrichedOrders } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
 import type { Order } from '@/components/Orders';
@@ -27,6 +28,16 @@ export function useOrderFilters() {
     setTotalItems,
   } = usePagination(30, 1);
 
+  // Parse a string that may contain multiple order IDs (pasted from Excel, etc.)
+  const parseMultipleIds = useCallback((text: string): number[] => {
+    return text
+      .split(/[\n,\t\s]+/)
+      .map(s => s.trim())
+      .filter(s => /^\d+$/.test(s))
+      .map(s => parseInt(s, 10))
+      .filter(id => id >= MIN_ORDER_ID);
+  }, []);
+
   // Handle search input change with debounce
   const handleSearch = useCallback((term: string) => {
     setSearchTerm(term);
@@ -39,25 +50,47 @@ export function useOrderFilters() {
       if (term.trim() === '') {
         setIsSearching(false);
         setSearchMessage('');
-        setHeaderFilters(prev => ({ ...prev, orderId: '', searchTerm: '' }));
-      } else if (/^\d+$/.test(term.trim())) {
-        const exactOrderId = term.trim();
-        logger.log('Searching for exact order ID:', exactOrderId);
-        setIsSearching(true);
-        setSearchMessage(`Searching for order ID: ${exactOrderId}...`);
-        setHeaderFilters(prev => ({ ...prev, orderId: exactOrderId, searchTerm: '' }));
+        setHeaderFilters(prev => ({ ...prev, orderId: '', orderIds: '', searchTerm: '' }));
       } else {
-        const searchValue = term.trim();
-        logger.log('Searching for:', searchValue);
-        setIsSearching(true);
-        setSearchMessage(`Searching for: "${searchValue}"...`);
-        setHeaderFilters(prev => ({ ...prev, orderId: '', searchTerm: searchValue }));
+        // Try to detect multiple order IDs (pasted from Excel, etc.)
+        const ids = parseMultipleIds(term);
+        if (ids.length > 1) {
+          const idsStr = ids.join(',');
+          logger.log('Searching for multiple order IDs:', ids);
+          setIsSearching(true);
+          setSearchMessage(`Searching for ${ids.length} order IDs...`);
+          setHeaderFilters(prev => ({ ...prev, orderId: '', orderIds: idsStr, searchTerm: '' }));
+        } else if (ids.length === 1) {
+          const exactOrderId = String(ids[0]);
+          logger.log('Searching for exact order ID:', exactOrderId);
+          setIsSearching(true);
+          setSearchMessage(`Searching for order ID: ${exactOrderId}...`);
+          setHeaderFilters(prev => ({ ...prev, orderId: exactOrderId, orderIds: '', searchTerm: '' }));
+        } else {
+          const searchValue = term.trim();
+          logger.log('Searching for:', searchValue);
+          setIsSearching(true);
+          setSearchMessage(`Searching for: "${searchValue}"...`);
+          setHeaderFilters(prev => ({ ...prev, orderId: '', orderIds: '', searchTerm: searchValue }));
+        }
       }
       setPage(1);
     }, 500);
 
     setSearchTimeout(timeout);
-  }, [setPage, searchTimeout]);
+  }, [setPage, searchTimeout, parseMultipleIds]);
+
+  // Handle bulk search from BulkOrderSearch component
+  const handleBulkSearch = useCallback((ids: number[]) => {
+    if (ids.length === 0) return;
+    const idsStr = ids.join(',');
+    logger.log('Bulk searching for order IDs:', ids);
+    setSearchTerm(ids.join(', '));
+    setIsSearching(true);
+    setSearchMessage(`Searching for ${ids.length} order IDs...`);
+    setHeaderFilters(prev => ({ ...prev, orderId: '', orderIds: idsStr, searchTerm: '' }));
+    setPage(1);
+  }, [setPage]);
 
   // Clean up timeout on unmount
   useEffect(() => {
@@ -75,6 +108,7 @@ export function useOrderFilters() {
     try {
       const filters = buildOrderFilters(headerFilters);
       const isSearchingForOrderId = filters.orderId && /^\d+$/.test(filters.orderId);
+      const isSearchingForOrderIds = !!filters.orderIds;
       const isSearchingWithSearchTerm = filters.searchTerm && filters.searchTerm.length > 0;
 
       const data = await getEnrichedOrders({
@@ -101,7 +135,15 @@ export function useOrderFilters() {
       setOrders(apiOrders);
       setTotalItems(data['hydra:totalItems'] || apiOrders.length || 0);
 
-      if (isSearchingForOrderId) {
+      if (isSearchingForOrderIds) {
+        const requestedCount = filters.orderIds.split(',').length;
+        if (apiOrders.length === 0) {
+          setSearchMessage(`No orders found for ${requestedCount} requested IDs`);
+        } else {
+          setSearchMessage(`Found ${apiOrders.length} of ${requestedCount} orders`);
+          setTimeout(() => setSearchMessage(''), 5000);
+        }
+      } else if (isSearchingForOrderId) {
         if (apiOrders.length === 0) {
           setSearchMessage(`No orders found with ID: ${filters.orderId}`);
         } else if (apiOrders.length === 1) {
@@ -184,6 +226,7 @@ export function useOrderFilters() {
     searchMessage,
     isSearching,
     handleSearch,
+    handleBulkSearch,
 
     // Orders data
     orders,
