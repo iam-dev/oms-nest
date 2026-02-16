@@ -26,6 +26,15 @@ interface OrderRelatedEntity {
   '@id'?: string;
 }
 
+// Enriched order customer/fitter/supplier can be a string name or an object with id+name
+interface OrderRelatedEntity {
+  id?: number;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  '@id'?: string;
+}
+
 // Base order interface that matches the API response
 export interface Order {
   id: number;

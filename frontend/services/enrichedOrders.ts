@@ -116,10 +116,10 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   logger.log('enrichedOrders.ts: Initial formattedFilters:', formattedFilters);
 
   // Fitter filtering is handled server-side via RLS and the authenticated cookie session
-  
+
   // Order ID search: pass orderId directly to the backend API which supports exact match filtering
   // (Previously used searchForOrderByPages which was limited to scanning 10 pages client-side)
-  
+
   // Extract searchTerm from filters to pass as top-level parameter
   // This ensures it gets converted to the 'search' parameter the backend expects
   const searchTermFromFilters = formattedFilters.searchTerm;

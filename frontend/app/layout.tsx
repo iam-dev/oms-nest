@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import RootClientWrapper from '@/components/RootClientWrapper';
@@ -19,9 +20,11 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" nonce={nonce}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`} nonce={nonce}>
         <RootClientWrapper>{children}</RootClientWrapper>
       </body>
     </html>
