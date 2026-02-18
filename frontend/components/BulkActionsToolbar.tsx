@@ -145,7 +145,14 @@ export function BulkActionsToolbar({
       }
 
       const doc = generateBulkOrderPDF(ordersData);
-      doc.save(`orders-bulk-${orderIds.length}.pdf`);
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.addEventListener('load', () => {
+          printWindow.print();
+        });
+      }
     } catch (err) {
       logger.error('Bulk print failed:', err);
       alert(err instanceof Error ? err.message : 'Failed to generate PDF');

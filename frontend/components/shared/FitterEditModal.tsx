@@ -24,11 +24,12 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  const isCreateMode = !fitter;
+
   useEffect(() => {
     if (fitter) {
       setEditedFitter({
         ...fitter,
-        // Ensure all fields are properly set
         username: fitter.username || '',
         firstName: fitter.firstName || '',
         lastName: fitter.lastName || '',
@@ -42,15 +43,30 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
         cellNo: fitter.cellNo || '',
         enabled: fitter.enabled ?? true,
       });
-      setError('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setShowPassword(false);
+    } else if (isOpen) {
+      setEditedFitter({
+        username: '',
+        firstName: '',
+        lastName: '',
+        email: '',
+        address: '',
+        city: '',
+        country: '',
+        state: '',
+        zipcode: '',
+        phoneNo: '',
+        cellNo: '',
+        enabled: true,
+      });
     }
-  }, [fitter]);
+    setError('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+  }, [fitter, isOpen]);
 
   const handleSave = async () => {
-    if (!editedFitter || !fitter) return;
+    if (!editedFitter) return;
 
     setSaving(true);
     setError('');
@@ -91,7 +107,10 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
         throw new Error('Please enter a valid email address');
       }
 
-      // Password validation (only if a new password is provided)
+      // Password validation (required for create, optional for edit)
+      if (isCreateMode && !newPassword) {
+        throw new Error('Password is required for new fitters');
+      }
       if (newPassword) {
         if (newPassword.length < 6) {
           throw new Error('Password must be at least 6 characters');
@@ -127,15 +146,13 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
     }));
   };
 
-  if (!fitter) return null;
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Fitter {fitter.username}</DialogTitle>
+          <DialogTitle>{isCreateMode ? 'Create Fitter' : `Edit Fitter ${fitter.username}`}</DialogTitle>
           <DialogDescription>
-            Update the fitter information below.
+            {isCreateMode ? 'Fill in the fitter information below.' : 'Update the fitter information below.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -217,7 +234,7 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
                   type={showPassword ? 'text' : 'password'}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Leave blank to keep current"
+                  placeholder={isCreateMode ? 'Enter password' : 'Leave blank to keep current'}
                   autoComplete="new-password"
                 />
                 <button
@@ -381,7 +398,7 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
             disabled={saving}
             className="bg-[#7b2326] hover:bg-[#8b2329] text-white"
           >
-            {saving ? 'Saving...' : 'Save fitter'}
+            {saving ? 'Saving...' : isCreateMode ? 'Create fitter' : 'Save fitter'}
           </Button>
         </div>
       </DialogContent>

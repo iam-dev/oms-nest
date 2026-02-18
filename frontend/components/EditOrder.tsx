@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
 import { fetchOrderEditData, searchCustomers, searchFitters, saveOrderEditData } from '@/services/orderEditView';
+import { createOrder } from '@/services/api';
 import { 
   ComprehensiveOrderData, 
   OrderEditFormState,
@@ -22,6 +23,9 @@ import {
   OrderStatus
 } from '@/types/ComprehensiveOrder';
 import { logger } from '@/utils/logger';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DuplicateData = Record<string, any>;
 
 interface EditOrderProps {
   order?: {
@@ -32,6 +36,8 @@ interface EditOrderProps {
   error?: string | null;
   onClose: () => void;
   onBack?: () => void;
+  isDuplicate?: boolean;
+  duplicateData?: DuplicateData;
 }
 
 const ORDER_STATUSES: { value: OrderStatus; label: string }[] = [
@@ -58,7 +64,7 @@ const steps = [
   { id: 3, title: 'Order Settings', icon: Settings },
 ];
 
-export function EditOrder({ order, isLoading = false, error, onClose, onBack }: EditOrderProps) {
+export function EditOrder({ order, isLoading = false, error, onClose, onBack, isDuplicate = false, duplicateData }: EditOrderProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [comprehensiveData, setComprehensiveData] = useState<ComprehensiveOrderData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
@@ -241,7 +247,32 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack }: 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         requestedDeliveryDate: (data.order as any).requestedDeliveryDate
       });
-      
+
+      // Override form data with duplicate data when duplicating an order
+      if (isDuplicate && duplicateData) {
+        setFormData(prev => ({
+          ...prev,
+          isUrgent: Boolean(duplicateData.isUrgent),
+          isStock: Boolean(duplicateData.isStock),
+          isDemo: Boolean(duplicateData.isDemo),
+          isSponsored: Boolean(duplicateData.isSponsored),
+          isRepair: Boolean(duplicateData.isRepair),
+          notes: String(duplicateData.specialNotes || prev.notes || ''),
+          status: 'DRAFT' as OrderStatus,
+          pricing: {
+            subtotal: Number(duplicateData.price) || prev.pricing.subtotal,
+            discount: Number(duplicateData.discount) || prev.pricing.discount,
+            tax: Number(duplicateData.tax) || prev.pricing.tax,
+            shipping: Number(duplicateData.shipping) || prev.pricing.shipping,
+            total: Number(duplicateData.price) || prev.pricing.total,
+            currency: prev.pricing.currency,
+          },
+        }));
+        if (duplicateData.customerName) {
+          setCustomerSearchTerm(String(duplicateData.customerName));
+        }
+      }
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load order data';
       logger.error('Error loading comprehensive order data:', err);
@@ -350,18 +381,22 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack }: 
     if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     } else {
-      // Save the order
       setSaving(true);
       try {
         const orderToSave = {
           ...comprehensiveData?.order,
           ...formData,
-          id: order?.id
+          id: isDuplicate ? undefined : order?.id,
         };
-        
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await saveOrderEditData(Number(order?.id || 0), orderToSave as any);
-        logger.log('Order saved successfully');
+
+        if (isDuplicate) {
+          await createOrder(orderToSave);
+          logger.log('Duplicate order created successfully');
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await saveOrderEditData(Number(order?.id || 0), orderToSave as unknown as Record<string, unknown>);
+          logger.log('Order saved successfully');
+        }
         onClose();
       } catch (error) {
         logger.error('Error saving order:', error);
@@ -420,7 +455,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack }: 
             {currentStep === 1 ? 'Back to Orders' : 'Back'}
           </Button>
           <DialogTitle className="text-lg">
-            {order ? `Edit Order #${order.orderId}` : 'New Order'} | Step {currentStep}: {steps[currentStep - 1].title}
+            {isDuplicate ? `Duplicate Order #${order?.orderId}` : order ? `Edit Order #${order.orderId}` : 'New Order'} | Step {currentStep}: {steps[currentStep - 1].title}
           </DialogTitle>
           <div className="w-32" />
         </div>

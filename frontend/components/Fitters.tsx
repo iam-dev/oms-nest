@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { EntityTable } from '@/components/shared/EntityTable';
 import { useTableFilters, usePagination, useEntityData } from '@/hooks';
 import { getFitterTableColumns } from '@/utils/fitterTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { updateFitter, deleteFitter, type Fitter } from '@/services/fitters';
+import { updateFitter, deleteFitter, createFitter, type Fitter } from '@/services/fitters';
 import { FitterDetailModal } from '@/components/shared/FitterDetailModal';
 import { FitterEditModal } from '@/components/shared/FitterEditModal';
 import { logger } from '@/utils/logger';
@@ -18,6 +19,7 @@ export default function Fitters() {
   const [selectedFitter, setSelectedFitter] = useState<Fitter | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [actionError, setActionError] = useState('');
 
@@ -77,19 +79,52 @@ export default function Fitters() {
     }
   };
 
+  // Handle create new fitter
+  const handleCreateFitter = () => {
+    setSelectedFitter(null);
+    setShowCreateModal(true);
+  };
+
   // Handle save fitter (for edit modal)
   const handleSaveFitter = async (updatedFitter: Partial<Fitter>) => {
     if (!selectedFitter) return;
 
     try {
       await updateFitter(selectedFitter.id, updatedFitter);
-      // Refresh the fitter list
       refetch();
       setShowEditModal(false);
       setSelectedFitter(null);
     } catch (error) {
       logger.error('Error updating fitter:', error);
-      throw error; // Re-throw to show error in modal
+      throw error;
+    }
+  };
+
+  // Handle create fitter save
+  const handleCreateFitterSave = async (newFitter: Partial<Fitter> & { password?: string }) => {
+    try {
+      // Transform frontend Fitter fields to match backend CreateFitterDto
+      const backendPayload: Record<string, unknown> = {
+        username: newFitter.username || '',
+        firstName: newFitter.firstName || '',
+        lastName: newFitter.lastName || '',
+        emailaddress: newFitter.email || '', // backend expects 'emailaddress', not 'email'
+        address: newFitter.address || '',
+        city: newFitter.city || '',
+        country: newFitter.country || '',
+        state: newFitter.state || '',
+        zipcode: newFitter.zipcode || '',
+        phoneNo: newFitter.phoneNo || '',
+        cellNo: newFitter.cellNo || '',
+        password: newFitter.password,
+      };
+      await createFitter(backendPayload);
+      refetch();
+      setShowCreateModal(false);
+      setSelectedFitter(null);
+    } catch (error) {
+      logger.error('Error creating fitter:', error);
+      throw error;
     }
   };
 
@@ -97,6 +132,7 @@ export default function Fitters() {
   const handleCloseModals = () => {
     setShowDetailModal(false);
     setShowEditModal(false);
+    setShowCreateModal(false);
     setSelectedFitter(null);
   };
 
@@ -112,10 +148,10 @@ export default function Fitters() {
         title="Fitters" 
         description="Manage your fitters" 
         actions={
-          <button className="btn-primary">
+          <Button onClick={handleCreateFitter} className="bg-[#7b2326] hover:bg-[#8b2329] text-white">
             <Plus className="mr-2 h-4 w-4" />
             Add Fitter
-          </button>
+          </Button>
         } 
       />
 
@@ -156,6 +192,14 @@ export default function Fitters() {
         isOpen={showEditModal}
         onClose={handleCloseModals}
         onSave={handleSaveFitter}
+      />
+
+      {/* Fitter Create Modal */}
+      <FitterEditModal
+        fitter={null}
+        isOpen={showCreateModal}
+        onClose={handleCloseModals}
+        onSave={handleCreateFitterSave}
       />
     </div>
   );

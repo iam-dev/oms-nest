@@ -21,11 +21,12 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const isCreateMode = !customer;
+
   useEffect(() => {
     if (customer) {
       setEditedCustomer({
         ...customer,
-        // Ensure all fields are properly set
         name: customer.name || '',
         address: customer.address || '',
         city: customer.city || '',
@@ -36,12 +37,24 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
         phoneNo: customer.phoneNo || '',
         cellNo: customer.cellNo || '',
       });
-      setError('');
+    } else if (isOpen) {
+      setEditedCustomer({
+        name: '',
+        address: '',
+        city: '',
+        country: '',
+        state: '',
+        zipcode: '',
+        email: '',
+        phoneNo: '',
+        cellNo: '',
+      });
     }
-  }, [customer]);
+    setError('');
+  }, [customer, isOpen]);
 
   const handleSave = async () => {
-    if (!editedCustomer || !customer) return;
+    if (!editedCustomer) return;
 
     setSaving(true);
     setError('');
@@ -70,15 +83,13 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
     }));
   };
 
-  if (!customer) return null;
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Customer {customer.id}</DialogTitle>
+          <DialogTitle>{isCreateMode ? 'Create Customer' : `Edit Customer ${customer.id}`}</DialogTitle>
           <DialogDescription>
-            Update the customer information below.
+            {isCreateMode ? 'Fill in the customer information below.' : 'Update the customer information below.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -229,7 +240,7 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
             disabled={saving}
             className="bg-[#7b2326] hover:bg-[#8b2329] text-white"
           >
-            {saving ? 'Saving...' : 'Save customer'}
+            {saving ? 'Saving...' : isCreateMode ? 'Create customer' : 'Save customer'}
           </Button>
         </div>
       </DialogContent>

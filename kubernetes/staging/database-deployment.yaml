@@ -151,8 +151,8 @@ data:
     save ""
     appendonly no
 
-    # Security settings
-    protected-mode yes
+    # Security settings (disabled: Redis is internal-only within K8s cluster)
+    protected-mode no
 
     # Logging
     loglevel notice

@@ -30,8 +30,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 1001
+        fsGroup: 1001
 
       containers:
       - name: oms-frontend
@@ -72,7 +72,7 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 1001
           capabilities:
             drop:
             - ALL
@@ -123,9 +123,7 @@ spec:
       - name: uploads
         emptyDir: {}
 
-      # Image pull secrets for private registry
-      imagePullSecrets:
-      - name: registry-credentials
+      # Image is public, no imagePullSecrets needed
 
       # Pod security
       automountServiceAccountToken: false

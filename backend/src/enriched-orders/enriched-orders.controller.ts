@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Body,
   Param,
@@ -79,10 +80,15 @@ export class EnrichedOrdersController {
   }
 
   @Get("edit-options")
-  async getEditFormOptions() {
+  async getEditFormOptions(@Query("saddleId") saddleIdStr?: string) {
     try {
-      this.logger.log("Fetching edit form options");
-      const result = await this.enrichedOrdersService.getEditFormOptions();
+      const saddleId = saddleIdStr ? parseInt(saddleIdStr, 10) : undefined;
+      this.logger.log(
+        `Fetching edit form options${saddleId ? ` for saddleId=${saddleId}` : ""}`,
+      );
+      const result = await this.enrichedOrdersService.getEditFormOptions(
+        saddleId && !isNaN(saddleId) ? saddleId : undefined,
+      );
       return result;
     } catch (error) {
       this.logger.error("Failed to fetch edit form options", error);
@@ -185,6 +191,29 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to update order status",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post("create")
+  async createOrder(
+    @Body() body: UpdateOrderDto,
+    @Req() req: { user?: { legacyId?: number } },
+  ) {
+    try {
+      this.logger.log("Creating new order");
+      const userId = req.user?.legacyId;
+      const result = await this.enrichedOrdersService.createOrder(body, userId);
+      return result;
+    } catch (error) {
+      this.logger.error("Failed to create order", error);
+      throw new HttpException(
+        {
+          message: "Failed to create order",
           details: error.message,
           timestamp: new Date().toISOString(),
         },
