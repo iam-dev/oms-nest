@@ -1,9 +1,9 @@
 name: Deploy to Staging
 
 on:
-  push:
-    branches:
-      - staging
+  # push trigger removed — staging-v2-deployment.yml is the active staging workflow.
+  # Both workflows pushed to the same Docker image tag (staging-latest), causing a race
+  # condition where this workflow could overwrite the image with the wrong API URL.
   workflow_dispatch:
     inputs:
       environment:
@@ -162,7 +162,7 @@ jobs:
     - name: Build application
       run: npm run build
       env:
-        NEXT_PUBLIC_API_URL: https://api-staging.ordermysaddle.com
+        NEXT_PUBLIC_API_URL: https://api-nest-staging.ordermysaddle.com
         NODE_ENV: staging
 
     - name: Log in to Container Registry
@@ -193,7 +193,7 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           NODE_ENV=staging
-          NEXT_PUBLIC_API_URL=https://api-staging.ordermysaddle.com
+          NEXT_PUBLIC_API_URL=https://api-nest-staging.ordermysaddle.com
 
   # Deploy to Kubernetes oms-staging namespace
   deploy-staging:

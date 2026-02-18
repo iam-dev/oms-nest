@@ -19,7 +19,7 @@ COPY . .
 # Set build-time environment variables
 ARG JWT_SECRET=default_jwt_secret_for_build
 ENV JWT_SECRET=$JWT_SECRET
-ARG NEXT_PUBLIC_API_URL=https://staging-api.ordermysaddle.com
+ARG NEXT_PUBLIC_API_URL=https://api-nest-staging.ordermysaddle.com
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Build the application
