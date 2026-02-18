@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
 import { fetchOrderEditData, searchCustomers, searchFitters, saveOrderEditData } from '@/services/orderEditView';
-import { createOrder } from '@/services/api';
+import { createOrderFromPayload, UpdateOrderPayload } from '@/services/enrichedOrders';
 import { 
   ComprehensiveOrderData, 
   OrderEditFormState,
@@ -383,17 +383,51 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     } else {
       setSaving(true);
       try {
-        const orderToSave = {
-          ...comprehensiveData?.order,
-          ...formData,
-          id: isDuplicate ? undefined : order?.id,
-        };
+        const isNewOrder = !order || isDuplicate;
 
-        if (isDuplicate) {
-          await createOrder(orderToSave);
-          logger.log('Duplicate order created successfully');
+        if (isNewOrder) {
+          // Build payload for createOrderFromPayload (enriched orders endpoint)
+          const createPayload: UpdateOrderPayload = {
+            orderStatus: formData.status || 'DRAFT',
+            rushed: formData.isUrgent || false,
+            demo: formData.isDemo || false,
+            repair: formData.isRepair || false,
+            sponsored: formData.isSponsored || false,
+            fitterStock: formData.isStock || false,
+            specialNotes: formData.notes,
+            orderReference: formData.reference,
+            // Customer fields
+            customerId: formData.customer?.id ? Number(formData.customer.id) : undefined,
+            customerName: formData.customer?.name,
+            customerEmail: formData.customer?.email,
+            customerAddress: formData.shippingAddress?.street,
+            customerCity: formData.shippingAddress?.city,
+            customerState: formData.shippingAddress?.state,
+            customerZipcode: formData.shippingAddress?.zipCode,
+            customerCountry: formData.shippingAddress?.country,
+            // Shipping fields
+            shipAddress: formData.shippingAddress?.street,
+            shipCity: formData.shippingAddress?.city,
+            shipState: formData.shippingAddress?.state,
+            shipZipcode: formData.shippingAddress?.zipCode,
+            shipCountry: formData.shippingAddress?.country,
+            // Fitter
+            fitterId: formData.fitter?.id ? Number(formData.fitter.id) : undefined,
+            // Pricing
+            priceSaddle: formData.pricing.subtotal,
+            priceDiscount: formData.pricing.discount,
+            priceTax: formData.pricing.tax,
+            priceShipping: formData.pricing.shipping,
+          };
+          await createOrderFromPayload(createPayload);
+          logger.log(isDuplicate ? 'Duplicate order created successfully' : 'New order created successfully');
         } else {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const orderToSave = {
+            ...comprehensiveData?.order,
+            ...formData,
+            id: order?.id,
+          };
           await saveOrderEditData(Number(order?.id || 0), orderToSave as unknown as Record<string, unknown>);
           logger.log('Order saved successfully');
         }

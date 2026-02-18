@@ -415,10 +415,33 @@ jobs:
         echo "E2E_ADMIN_PASSWORD=$E2E_ADMIN_PASSWORD" >> "$GITHUB_OUTPUT"
         echo "E2E_FITTER_PASSWORD=$E2E_FITTER_PASSWORD" >> "$GITHUB_OUTPUT"
 
+    - name: Wait for old pods to terminate
+      working-directory: .
+      run: |
+        echo "Waiting for any terminating pods to finish..."
+        for i in $(seq 1 30); do
+          TERMINATING=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend \
+            -o jsonpath='{range .items[*]}{.metadata.deletionTimestamp}{"\n"}{end}' | grep -c . || true)
+          if [ "$TERMINATING" -eq 0 ]; then
+            echo "All backend pods are stable"
+            break
+          fi
+          echo "⏳ $TERMINATING pod(s) still terminating (attempt $i/30)..."
+          sleep 5
+        done
+
     - name: Create E2E test users on staging
       working-directory: .
       run: |
-        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend -o jsonpath='{.items[0].metadata.name}')
+        # Select a Running pod that is NOT being terminated
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend \
+          -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
+          | awk -F'\t' '$2 == "" { print $1; exit }')
+        if [ -z "$POD" ]; then
+          echo "::error::No ready backend pod found"
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend
+          exit 1
+        fi
         echo "Using backend pod: $POD"
         kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
           const bcrypt = require('bcryptjs');
@@ -457,6 +480,7 @@ jobs:
             );
             await c.end();
             console.log('E2E test users created/updated with random passwords (including fitters entry)');
+            process.exit(0);
           })().catch(e => { console.error('Failed to create test users:', e.message); process.exit(1); });
         "
 
@@ -476,9 +500,11 @@ jobs:
       if: always()
       working-directory: .
       run: |
-        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend \
+          -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
+          | awk -F'\t' '$2 == "" { print $1; exit }' 2>/dev/null || true)
         if [ -z "$POD" ]; then
-          echo "No backend pod found, skipping cleanup"
+          echo "No ready backend pod found, skipping cleanup"
           exit 0
         fi
         echo "Cleaning up test users from pod: $POD"
@@ -509,6 +535,7 @@ jobs:
             );
             console.log('Deleted', result.rowCount, 'E2E test users');
             await c.end();
+            process.exit(0);
           })().catch(e => { console.error('Failed to delete test users:', e.message); process.exit(1); });
         " || echo "Warning: test user cleanup failed (non-fatal)"
 

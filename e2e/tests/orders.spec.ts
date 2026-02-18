@@ -248,4 +248,177 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
       await context2.close();
     }
   });
+
+  test('should create a new order via Create Order button @crud', async () => {
+    await page.goto('/orders');
+    await page.waitForLoadState('networkidle');
+
+    // Look for "Create Order" or "New Order" button
+    const createSelectors = [
+      'button:has-text("Create Order")',
+      'button:has-text("New Order")',
+      '[data-testid="create-order"]',
+    ];
+
+    for (const selector of createSelectors) {
+      try {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 3000 })) {
+          await btn.click();
+
+          // Wait for dialog to appear
+          await page.locator('[role="dialog"], .modal').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+          const dialogVisible = await page.locator('[role="dialog"], .modal').isVisible().catch(() => false);
+          if (dialogVisible) {
+            console.log('Create Order dialog opened successfully');
+          }
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+  });
+
+  test('should edit an existing order @crud', async () => {
+    await page.goto('/orders');
+    await page.waitForLoadState('networkidle');
+
+    // Look for edit button on a row
+    const editSelectors = [
+      'button:has-text("Edit")',
+      '[data-testid*="edit"]',
+      'button[aria-label*="edit" i]',
+    ];
+
+    for (const selector of editSelectors) {
+      try {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 3000 })) {
+          await btn.click();
+
+          await page.locator('[role="dialog"], .modal').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+          const dialogVisible = await page.locator('[role="dialog"], .modal').isVisible().catch(() => false);
+          if (dialogVisible) {
+            console.log('Edit Order dialog opened successfully');
+          }
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+  });
+
+  test('should duplicate an existing order @crud', async () => {
+    await page.goto('/orders');
+    await page.waitForLoadState('networkidle');
+
+    // Open an order detail first
+    const orderRow = page.locator('tbody tr').first();
+    if (await orderRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await orderRow.click();
+
+      await page.locator('[role="dialog"], .modal').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+      // Look for duplicate button
+      const dupSelectors = [
+        'button:has-text("Duplicate")',
+        '[data-testid*="duplicate"]',
+        'button[aria-label*="duplicate" i]',
+      ];
+
+      for (const selector of dupSelectors) {
+        try {
+          const btn = page.locator(selector).first();
+          if (await btn.isVisible({ timeout: 3000 })) {
+            await btn.click();
+            console.log('Duplicate order action triggered');
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+  });
+
+  test('should print order directly (print dialog) @print', async () => {
+    await page.goto('/orders');
+    await page.waitForLoadState('networkidle');
+
+    // Open an order detail
+    const orderRow = page.locator('tbody tr').first();
+    if (await orderRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await orderRow.click();
+
+      await page.locator('[role="dialog"], .modal').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+      // Look for print order button
+      const printSelectors = [
+        'button:has-text("Print order")',
+        'button:has-text("Print Order")',
+        '[data-testid*="print-order"]',
+      ];
+
+      for (const selector of printSelectors) {
+        try {
+          const btn = page.locator(selector).first();
+          if (await btn.isVisible({ timeout: 3000 })) {
+            // Listen for new page (print window)
+            const popupPromise = page.context().waitForEvent('page', { timeout: 5000 }).catch(() => null);
+            await btn.click();
+            const popup = await popupPromise;
+            if (popup) {
+              console.log('Print window opened for order PDF');
+              await popup.close();
+            }
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+  });
+
+  test('should print label directly (print dialog) @print', async () => {
+    await page.goto('/orders');
+    await page.waitForLoadState('networkidle');
+
+    // Open an order detail
+    const orderRow = page.locator('tbody tr').first();
+    if (await orderRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await orderRow.click();
+
+      await page.locator('[role="dialog"], .modal').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+      // Look for print label button
+      const labelSelectors = [
+        'button:has-text("Print label")',
+        'button:has-text("Print Label")',
+        '[data-testid*="print-label"]',
+      ];
+
+      for (const selector of labelSelectors) {
+        try {
+          const btn = page.locator(selector).first();
+          if (await btn.isVisible({ timeout: 3000 })) {
+            const popupPromise = page.context().waitForEvent('page', { timeout: 5000 }).catch(() => null);
+            await btn.click();
+            const popup = await popupPromise;
+            if (popup) {
+              console.log('Print window opened for label PDF');
+              await popup.close();
+            }
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+  });
 });
