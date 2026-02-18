@@ -250,12 +250,26 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
 
   const handlePrintOrder = () => {
     const doc = generateOrderPDF(orderDataForPdf);
-    doc.save(`order-${displayOrderId}.pdf`);
+    const pdfBlob = doc.output('blob');
+    const url = URL.createObjectURL(pdfBlob);
+    const printWindow = window.open(url, '_blank');
+    if (printWindow) {
+      printWindow.addEventListener('load', () => {
+        printWindow.print();
+      });
+    }
   };
 
   const handlePrintLabel = () => {
     const doc = generateLabelPDF(orderDataForPdf);
-    doc.save(`label-${displayOrderId}.pdf`);
+    const pdfBlob = doc.output('blob');
+    const url = URL.createObjectURL(pdfBlob);
+    const printWindow = window.open(url, '_blank');
+    if (printWindow) {
+      printWindow.addEventListener('load', () => {
+        printWindow.print();
+      });
+    }
   };
 
   const handleDuplicateOrder = () => {
