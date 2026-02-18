@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
-import { fetchOrderDetail, updateOrder, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
+import { fetchOrderDetail, updateOrder, createOrderFromPayload, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
 
 interface EditFormOptions {
@@ -35,6 +35,7 @@ interface ComprehensiveEditOrderProps {
     id: string;
     orderId: number;
   };
+  isDuplicate?: boolean;
   isLoading?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -53,7 +54,7 @@ const currencyMap: Record<number, string> = {
   0: 'USD', 1: 'USD', 2: 'EUR', 3: 'GBP', 4: 'AUD', 5: 'CAD', 6: 'CHF', 7: 'DE',
 };
 
-export function ComprehensiveEditOrder({ order, isLoading = false, error, onClose, onBack }: ComprehensiveEditOrderProps) {
+export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading = false, error, onClose, onBack }: ComprehensiveEditOrderProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [loadingData, setLoadingData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -125,27 +126,35 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
 
   const orderId = order?.orderId || Number(order?.id) || 0;
 
+  // Fetch edit options filtered by saddleId
+  const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
+    const url = forSaddleId
+      ? `${API_URL}/api/v1/enriched_orders/edit-options?saddleId=${forSaddleId}`
+      : `${API_URL}/api/v1/enriched_orders/edit-options`;
+    try {
+      const r = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'include',
+      });
+      if (!r.ok) throw new Error(`Failed to fetch options: ${r.status}`);
+      return r.json() as Promise<EditFormOptions>;
+    } catch (err) {
+      logger.warn('Failed to fetch edit options:', err);
+      return null;
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     setLoadingData(true);
     setDataError(null);
 
     try {
-      // Fetch order detail and edit options in parallel
-      const [detail, options] = await Promise.all([
-        fetchOrderDetail(orderId),
-        fetch(`${API_URL}/api/v1/enriched_orders/edit-options`, {
-          headers: {
-            'Accept': 'application/json',
-          },
-          credentials: 'include',
-        }).then(r => {
-          if (!r.ok) throw new Error(`Failed to fetch options: ${r.status}`);
-          return r.json() as Promise<EditFormOptions>;
-        }).catch(err => {
-          logger.warn('Failed to fetch edit options:', err);
-          return null;
-        }),
-      ]);
+      // First fetch order detail to get saddleId
+      const detail = await fetchOrderDetail(orderId);
+      const detailSaddleId = detail.saddleId ? String(detail.saddleId) : undefined;
+
+      // Then fetch options filtered by the order's saddle
+      const options = await fetchEditOptions(detailSaddleId);
 
       setOrderDetail(detail);
       setEditOptions(options);
@@ -216,9 +225,15 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
       setShipCountry(detail.shipCountry || '');
 
       // Order overview
-      setOrderReference(detail.fitterReference || '');
-      setOrderStatus(detail.orderStatus || '');
+      setOrderReference(isDuplicate ? '' : (detail.fitterReference || ''));
+      setOrderStatus(isDuplicate ? 'Unordered' : (detail.orderStatus || ''));
       setSpecialNotes(detail.specialNotes || '');
+
+      // Reset certain fields for duplicate
+      if (isDuplicate) {
+        setPriceTradein('0.00');
+        setPriceDeposit('0.00');
+      }
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load order data';
@@ -227,7 +242,7 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
     } finally {
       setLoadingData(false);
     }
-  }, [orderId]);
+  }, [orderId, isDuplicate, fetchEditOptions]);
 
   // Load order data and edit options
   useEffect(() => {
@@ -366,8 +381,13 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
         saddleOptions,
       };
 
-      await updateOrder(orderId, payload);
-      toast.success(`Order #${orderId} updated successfully`);
+      if (isDuplicate) {
+        const result = await createOrderFromPayload(payload);
+        toast.success(`Order duplicated successfully! New order #${result.orderId}`);
+      } else {
+        await updateOrder(orderId, payload);
+        toast.success(`Order #${orderId} updated successfully`);
+      }
       onClose();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Failed to save order';
@@ -459,7 +479,7 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
             {currentStep === 1 ? 'Back to Orders' : 'Back'}
           </Button>
           <DialogTitle className="text-lg">
-            {order ? `Edit Order #${orderId}` : 'New Order'} | Step {currentStep}: {steps[currentStep - 1].title}
+            {isDuplicate ? `Duplicate Order #${orderId}` : (order ? `Edit Order #${orderId}` : 'New Order')} | Step {currentStep}: {steps[currentStep - 1].title}
           </DialogTitle>
           <div className="w-32" />
         </div>
@@ -597,7 +617,13 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
                     <Label className="text-sm font-medium">
                       Brand & Model: <span className="text-red-500">*</span>
                     </Label>
-                    <Select value={saddleId} onValueChange={setSaddleId}>
+                    <Select value={saddleId} onValueChange={async (val) => {
+                      setSaddleId(val);
+                      setOptionSelections({});
+                      setOptionCustom({});
+                      const newOptions = await fetchEditOptions(val);
+                      if (newOptions) setEditOptions(newOptions);
+                    }}>
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Select model..." />
                       </SelectTrigger>
@@ -1087,7 +1113,7 @@ export function ComprehensiveEditOrder({ order, isLoading = false, error, onClos
               </div>
             ) : (
               currentStep === 3
-                ? (order ? 'Update Order' : 'Create Order')
+                ? (isDuplicate ? 'Duplicate Order' : (order ? 'Update Order' : 'Create Order'))
                 : 'Next Step'
             )}
           </Button>

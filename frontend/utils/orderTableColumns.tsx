@@ -107,7 +107,7 @@ export function getOrderTableColumns(
           type="enum"
           data={dynamicSeatSizes.length > 0 
             ? dynamicSeatSizes.map(size => ({ label: size, value: size }))
-            : ['17', '17.5', '18'].map(size => ({ label: size, value: size }))
+            : ['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'].map(size => ({ label: size, value: size }))
           }
           entityType="order"
         />

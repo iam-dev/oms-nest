@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { EditOrder } from './EditOrder';
+import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
 import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
@@ -84,8 +84,6 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
   const [sendTo, setSendTo] = useState('fitter-factory');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [formData, setFormData] = useState({});
 
   useEffect(() => {
     if (!orderId) {
@@ -261,57 +259,7 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
   };
 
   const handleDuplicateOrder = () => {
-    const duplicateData = {
-      fitter: fitterData.fullName,
-      isStock: true,
-      isDemo: false,
-      isUrgent: false,
-      isSponsored: false,
-      isRepair: false,
-      repairNotes: '',
-      brand: detailData?.brandName || '',
-      model: saddleModel,
-      preset: '',
-      leatherType: saddleLeatherType,
-      ...Object.fromEntries(saddleSpecs.map(s => [s.optionName, s.displayValue || ''])),
-      extras: {
-        completeReblock: false,
-        overflocking: false,
-        treeAdjustment: false,
-        fittedByFactory: false,
-        coveredNylonStirrup: false,
-        iconFlexAirGirth: false,
-        deluxeGirth: false,
-        contourGirth: false,
-        thinlineFleece: false,
-      },
-      specialNotes: specialNotes,
-      price: priceData.saddlePrice,
-      tradeIn: 0,
-      deposit: 0,
-      discount: 0,
-      fittingEval: 0,
-      callFee: 0,
-      girth: 0,
-      additional: 0,
-      shipping: null,
-      tax: null,
-      customerEmail: customerData.email !== '-' ? customerData.email : '',
-      customerName: customerData.name !== '-' ? customerData.name : '',
-      customerAddress: customerData.address,
-      customerCity: customerData.city,
-      customerZipcode: customerData.zipcode,
-      customerCountry: customerData.country,
-      customerReference: '',
-      shippingName: detailData?.shipName || '',
-      shippingAddress: detailData?.shipAddress || '',
-      shippingCity: detailData?.shipCity || '',
-      shippingCountry: detailData?.shipCountry || '',
-      shippingZipcode: detailData?.shipZipcode || '',
-    };
-
     setIsDuplicateOpen(true);
-    setFormData(duplicateData);
   };
 
   // Loading state
@@ -679,15 +627,16 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
       </DialogContent>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <EditOrder
+        <ComprehensiveEditOrder
           order={{ id: String(orderId), orderId: Number(displayOrderId) }}
           onClose={() => setIsEditOpen(false)}
         />
       </Dialog>
 
       <Dialog open={isDuplicateOpen} onOpenChange={setIsDuplicateOpen}>
-        <EditOrder
+        <ComprehensiveEditOrder
           order={{ id: String(orderId), orderId: Number(displayOrderId) }}
+          isDuplicate={true}
           onClose={() => setIsDuplicateOpen(false)}
         />
       </Dialog>

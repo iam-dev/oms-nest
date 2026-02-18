@@ -122,6 +122,8 @@ export default function Reports() {
           filters.customerCountry = headerFilters[key];
         } else if (key === 'saddle') {
           filters.saddleName = headerFilters[key];
+        } else if (key === 'kneeRoll') {
+          filters.kneeRoll = headerFilters[key];
         }
       }
     });
@@ -171,6 +173,7 @@ export default function Reports() {
   const [selectedFitterCountry, setSelectedFitterCountry] = useState('all-fitter-countries');
   const [selectedSeatSize, setSelectedSeatSize] = useState('all-sizes');
   const [selectedUrgent, setSelectedUrgent] = useState('all');
+  const [selectedKneeRoll, setSelectedKneeRoll] = useState('all-knee-rolls');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [date, setDate] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
@@ -180,6 +183,18 @@ export default function Reports() {
   // Extract unique seat sizes from orders (handles both snake_case and camelCase)
   const dynamicSeatSizes = React.useMemo(() => {
     return extractDynamicSeatSizes(orders);
+  }, [orders]);
+
+  // Extract unique knee roll values from orders
+  const kneeRollOptions = React.useMemo(() => {
+    const values = new Set<string>();
+    orders.forEach(order => {
+      const kr = order.knee_roll || order.kneeRoll;
+      if (kr && typeof kr === 'string' && kr.trim()) {
+        values.add(kr.trim());
+      }
+    });
+    return Array.from(values).sort();
   }, [orders]);
 
   const columns = getOrderTableColumns(
@@ -566,6 +581,28 @@ export default function Reports() {
                   <SelectItem value="all-sizes">All Sizes</SelectItem>
                   {dynamicSeatSizes.map(size => (
                     <SelectItem key={size} value={size}>{size}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="w-32">Knee Roll</label>
+              <Select value={selectedKneeRoll} onValueChange={(value) => {
+                setSelectedKneeRoll(value);
+                setHeaderFilters(prev => ({
+                  ...prev,
+                  kneeRoll: value === 'all-knee-rolls' ? '' : value
+                }));
+                setPage(1);
+              }}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Please select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-knee-rolls">All Knee Rolls</SelectItem>
+                  {kneeRollOptions.map(kr => (
+                    <SelectItem key={kr} value={kr}>{kr}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

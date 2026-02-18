@@ -248,6 +248,29 @@ export interface UpdateOrderPayload {
   }>;
 }
 
+export async function createOrderFromPayload(
+  payload: UpdateOrderPayload,
+): Promise<{ success: boolean; orderId: number }> {
+  logger.log('Creating new order');
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to create order: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function updateOrder(
   orderId: number,
   payload: UpdateOrderPayload,

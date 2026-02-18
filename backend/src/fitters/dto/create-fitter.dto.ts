@@ -9,6 +9,33 @@ import {
 
 export class CreateFitterDto {
   @ApiPropertyOptional({
+    description: "Username for the fitter login account",
+    example: "johndoe",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  username?: string;
+
+  @ApiPropertyOptional({
+    description: "Fitter first name",
+    example: "John",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  firstName?: string;
+
+  @ApiPropertyOptional({
+    description: "Fitter last name",
+    example: "Doe",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  lastName?: string;
+
+  @ApiPropertyOptional({
     description: "User ID that this fitter is associated with",
     example: 123,
   })
@@ -97,7 +124,7 @@ export class CreateFitterDto {
   emailaddress?: string;
 
   @ApiPropertyOptional({
-    description: "New password for the fitter (admin only)",
+    description: "Password for the fitter login account",
     example: "newPassword123",
   })
   @IsOptional()

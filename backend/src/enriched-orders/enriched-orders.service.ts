@@ -52,6 +52,10 @@ export interface EnrichedOrdersQueryDto {
   repair?: string | boolean;
   // Comma-separated order IDs for bulk search
   orderIds?: string;
+  // Filter by knee roll (option_id = 2) value
+  kneeRoll?: string;
+  // Filter by supplier name (alias for factoryName)
+  supplierName?: string;
 }
 
 export interface PaginationMetadata {
@@ -234,7 +238,11 @@ export class EnrichedOrdersService {
         o.order_data,
         o.seat_sizes,
         c.country as customer_country,
-        o.repair
+        o.repair,
+        (SELECT oi2.name FROM orders_info oi
+         JOIN options_items oi2 ON oi.option_item_id = oi2.id
+         WHERE oi.order_id = o.id AND oi.option_id = 2
+         LIMIT 1) as knee_roll
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN fitters f ON o.fitter_id = f.id
@@ -572,6 +580,26 @@ export class EnrichedOrdersService {
       paramIndex += 5;
     }
 
+    // Filter by knee roll (option_id = 2) — matches option_items.name via orders_info
+    if (query.kneeRoll) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM orders_info oi
+        JOIN options_items oi2 ON oi.option_item_id = oi2.id
+        WHERE oi.order_id = o.id
+          AND oi.option_id = 2
+          AND oi2.name ILIKE $${paramIndex}
+      )`);
+      params.push(`%${query.kneeRoll}%`);
+      paramIndex++;
+    }
+
+    // Filter by supplier name (alias)
+    if (query.supplierName) {
+      conditions.push(`fac.full_name ILIKE $${paramIndex}`);
+      params.push(`%${query.supplierName}%`);
+      paramIndex++;
+    }
+
     return {
       where: conditions.length > 0 ? conditions.join(" AND ") : "",
       params,
@@ -906,13 +934,14 @@ export class EnrichedOrdersService {
     }
   }
 
-  async getEditFormOptions(): Promise<any> {
+  async getEditFormOptions(
+    saddleId?: number,
+  ): Promise<Record<string, unknown[]>> {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
-      // Fetch available fitters
       const fitters = await queryRunner.query(`
         SELECT f.id, c.user_name as "username", c.full_name as "fullName"
         FROM fitters f
@@ -921,7 +950,6 @@ export class EnrichedOrdersService {
         ORDER BY c.full_name
       `);
 
-      // Fetch available saddle models (brand + model)
       const saddles = await queryRunner.query(`
         SELECT s.id, s.brand, s.model_name as "modelName",
           CONCAT(s.brand, ' ', s.model_name) as "displayName"
@@ -930,27 +958,51 @@ export class EnrichedOrdersService {
         ORDER BY s.brand, s.model_name
       `);
 
-      // Fetch available leather types
       const leatherTypes = await queryRunner.query(`
         SELECT id, name FROM leather_types
         WHERE deleted = 0
         ORDER BY name
       `);
 
-      // Fetch all options with their items
-      const options = await queryRunner.query(`
-        SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group"
-        FROM options o
-        ORDER BY o.sequence
-      `);
+      let options: unknown[];
+      let optionItems: unknown[];
 
-      const optionItems = await queryRunner.query(`
-        SELECT oi.id, oi.name, oi.option_id as "optionId"
-        FROM options_items oi
-        ORDER BY oi.option_id, oi.name
-      `);
+      if (saddleId) {
+        options = await queryRunner.query(
+          `
+          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group"
+          FROM options o
+          INNER JOIN saddle_options_items soi ON soi.option_id = o.id
+          WHERE soi.saddle_id = $1 AND soi.deleted = 0
+          ORDER BY o.sequence
+        `,
+          [saddleId],
+        );
 
-      // Fetch all statuses
+        optionItems = await queryRunner.query(
+          `
+          SELECT DISTINCT oi.id, oi.name, oi.option_id as "optionId"
+          FROM options_items oi
+          INNER JOIN saddle_options_items soi ON soi.option_item_id = oi.id
+          WHERE soi.saddle_id = $1 AND soi.deleted = 0
+          ORDER BY oi.option_id, oi.name
+        `,
+          [saddleId],
+        );
+      } else {
+        options = await queryRunner.query(`
+          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group"
+          FROM options o
+          ORDER BY o.sequence
+        `);
+
+        optionItems = await queryRunner.query(`
+          SELECT oi.id, oi.name, oi.option_id as "optionId"
+          FROM options_items oi
+          ORDER BY oi.option_id, oi.name
+        `);
+      }
+
       const statuses = await queryRunner.query(`
         SELECT id, name FROM statuses ORDER BY id
       `);
@@ -1355,6 +1407,172 @@ export class EnrichedOrdersService {
         this.logger.warn(`Rollback failed: ${rbErr.message}`);
       }
       this.logger.error(`Failed to update order ${orderId}`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async createOrder(
+    dto: UpdateOrderDto,
+    userId?: number,
+  ): Promise<{ success: boolean; orderId: number }> {
+    this.logger.log("Creating new order");
+
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      // Resolve status name to integer ID
+      let statusId = 0; // Default: Unordered
+      if (dto.orderStatus) {
+        const statusResult = await queryRunner.query(
+          `SELECT id FROM statuses WHERE name = $1`,
+          [dto.orderStatus],
+        );
+        if (statusResult && statusResult.length > 0) {
+          statusId = statusResult[0].id;
+        }
+      }
+
+      // Convert dollar prices to cents
+      const toCents = (val: number | undefined): number =>
+        val !== undefined ? Math.round(val * 100) : 0;
+
+      const orderTime = Math.floor(Date.now() / 1000);
+
+      const result = await queryRunner.query(
+        `INSERT INTO orders (
+          fitter_id, saddle_id, leather_id, factory_id,
+          fitter_stock, customer_id, fitter_reference,
+          horse_name, name, address, zipcode, city, state, country,
+          phone_no, cell_no, email,
+          order_status, ship_name, ship_address, ship_zipcode,
+          ship_city, ship_state, ship_country,
+          order_time, payment, payment_time, order_step,
+          price_saddle, price_tradein, price_deposit, price_discount,
+          price_fittingeval, price_callfee, price_girth,
+          price_shipping, price_tax, price_additional,
+          special_notes, serial_number, custom_order, changed,
+          repair, demo, sponsored, rushed,
+          oms_version, currency, order_data
+        ) VALUES (
+          $1, $2, $3, $4,
+          $5, $6, $7,
+          $8, $9, $10, $11, $12, $13, $14,
+          $15, $16, $17,
+          $18, $19, $20, $21,
+          $22, $23, $24,
+          $25, $26, $27, $28,
+          $29, $30, $31, $32,
+          $33, $34, $35,
+          $36, $37, $38,
+          $39, $40, $41, $42,
+          $43, $44, $45, $46,
+          $47, $48, $49
+        ) RETURNING id`,
+        [
+          dto.fitterId || 0,
+          dto.saddleId || 0,
+          dto.leatherId || 0,
+          0, // factory_id
+          dto.fitterStock ? 1 : 0,
+          dto.customerId || 0,
+          dto.orderReference || "",
+          dto.horseName || "",
+          dto.customerName || "",
+          dto.customerAddress || "",
+          dto.customerZipcode || "",
+          dto.customerCity || "",
+          dto.customerState || "",
+          dto.customerCountry || "",
+          dto.customerPhone || "",
+          dto.customerCell || "",
+          dto.customerEmail || "",
+          statusId,
+          dto.shipName || "",
+          dto.shipAddress || "",
+          dto.shipZipcode || "",
+          dto.shipCity || "",
+          dto.shipState || "",
+          dto.shipCountry || "",
+          orderTime,
+          "", // payment
+          0, // payment_time
+          1, // order_step
+          toCents(dto.priceSaddle),
+          toCents(dto.priceTradein),
+          toCents(dto.priceDeposit),
+          toCents(dto.priceDiscount),
+          toCents(dto.priceFittingeval),
+          toCents(dto.priceCallfee),
+          toCents(dto.priceGirth),
+          toCents(dto.priceShipping),
+          toCents(dto.priceTax),
+          toCents(dto.priceAdditional),
+          dto.specialNotes || "",
+          "", // serial_number
+          dto.customOrder ? 1 : 0,
+          0, // changed
+          dto.repair ? 1 : 0,
+          dto.demo ? 1 : 0,
+          dto.sponsored ? 1 : 0,
+          dto.rushed ? 1 : 0,
+          2, // oms_version
+          0, // currency (will use fitter's currency)
+          "", // order_data
+        ],
+      );
+
+      const newOrderId = result[0].id;
+
+      // Insert saddle options (orders_info) if provided
+      if (dto.saddleOptions && dto.saddleOptions.length > 0) {
+        for (const opt of dto.saddleOptions) {
+          await queryRunner.query(
+            `INSERT INTO orders_info (order_id, option_id, option_item_id, clone_number, color, leathertype, custom)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              newOrderId,
+              opt.optionId,
+              opt.optionItemId,
+              0,
+              "",
+              "",
+              opt.custom || "",
+            ],
+          );
+        }
+      }
+
+      // Insert audit log entry
+      try {
+        await queryRunner.query(
+          `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
+           VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, 0, $4)`,
+          [userId || dto.fitterId || 0, newOrderId, "Order created.", statusId],
+        );
+      } catch (logErr) {
+        this.logger.warn(
+          `Failed to log order creation for ${newOrderId}: ${logErr.message}`,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      await this.invalidateCache();
+
+      this.logger.log(`Successfully created order ${newOrderId}`);
+      return { success: true, orderId: newOrderId };
+    } catch (error) {
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rbErr) {
+        this.logger.warn(`Rollback failed: ${rbErr.message}`);
+      }
+      this.logger.error("Failed to create order", error);
       throw error;
     } finally {
       await queryRunner.release();

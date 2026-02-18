@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { NotFoundException } from "@nestjs/common";
+import { DataSource } from "typeorm";
 import { FitterService } from "../../../src/fitters/fitter.service";
 import { IFitterRepository } from "../../../src/fitters/domain/fitter.repository";
 import { Fitter } from "../../../src/fitters/domain/fitter";
@@ -51,6 +52,12 @@ describe("FitterService", () => {
           useValue: {
             findOne: jest.fn(),
             save: jest.fn(),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            query: jest.fn(),
           },
         },
       ],

@@ -90,7 +90,7 @@ export async function fetchFitters({
   });
 }
 
-export async function createFitter(fitterData: Partial<Fitter>): Promise<Fitter> {
+export async function createFitter(fitterData: Record<string, unknown>): Promise<Fitter> {
   logger.log('Creating fitter with data:', fitterData);
 
   const response = await fetch(`${API_URL}/api/v1/fitters`, {
