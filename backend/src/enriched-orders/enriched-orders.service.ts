@@ -15,6 +15,7 @@ export interface EnrichedOrdersQueryDto {
   page?: number;
   limit?: number;
   partial?: boolean | string;
+  noCache?: string | boolean;
   searchTerm?: string;
   search?: string; // Alias for searchTerm
   orderBy?: string;
@@ -156,7 +157,7 @@ export class EnrichedOrdersService {
       let cached: any = null;
       let cacheKey = "";
 
-      if (isCacheEnabled) {
+      if (isCacheEnabled && !query.noCache) {
         cacheKey = this.generateCacheKey(query);
         // Try to get from cache first
         cached = await this.cacheManager.get(cacheKey);
@@ -186,7 +187,7 @@ export class EnrichedOrdersService {
         },
       };
 
-      if (isCacheEnabled) {
+      if (isCacheEnabled && !query.noCache) {
         // Cache the result
         await this.cacheManager.set(cacheKey, response, cacheTTL);
         this.logger.debug(

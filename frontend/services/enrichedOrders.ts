@@ -154,9 +154,9 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   const effectiveSearchTerm = searchTermFromFilters || params.searchTerm;
   logger.log('enrichedOrders.ts: Final API request parameters:', formattedFilters, 'searchTerm:', effectiveSearchTerm);
 
-  // When bustCache is true, add a timestamp param to bypass backend cache key matching
+  // When bustCache is true, pass noCache to bypass backend Redis cache entirely
   const extraParams = params.bustCache
-    ? { ...formattedFilters, _t: String(Date.now()) }
+    ? { ...formattedFilters, noCache: 'true' }
     : formattedFilters;
 
   const response = await fetchEntities({
