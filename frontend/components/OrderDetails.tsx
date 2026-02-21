@@ -30,6 +30,7 @@ interface OrderDetailsProps {
     orderStatus?: string;
   };
   onClose: () => void;
+  onOrderChanged?: () => void;
 }
 
 function formatOrderDate(orderTime: string | null): string {
@@ -70,7 +71,7 @@ function formatPrice(value: number | null | undefined): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function OrderDetails({ order, onClose }: OrderDetailsProps) {
+export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsProps) {
   const orderId = Number(order.id) || Number(order.orderId) || 0;
   const displayOrderId = order.orderId || orderId;
 
@@ -643,7 +644,10 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <ComprehensiveEditOrder
           order={{ id: String(orderId), orderId: Number(displayOrderId) }}
-          onClose={() => setIsEditOpen(false)}
+          onClose={() => {
+            setIsEditOpen(false);
+            onOrderChanged?.();
+          }}
         />
       </Dialog>
 
@@ -651,7 +655,10 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
         <ComprehensiveEditOrder
           order={{ id: String(orderId), orderId: Number(displayOrderId) }}
           isDuplicate={true}
-          onClose={() => setIsDuplicateOpen(false)}
+          onClose={() => {
+            setIsDuplicateOpen(false);
+            onOrderChanged?.();
+          }}
         />
       </Dialog>
     </>

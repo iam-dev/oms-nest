@@ -263,6 +263,10 @@ export default function Orders() {
           <OrderDetails
             order={selectedOrder}
             onClose={() => setIsDetailsOpen(false)}
+            onOrderChanged={() => {
+              setIsDetailsOpen(false);
+              fetchAndSetOrders();
+            }}
           />
         )}
       </Dialog>

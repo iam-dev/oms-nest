@@ -45,7 +45,8 @@ export default function Reports() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Extract unique factory names from orders for filter dropdown
   const suppliers = React.useMemo(() => {
     return extractDynamicFactories(orders);
@@ -149,7 +150,7 @@ export default function Reports() {
         setError('Failed to load orders from API');
         setLoading(false);
       });
-  }, [page, headerFilters]);
+  }, [page, headerFilters, refreshKey]);
 
   const [groupBySaddle, setGroupBySaddle] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -693,7 +694,7 @@ export default function Reports() {
       {error ? (
         <div>Error: {error}</div>
       ) : (
-        <div className="border rounded-lg">
+        <div>
           <OrdersTable
             {...{
               orders: filteredOrders,
@@ -745,6 +746,10 @@ export default function Reports() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             order={selectedOrder as any}
             onClose={() => setIsDetailsOpen(false)}
+            onOrderChanged={() => {
+              setIsDetailsOpen(false);
+              setRefreshKey(k => k + 1);
+            }}
           />
         )}
       </Dialog>
