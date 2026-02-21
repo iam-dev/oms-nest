@@ -252,6 +252,7 @@ export interface UpdateOrderPayload {
     optionItemId: number;
     custom?: string;
   }>;
+  repairSourceOrderId?: number;
 }
 
 export async function createOrderFromPayload(
@@ -397,6 +398,9 @@ export interface OrderDetailData {
   // Leather
   leatherId: number | null;
   leatherName: string | null;
+
+  // Repair linking
+  repairSourceOrderId: number | null;
 
   // Saddle specifications from orders_info
   saddleSpecs: Array<{

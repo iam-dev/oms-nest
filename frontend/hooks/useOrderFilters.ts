@@ -11,7 +11,8 @@ import { getEnrichedOrders } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
 import type { Order } from '@/components/Orders';
 
-export function useOrderFilters() {
+export function useOrderFilters(options?: { baseFilters?: Record<string, string> }) {
+  const baseFilters = options?.baseFilters ?? {};
   const [searchTerm, setSearchTerm] = useState('');
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -106,7 +107,7 @@ export function useOrderFilters() {
     setLoading(true);
     setError('');
     try {
-      const filters = buildOrderFilters(headerFilters);
+      const filters = { ...baseFilters, ...buildOrderFilters(headerFilters) };
       const isSearchingForOrderId = filters.orderId && /^\d+$/.test(filters.orderId);
       const isSearchingForOrderIds = !!filters.orderIds;
       const isSearchingWithSearchTerm = filters.searchTerm && filters.searchTerm.length > 0;

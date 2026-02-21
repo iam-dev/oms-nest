@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
+import { CreateRepairDialog } from './CreateRepairDialog';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
 import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
@@ -85,6 +86,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   const [sendTo, setSendTo] = useState('fitter-factory');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
+  const [isRepairOpen, setIsRepairOpen] = useState(false);
 
   useEffect(() => {
     if (!orderId) {
@@ -338,6 +340,11 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
               D
             </div>
             <span className="text-base">Order {displayOrderId}</span>
+            {detailData?.repairSourceOrderId && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-2">
+                Repair of #{detailData.repairSourceOrderId}
+              </span>
+            )}
             <span className="text-xs font-normal ml-4">
               Order date: {orderDate}
             </span>
@@ -637,6 +644,14 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
             >
               Duplicate order
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setIsRepairOpen(true)}
+            >
+              Create repair
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -657,6 +672,17 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
           isDuplicate={true}
           onClose={() => {
             setIsDuplicateOpen(false);
+            onOrderChanged?.();
+          }}
+        />
+      </Dialog>
+
+      <Dialog open={isRepairOpen} onOpenChange={setIsRepairOpen}>
+        <CreateRepairDialog
+          sourceOrderId={orderId}
+          sourceDisplayOrderId={Number(displayOrderId)}
+          onClose={() => {
+            setIsRepairOpen(false);
             onOrderChanged?.();
           }}
         />
