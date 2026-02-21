@@ -102,7 +102,7 @@ export function useOrderFilters() {
   }, [searchTimeout]);
 
   // Fetch orders
-  const fetchAndSetOrders = useCallback(async () => {
+  const fetchAndSetOrders = useCallback(async (forceFresh = false) => {
     setLoading(true);
     setError('');
     try {
@@ -117,6 +117,7 @@ export function useOrderFilters() {
         filters,
         orderBy: 'orderId',
         order: 'desc',
+        bustCache: forceFresh,
       });
 
       const apiOrders = data['hydra:member'] || [];

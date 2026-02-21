@@ -188,7 +188,7 @@ export default function Orders() {
   const handleCloseEdit = () => {
     setIsEditOpen(false);
     setOrderDataError(null);
-    fetchAndSetOrders();
+    fetchAndSetOrders(true);
   };
 
   return (
@@ -265,7 +265,7 @@ export default function Orders() {
             onClose={() => setIsDetailsOpen(false)}
             onOrderChanged={() => {
               setIsDetailsOpen(false);
-              fetchAndSetOrders();
+              fetchAndSetOrders(true);
             }}
           />
         )}

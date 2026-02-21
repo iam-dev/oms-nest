@@ -129,10 +129,11 @@ export default function Reports() {
       }
     });
 
-    getEnrichedOrders({ 
-      page, 
+    getEnrichedOrders({
+      page,
       partial: true,
-      filters
+      filters,
+      bustCache: refreshKey > 0,
     })
       .then(data => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
