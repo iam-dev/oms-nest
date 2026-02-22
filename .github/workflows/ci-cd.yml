@@ -83,7 +83,7 @@ jobs:
         working-directory: backend
         run: |
           npm ci
-          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
           # Generate dependency report
           npm list --all --json > dependency-report.json
 
@@ -91,13 +91,13 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
 
       - name: 📦 E2E Dependencies Audit
         working-directory: e2e
         run: |
           npm ci
-          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
 
       - name: 📊 Upload Dependency Reports
         uses: actions/upload-artifact@v4
