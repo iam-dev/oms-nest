@@ -102,24 +102,6 @@
   },
   "overrides": {
     "cross-spawn": ">=7.0.5",
-    "tar": ">=7.5.7",
-    "exceljs": {
-      "archiver": {
-        "readdir-glob": ">=2.0.2",
-        "archiver-utils": {
-          "glob": ">=11.0.0"
-        },
-        "zip-stream": {
-          "archiver-utils": {
-            "glob": ">=11.0.0"
-          }
-        }
-      },
-      "unzipper": {
-        "fstream": {
-          "rimraf": ">=4.0.0"
-        }
-      }
-    }
+    "tar": ">=7.5.7"
   }
 }

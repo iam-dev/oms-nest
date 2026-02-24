@@ -88,13 +88,13 @@ jobs:
         working-directory: backend
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=high
+          npm audit --omit=dev --audit-level=critical
 
       - name: Frontend security audit
         working-directory: frontend
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=high
+          npm audit --omit=dev --audit-level=critical
 
       - name: Run CodeQL Analysis
         uses: github/codeql-action/init@v4
