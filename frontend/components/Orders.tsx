@@ -188,7 +188,7 @@ export default function Orders() {
   const handleCloseEdit = () => {
     setIsEditOpen(false);
     setOrderDataError(null);
-    fetchAndSetOrders();
+    fetchAndSetOrders(true);
   };
 
   return (
@@ -263,6 +263,10 @@ export default function Orders() {
           <OrderDetails
             order={selectedOrder}
             onClose={() => setIsDetailsOpen(false)}
+            onOrderChanged={() => {
+              setIsDetailsOpen(false);
+              fetchAndSetOrders(true);
+            }}
           />
         )}
       </Dialog>

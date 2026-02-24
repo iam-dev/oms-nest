@@ -274,6 +274,7 @@ export class EnrichedOrdersController {
       page: this.parsePositiveInt(query.page, 1),
       limit: Math.min(this.parsePositiveInt(query.limit, 50) || 50, 100), // Max 100 per page
       partial: query.partial === "true" || query.partial === true,
+      noCache: query.noCache === "true" || query.noCache === true,
       searchTerm: query.searchTerm
         ? String(query.searchTerm).trim()
         : undefined,

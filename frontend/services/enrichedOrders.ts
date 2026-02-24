@@ -12,6 +12,7 @@ interface GetEnrichedOrdersParams {
   fromDate?: Date;
   toDate?: Date;
   searchTerm?: string;
+  bustCache?: boolean;
 }
 
 interface SearchFilters {
@@ -153,11 +154,16 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   const effectiveSearchTerm = searchTermFromFilters || params.searchTerm;
   logger.log('enrichedOrders.ts: Final API request parameters:', formattedFilters, 'searchTerm:', effectiveSearchTerm);
 
+  // When bustCache is true, pass noCache to bypass backend Redis cache entirely
+  const extraParams = params.bustCache
+    ? { ...formattedFilters, noCache: 'true' }
+    : formattedFilters;
+
   const response = await fetchEntities({
     entity: 'enriched_orders',
     page: params.page,
     partial: params.partial,
-    extraParams: formattedFilters,
+    extraParams,
     searchTerm: effectiveSearchTerm,
   });
   
@@ -246,6 +252,7 @@ export interface UpdateOrderPayload {
     optionItemId: number;
     custom?: string;
   }>;
+  repairSourceOrderId?: number;
 }
 
 export async function createOrderFromPayload(
@@ -391,6 +398,9 @@ export interface OrderDetailData {
   // Leather
   leatherId: number | null;
   leatherName: string | null;
+
+  // Repair linking
+  repairSourceOrderId: number | null;
 
   // Saddle specifications from orders_info
   saddleSpecs: Array<{

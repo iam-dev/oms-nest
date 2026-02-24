@@ -1,0 +1,6 @@
+# Transitive minimatch ReDoS via exceljs -> archiver chain.
+# No upstream fix available — exceljs depends on archiver which
+# depends on glob/readdir-glob with old minimatch versions.
+# These are not exploitable in our usage (server-side only, no
+# user-supplied glob patterns).
+CVE-2026-26996

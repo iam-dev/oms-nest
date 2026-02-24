@@ -15,6 +15,7 @@ export interface EnrichedOrdersQueryDto {
   page?: number;
   limit?: number;
   partial?: boolean | string;
+  noCache?: string | boolean;
   searchTerm?: string;
   search?: string; // Alias for searchTerm
   orderBy?: string;
@@ -127,6 +128,8 @@ export interface UpdateOrderDto {
     optionItemId: number;
     custom?: string;
   }>;
+  // Repair linking: the original order this repair was created from
+  repairSourceOrderId?: number;
 }
 
 @Injectable()
@@ -154,7 +157,7 @@ export class EnrichedOrdersService {
       let cached: any = null;
       let cacheKey = "";
 
-      if (isCacheEnabled) {
+      if (isCacheEnabled && !query.noCache) {
         cacheKey = this.generateCacheKey(query);
         // Try to get from cache first
         cached = await this.cacheManager.get(cacheKey);
@@ -184,7 +187,7 @@ export class EnrichedOrdersService {
         },
       };
 
-      if (isCacheEnabled) {
+      if (isCacheEnabled && !query.noCache) {
         // Cache the result
         await this.cacheManager.set(cacheKey, response, cacheTTL);
         this.logger.debug(
@@ -239,6 +242,7 @@ export class EnrichedOrdersService {
         o.seat_sizes,
         c.country as customer_country,
         o.repair,
+        o.repair_source_order_id as "repairSourceOrderId",
         (SELECT oi2.name FROM orders_info oi
          JOIN options_items oi2 ON oi.option_item_id = oi2.id
          WHERE oi.order_id = o.id AND oi.option_id = 2
@@ -362,20 +366,47 @@ export class EnrichedOrdersService {
     }
 
     // General search term (searches multiple fields)
+    // Splits multi-word queries into individual words and matches ANY word
     const searchTermValue = query.searchTerm || query.search;
     if (searchTermValue) {
-      conditions.push(`(
-        o.name ILIKE $${paramIndex} OR
-        o.special_notes ILIKE $${paramIndex} OR
-        o.horse_name ILIKE $${paramIndex} OR
-        c.name ILIKE $${paramIndex} OR
-        fc.full_name ILIKE $${paramIndex} OR
-        fac.full_name ILIKE $${paramIndex} OR
-        s.brand ILIKE $${paramIndex} OR
-        s.model_name ILIKE $${paramIndex}
-      )`);
-      params.push(`%${searchTermValue}%`);
-      paramIndex++;
+      const searchFields = [
+        "o.name",
+        "o.special_notes",
+        "o.horse_name",
+        "c.name",
+        "fc.full_name",
+        "fac.full_name",
+        "s.brand",
+        "s.model_name",
+        "COALESCE(o.order_data, '')",
+      ];
+      // Split into words, filter out very short words (< 3 chars) to reduce noise
+      const words = searchTermValue
+        .trim()
+        .split(/\s+/)
+        .filter((w: string) => w.length >= 3);
+
+      if (words.length <= 1) {
+        // Single word or short phrase: exact substring match (original behavior)
+        const fieldConditions = searchFields
+          .map((f) => `${f} ILIKE $${paramIndex}`)
+          .join(" OR ");
+        conditions.push(`(${fieldConditions})`);
+        params.push(`%${searchTermValue}%`);
+        paramIndex++;
+      } else {
+        // Multi-word: each word must match at least one field (AND between words)
+        const wordConditions = words.map((word: string) => {
+          const idx = paramIndex;
+          paramIndex++;
+          params.push(`%${word}%`);
+          const fieldConditions = searchFields
+            .map((f) => `${f} ILIKE $${idx}`)
+            .join(" OR ");
+          return `(${fieldConditions})`;
+        });
+        conditions.push(`(${wordConditions.join(" AND ")})`);
+      }
     }
 
     // Filter by urgency (accepts multiple formats)
@@ -713,6 +744,7 @@ export class EnrichedOrdersService {
           o.currency,
           o.fitter_reference as "fitterReference",
           o.order_data as "orderData",
+          o.repair_source_order_id as "repairSourceOrderId",
 
           -- Order address fields
           o.name as "orderName",
@@ -1349,6 +1381,9 @@ export class EnrichedOrdersService {
       addField("price_tax", toCents(dto.priceTax));
       addField("price_additional", toCents(dto.priceAdditional));
 
+      // Repair source order linking
+      addField("repair_source_order_id", dto.repairSourceOrderId);
+
       // Always update changed timestamp
       setClauses.push(`changed = EXTRACT(EPOCH FROM NOW())::integer`);
 
@@ -1458,7 +1493,8 @@ export class EnrichedOrdersService {
           price_shipping, price_tax, price_additional,
           special_notes, serial_number, custom_order, changed,
           repair, demo, sponsored, rushed,
-          oms_version, currency, order_data
+          oms_version, currency, order_data,
+          repair_source_order_id
         ) VALUES (
           $1, $2, $3, $4,
           $5, $6, $7,
@@ -1472,7 +1508,8 @@ export class EnrichedOrdersService {
           $36, $37, $38,
           $39, $40, $41, $42,
           $43, $44, $45, $46,
-          $47, $48, $49
+          $47, $48, $49,
+          $50
         ) RETURNING id`,
         [
           dto.fitterId || 0,
@@ -1524,6 +1561,7 @@ export class EnrichedOrdersService {
           2, // oms_version
           0, // currency (will use fitter's currency)
           "", // order_data
+          dto.repairSourceOrderId || null,
         ],
       );
 

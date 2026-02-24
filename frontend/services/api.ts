@@ -270,6 +270,7 @@ export async function fetchEntities({
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'Cache-Control': 'no-cache',
       },
       credentials: 'include',
       signal: controller.signal,
