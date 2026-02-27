@@ -57,6 +57,10 @@ export interface EnrichedOrdersQueryDto {
   kneeRoll?: string;
   // Filter by supplier name (alias for factoryName)
   supplierName?: string;
+  // Filter by fitter country
+  fitterCountry?: string;
+  // Filter by sale type (comma-separated: demo,sponsored,urgent,repair,normal)
+  saleType?: string;
 }
 
 export interface PaginationMetadata {
@@ -128,6 +132,8 @@ export interface UpdateOrderDto {
     optionItemId: number;
     custom?: string;
   }>;
+  // Seat sizes for the order
+  seatSizes?: string[];
   // Repair linking: the original order this repair was created from
   repairSourceOrderId?: number;
 }
@@ -241,6 +247,7 @@ export class EnrichedOrdersService {
         o.order_data,
         o.seat_sizes,
         c.country as customer_country,
+        f.country as fitter_country,
         o.repair,
         o.repair_source_order_id as "repairSourceOrderId",
         (SELECT oi2.name FROM orders_info oi
@@ -447,11 +454,26 @@ export class EnrichedOrdersService {
     }
 
     // Filter by fitter name (searches in credentials.full_name via fitters join)
+    // Supports comma-separated values for multi-select
     const fitterNameFilter = query.fitterName || query.fitter;
     if (fitterNameFilter) {
-      conditions.push(`fc.full_name ILIKE $${paramIndex}`);
-      params.push(`%${fitterNameFilter}%`);
-      paramIndex++;
+      const values = String(fitterNameFilter)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 1) {
+        conditions.push(`fc.full_name ILIKE $${paramIndex}`);
+        params.push(`%${values[0]}%`);
+        paramIndex++;
+      } else if (values.length > 1) {
+        const orClauses = values.map((v) => {
+          const clause = `fc.full_name ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
     }
 
     // Filter by customer ID
@@ -462,11 +484,26 @@ export class EnrichedOrdersService {
     }
 
     // Filter by customer name (searches in customers.name)
+    // Supports comma-separated values for multi-select
     const customerNameFilter = query.customerName || query.customer;
     if (customerNameFilter) {
-      conditions.push(`c.name ILIKE $${paramIndex}`);
-      params.push(`%${customerNameFilter}%`);
-      paramIndex++;
+      const values = String(customerNameFilter)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 1) {
+        conditions.push(`c.name ILIKE $${paramIndex}`);
+        params.push(`%${values[0]}%`);
+        paramIndex++;
+      } else if (values.length > 1) {
+        const orClauses = values.map((v) => {
+          const clause = `c.name ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
     }
 
     // Filter by brand/saddle ID
@@ -477,44 +514,91 @@ export class EnrichedOrdersService {
     }
 
     // Filter by saddle name (brand - model format)
+    // Supports comma-separated values for multi-select
     if (query.saddleName) {
-      const parts = query.saddleName.split(" - ");
-      if (parts.length >= 2) {
-        const brand = parts[0].trim();
-        const model = parts.slice(1).join(" - ").trim();
-        conditions.push(
-          `(s.brand ILIKE $${paramIndex} AND s.model_name ILIKE $${paramIndex + 1})`,
-        );
-        params.push(`%${brand}%`);
-        params.push(`%${model}%`);
-        paramIndex += 2;
-      } else {
-        conditions.push(
-          `(s.brand ILIKE $${paramIndex} OR s.model_name ILIKE $${paramIndex})`,
-        );
-        params.push(`%${query.saddleName}%`);
-        paramIndex++;
+      const saddleValues = String(query.saddleName)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (saddleValues.length === 1) {
+        const parts = saddleValues[0].split(" - ");
+        if (parts.length >= 2) {
+          const brand = parts[0].trim();
+          const model = parts.slice(1).join(" - ").trim();
+          conditions.push(
+            `(s.brand ILIKE $${paramIndex} AND s.model_name ILIKE $${paramIndex + 1})`,
+          );
+          params.push(`%${brand}%`);
+          params.push(`%${model}%`);
+          paramIndex += 2;
+        } else {
+          conditions.push(
+            `(s.brand ILIKE $${paramIndex} OR s.model_name ILIKE $${paramIndex})`,
+          );
+          params.push(`%${saddleValues[0]}%`);
+          paramIndex++;
+        }
+      } else if (saddleValues.length > 1) {
+        const orGroups = saddleValues.map((sv) => {
+          const parts = sv.split(" - ");
+          if (parts.length >= 2) {
+            const brand = parts[0].trim();
+            const model = parts.slice(1).join(" - ").trim();
+            const clause = `(s.brand ILIKE $${paramIndex} AND s.model_name ILIKE $${paramIndex + 1})`;
+            params.push(`%${brand}%`);
+            params.push(`%${model}%`);
+            paramIndex += 2;
+            return clause;
+          } else {
+            const clause = `(s.brand ILIKE $${paramIndex} OR s.model_name ILIKE $${paramIndex})`;
+            params.push(`%${sv}%`);
+            paramIndex++;
+            return clause;
+          }
+        });
+        conditions.push(`(${orGroups.join(" OR ")})`);
       }
     }
 
     // Filter by order status (supports both integer ID and string name)
+    // Supports comma-separated values for multi-select
     const statusFilter = query.orderStatus || query.status;
     if (statusFilter) {
-      // Check if it's a numeric ID or a string name
-      const statusAsNumber = parseInt(String(statusFilter), 10);
-      if (
-        !isNaN(statusAsNumber) &&
-        String(statusAsNumber) === String(statusFilter)
-      ) {
-        // Numeric status ID - filter directly on order_status column
-        conditions.push(`o.order_status = $${paramIndex}`);
-        params.push(statusAsNumber);
-        paramIndex++;
-      } else {
-        // String status name - filter on statuses.name (case-insensitive)
-        conditions.push(`LOWER(st.name) = LOWER($${paramIndex})`);
-        params.push(statusFilter);
-        paramIndex++;
+      const statusValues = String(statusFilter)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (statusValues.length === 1) {
+        const statusAsNumber = parseInt(statusValues[0], 10);
+        if (
+          !isNaN(statusAsNumber) &&
+          String(statusAsNumber) === statusValues[0]
+        ) {
+          conditions.push(`o.order_status = $${paramIndex}`);
+          params.push(statusAsNumber);
+          paramIndex++;
+        } else {
+          conditions.push(`LOWER(st.name) = LOWER($${paramIndex})`);
+          params.push(statusValues[0]);
+          paramIndex++;
+        }
+      } else if (statusValues.length > 1) {
+        const allNumeric = statusValues.every(
+          (v) => !isNaN(parseInt(v, 10)) && String(parseInt(v, 10)) === v,
+        );
+        if (allNumeric) {
+          conditions.push(`o.order_status = ANY($${paramIndex}::int[])`);
+          params.push(statusValues.map((v) => parseInt(v, 10)));
+          paramIndex++;
+        } else {
+          const orClauses = statusValues.map((v) => {
+            const clause = `LOWER(st.name) = LOWER($${paramIndex})`;
+            params.push(v);
+            paramIndex++;
+            return clause;
+          });
+          conditions.push(`(${orClauses.join(" OR ")})`);
+        }
       }
     }
 
@@ -526,11 +610,26 @@ export class EnrichedOrdersService {
     }
 
     // Filter by factory name (searches in credentials.full_name via factories join)
+    // Supports comma-separated values for multi-select
     const factoryNameFilter = query.factoryName || query.factory;
     if (factoryNameFilter) {
-      conditions.push(`fac.full_name ILIKE $${paramIndex}`);
-      params.push(`%${factoryNameFilter}%`);
-      paramIndex++;
+      const values = String(factoryNameFilter)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 1) {
+        conditions.push(`fac.full_name ILIKE $${paramIndex}`);
+        params.push(`%${values[0]}%`);
+        paramIndex++;
+      } else if (values.length > 1) {
+        const orClauses = values.map((v) => {
+          const clause = `fac.full_name ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
     }
 
     // Filter by repair flag
@@ -560,75 +659,176 @@ export class EnrichedOrdersService {
     }
 
     // Filter by customer country
+    // Supports comma-separated values for multi-select
     if (query.customerCountry) {
-      conditions.push(`c.country ILIKE $${paramIndex}`);
-      params.push(`%${query.customerCountry}%`);
-      paramIndex++;
+      const values = String(query.customerCountry)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 1) {
+        conditions.push(`c.country ILIKE $${paramIndex}`);
+        params.push(`%${values[0]}%`);
+        paramIndex++;
+      } else if (values.length > 1) {
+        const orClauses = values.map((v) => {
+          const clause = `c.country ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
     }
 
     // Filter by seat size (searches multiple sources like the frontend display)
+    // Supports comma-separated values for multi-select
     const seatSizeFilter = query.seatSizes || query.seatSize;
     if (seatSizeFilter) {
-      // Normalize: accept both dot (17.5) and comma (17,5) notation
-      const commaSize = String(seatSizeFilter).replace(".", ",");
-      const dotSize = String(seatSizeFilter).replace(",", ".");
+      const seatSizeValues = String(seatSizeFilter)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
 
-      // Build a comprehensive search condition that checks:
-      // 1. seat_sizes JSONB column (primary source, if populated)
-      // 2. orders_info table with options_items (authoritative source for seat sizes)
-      // 3. special_notes field (fallback - searches for patterns like "seat size 18")
-      // 4. order_data JSONB for seatSize fields
-      const seatSizeConditions = [
-        // Check seat_sizes JSONB array (both notations)
-        `o.seat_sizes @> $${paramIndex}::jsonb`,
-        `o.seat_sizes @> $${paramIndex + 1}::jsonb`,
-        // Check orders_info table directly (option_id = 1 is "Seat Size")
-        `EXISTS (
-          SELECT 1 FROM orders_info oi
-          JOIN options_items oi2 ON oi.option_item_id = oi2.id
-          WHERE oi.order_id = o.id
-            AND oi.option_id = 1
-            AND (
-              REPLACE(oi2.name, '.', ',') = $${paramIndex + 2}
-              OR REPLACE(oi2.name, ',', '.') = $${paramIndex + 3}
-              OR oi2.name = $${paramIndex + 2}
-              OR oi2.name = $${paramIndex + 3}
-            )
-        )`,
-        // Check special_notes for seat size patterns (case-insensitive)
-        `o.special_notes ~* $${paramIndex + 4}`,
-      ];
+      const buildSeatSizeCondition = (size: string): string => {
+        const commaSize = size.replace(".", ",");
+        const dotSize = size.replace(",", ".");
 
-      conditions.push(`(${seatSizeConditions.join(" OR ")})`);
-      params.push(JSON.stringify([commaSize])); // For JSONB @> with comma
-      params.push(JSON.stringify([dotSize])); // For JSONB @> with dot
-      params.push(commaSize); // For orders_info comparison (comma notation)
-      params.push(dotSize); // For orders_info comparison (dot notation)
-      // Regex pattern to match seat size in special_notes (e.g., "seat size 18", "18 seat", "18"")
-      params.push(
-        `(seat\\s*size[:\\s]*${dotSize.replace(".", "\\.")}|${dotSize.replace(".", "\\.")}\\s*(seat|inch|"))`,
-      );
-      paramIndex += 5;
+        const seatSizeConditions = [
+          `o.seat_sizes @> $${paramIndex}::jsonb`,
+          `o.seat_sizes @> $${paramIndex + 1}::jsonb`,
+          `EXISTS (
+            SELECT 1 FROM orders_info oi
+            JOIN options_items oi2 ON oi.option_item_id = oi2.id
+            WHERE oi.order_id = o.id
+              AND oi.option_id = 1
+              AND (
+                REPLACE(oi2.name, '.', ',') = $${paramIndex + 2}
+                OR REPLACE(oi2.name, ',', '.') = $${paramIndex + 3}
+                OR oi2.name = $${paramIndex + 2}
+                OR oi2.name = $${paramIndex + 3}
+              )
+          )`,
+          `o.special_notes ~* $${paramIndex + 4}`,
+        ];
+
+        params.push(JSON.stringify([commaSize]));
+        params.push(JSON.stringify([dotSize]));
+        params.push(commaSize);
+        params.push(dotSize);
+        params.push(
+          `(seat\\s*size[:\\s]*${dotSize.replace(".", "\\.")}|${dotSize.replace(".", "\\.")}\\s*(seat|inch|"))`,
+        );
+        paramIndex += 5;
+        return `(${seatSizeConditions.join(" OR ")})`;
+      };
+
+      if (seatSizeValues.length === 1) {
+        conditions.push(buildSeatSizeCondition(seatSizeValues[0]));
+      } else if (seatSizeValues.length > 1) {
+        const orGroups = seatSizeValues.map((sv) => buildSeatSizeCondition(sv));
+        conditions.push(`(${orGroups.join(" OR ")})`);
+      }
     }
 
     // Filter by knee roll (option_id = 2) — matches option_items.name via orders_info
+    // Supports comma-separated values for multi-select
     if (query.kneeRoll) {
-      conditions.push(`EXISTS (
-        SELECT 1 FROM orders_info oi
-        JOIN options_items oi2 ON oi.option_item_id = oi2.id
-        WHERE oi.order_id = o.id
-          AND oi.option_id = 2
-          AND oi2.name ILIKE $${paramIndex}
-      )`);
-      params.push(`%${query.kneeRoll}%`);
-      paramIndex++;
+      const krValues = String(query.kneeRoll)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (krValues.length === 1) {
+        conditions.push(`EXISTS (
+          SELECT 1 FROM orders_info oi
+          JOIN options_items oi2 ON oi.option_item_id = oi2.id
+          WHERE oi.order_id = o.id
+            AND oi.option_id = 2
+            AND oi2.name ILIKE $${paramIndex}
+        )`);
+        params.push(`%${krValues[0]}%`);
+        paramIndex++;
+      } else if (krValues.length > 1) {
+        const orClauses = krValues.map((v) => {
+          const clause = `EXISTS (
+            SELECT 1 FROM orders_info oi
+            JOIN options_items oi2 ON oi.option_item_id = oi2.id
+            WHERE oi.order_id = o.id
+              AND oi.option_id = 2
+              AND oi2.name ILIKE $${paramIndex}
+          )`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
     }
 
     // Filter by supplier name (alias)
+    // Supports comma-separated values for multi-select
     if (query.supplierName) {
-      conditions.push(`fac.full_name ILIKE $${paramIndex}`);
-      params.push(`%${query.supplierName}%`);
-      paramIndex++;
+      const values = String(query.supplierName)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 1) {
+        conditions.push(`fac.full_name ILIKE $${paramIndex}`);
+        params.push(`%${values[0]}%`);
+        paramIndex++;
+      } else if (values.length > 1) {
+        const orClauses = values.map((v) => {
+          const clause = `fac.full_name ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
+    }
+
+    // Filter by fitter country
+    // Supports comma-separated values for multi-select
+    if (query.fitterCountry) {
+      const values = String(query.fitterCountry)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 1) {
+        conditions.push(`f.country ILIKE $${paramIndex}`);
+        params.push(`%${values[0]}%`);
+        paramIndex++;
+      } else if (values.length > 1) {
+        const orClauses = values.map((v) => {
+          const clause = `f.country ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
+    }
+
+    // Filter by sale type (demo, sponsored, urgent, repair, normal)
+    // Supports comma-separated values for multi-select
+    if (query.saleType) {
+      const types = String(query.saleType)
+        .split(",")
+        .map((v) => v.trim().toLowerCase())
+        .filter(Boolean);
+      const orClauses: string[] = [];
+      for (const type of types) {
+        if (type === "demo") orClauses.push("o.demo = 1");
+        else if (type === "sponsored") orClauses.push("o.sponsored = 1");
+        else if (type === "urgent") orClauses.push("o.rushed = 1");
+        else if (type === "repair") orClauses.push("o.repair = 1");
+        else if (type === "normal")
+          orClauses.push(
+            "(o.demo = 0 AND o.sponsored = 0 AND o.rushed = 0 AND o.repair = 0)",
+          );
+      }
+      if (orClauses.length > 0) {
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
     }
 
     return {
@@ -712,6 +912,15 @@ export class EnrichedOrdersService {
       query.repair !== ""
     )
       keyParts.push(`repair:${query.repair}`);
+    // Knee roll filter
+    if (query.kneeRoll) keyParts.push(`kneeRoll:${query.kneeRoll}`);
+    // Supplier name filter
+    if (query.supplierName) keyParts.push(`supplierName:${query.supplierName}`);
+    // Fitter country filter
+    if (query.fitterCountry)
+      keyParts.push(`fitterCountry:${query.fitterCountry}`);
+    // Sale type filter
+    if (query.saleType) keyParts.push(`saleType:${query.saleType}`);
 
     return keyParts.join(":");
   }
@@ -991,7 +1200,7 @@ export class EnrichedOrdersService {
       `);
 
       const leatherTypes = await queryRunner.query(`
-        SELECT id, name FROM leather_types
+        SELECT id, name, price1 FROM leather_types
         WHERE deleted = 0
         ORDER BY name
       `);
@@ -1002,7 +1211,7 @@ export class EnrichedOrdersService {
       if (saddleId) {
         options = await queryRunner.query(
           `
-          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group"
+          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1
           FROM options o
           INNER JOIN saddle_options_items soi ON soi.option_id = o.id
           WHERE soi.saddle_id = $1 AND soi.deleted = 0
@@ -1011,25 +1220,29 @@ export class EnrichedOrdersService {
           [saddleId],
         );
 
+        // Return ALL items for options relevant to this saddle (full lists for seat size, etc.)
         optionItems = await queryRunner.query(
           `
-          SELECT DISTINCT oi.id, oi.name, oi.option_id as "optionId"
+          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1
           FROM options_items oi
-          INNER JOIN saddle_options_items soi ON soi.option_item_id = oi.id
-          WHERE soi.saddle_id = $1 AND soi.deleted = 0
+          WHERE oi.option_id IN (
+            SELECT DISTINCT soi.option_id
+            FROM saddle_options_items soi
+            WHERE soi.saddle_id = $1 AND soi.deleted = 0
+          )
           ORDER BY oi.option_id, oi.name
         `,
           [saddleId],
         );
       } else {
         options = await queryRunner.query(`
-          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group"
+          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1
           FROM options o
           ORDER BY o.sequence
         `);
 
         optionItems = await queryRunner.query(`
-          SELECT oi.id, oi.name, oi.option_id as "optionId"
+          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1
           FROM options_items oi
           ORDER BY oi.option_id, oi.name
         `);
@@ -1039,6 +1252,64 @@ export class EnrichedOrdersService {
         SELECT id, name FROM statuses ORDER BY id
       `);
 
+      // PRESETS - filtered by saddle if saddleId provided
+      let presets: unknown[] = [];
+      let presetItems: unknown[] = [];
+
+      if (saddleId) {
+        // Get the saddle's presets column (comma-separated preset IDs)
+        const saddleRow = await queryRunner.query(
+          `SELECT presets FROM saddles WHERE id = $1`,
+          [saddleId],
+        );
+        const presetsStr = saddleRow.length > 0 ? saddleRow[0].presets : "";
+        const presetIds = presetsStr
+          ? presetsStr
+              .split(",")
+              .map((s: string) => parseInt(s.trim(), 10))
+              .filter((n: number) => !isNaN(n) && n > 0)
+          : [];
+
+        if (presetIds.length > 0) {
+          presets = await queryRunner.query(
+            `SELECT id, name, sequence FROM presets
+             WHERE id = ANY($1) AND deleted = 0
+             ORDER BY sequence, name`,
+            [presetIds],
+          );
+
+          presetItems = await queryRunner.query(
+            `SELECT preset_id as "presetId", options_id as "optionId", item_id as "itemId"
+             FROM presets_items
+             WHERE preset_id = ANY($1)`,
+            [presetIds],
+          );
+        } else {
+          // Saddle has no preset mapping — fall back to ALL active presets
+          presets = await queryRunner.query(`
+            SELECT id, name, sequence FROM presets
+            WHERE deleted = 0
+            ORDER BY sequence, name
+          `);
+
+          presetItems = await queryRunner.query(`
+            SELECT preset_id as "presetId", options_id as "optionId", item_id as "itemId"
+            FROM presets_items
+          `);
+        }
+      } else {
+        presets = await queryRunner.query(`
+          SELECT id, name, sequence FROM presets
+          WHERE deleted = 0
+          ORDER BY sequence, name
+        `);
+
+        presetItems = await queryRunner.query(`
+          SELECT preset_id as "presetId", options_id as "optionId", item_id as "itemId"
+          FROM presets_items
+        `);
+      }
+
       return {
         fitters,
         saddles,
@@ -1046,6 +1317,8 @@ export class EnrichedOrdersService {
         options,
         optionItems,
         statuses,
+        presets,
+        presetItems,
       };
     } catch (error) {
       this.logger.error("Failed to fetch edit form options", error);
@@ -1384,6 +1657,16 @@ export class EnrichedOrdersService {
       // Repair source order linking
       addField("repair_source_order_id", dto.repairSourceOrderId);
 
+      // Seat sizes
+      if (dto.seatSizes !== undefined) {
+        addField(
+          "seat_sizes",
+          dto.seatSizes && dto.seatSizes.length > 0
+            ? JSON.stringify(dto.seatSizes)
+            : null,
+        );
+      }
+
       // Always update changed timestamp
       setClauses.push(`changed = EXTRACT(EPOCH FROM NOW())::integer`);
 
@@ -1400,10 +1683,33 @@ export class EnrichedOrdersService {
         ]);
         for (const opt of dto.saddleOptions) {
           await queryRunner.query(
-            `INSERT INTO orders_info (order_id, option_id, option_item_id, custom)
-             VALUES ($1, $2, $3, $4)`,
-            [orderId, opt.optionId, opt.optionItemId, opt.custom || ""],
+            `INSERT INTO orders_info (order_id, option_id, option_item_id, clone_number, color, leathertype, custom)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              orderId,
+              opt.optionId,
+              opt.optionItemId,
+              0,
+              "",
+              "",
+              opt.custom || "",
+            ],
           );
+        }
+
+        // Sync seat_sizes JSONB column from seat size option (option_id = 1)
+        const seatSizeOpt = dto.saddleOptions.find((o) => o.optionId === 1);
+        if (seatSizeOpt) {
+          const seatSizeName = await queryRunner.query(
+            `SELECT name FROM options_items WHERE id = $1`,
+            [seatSizeOpt.optionItemId],
+          );
+          if (seatSizeName.length > 0) {
+            await queryRunner.query(
+              `UPDATE orders SET seat_sizes = $1 WHERE id = $2`,
+              [JSON.stringify([seatSizeName[0].name]), orderId],
+            );
+          }
         }
       }
 
@@ -1494,7 +1800,7 @@ export class EnrichedOrdersService {
           special_notes, serial_number, custom_order, changed,
           repair, demo, sponsored, rushed,
           oms_version, currency, order_data,
-          repair_source_order_id
+          repair_source_order_id, seat_sizes
         ) VALUES (
           $1, $2, $3, $4,
           $5, $6, $7,
@@ -1509,7 +1815,7 @@ export class EnrichedOrdersService {
           $39, $40, $41, $42,
           $43, $44, $45, $46,
           $47, $48, $49,
-          $50
+          $50, $51
         ) RETURNING id`,
         [
           dto.fitterId || 0,
@@ -1562,6 +1868,9 @@ export class EnrichedOrdersService {
           0, // currency (will use fitter's currency)
           "", // order_data
           dto.repairSourceOrderId || null,
+          dto.seatSizes && dto.seatSizes.length > 0
+            ? JSON.stringify(dto.seatSizes)
+            : null,
         ],
       );
 
@@ -1583,6 +1892,21 @@ export class EnrichedOrdersService {
               opt.custom || "",
             ],
           );
+        }
+
+        // Populate seat_sizes JSONB column from seat size option (option_id = 1)
+        const seatSizeOpt = dto.saddleOptions.find((o) => o.optionId === 1);
+        if (seatSizeOpt) {
+          const seatSizeName = await queryRunner.query(
+            `SELECT name FROM options_items WHERE id = $1`,
+            [seatSizeOpt.optionItemId],
+          );
+          if (seatSizeName.length > 0) {
+            await queryRunner.query(
+              `UPDATE orders SET seat_sizes = $1 WHERE id = $2`,
+              [JSON.stringify([seatSizeName[0].name]), newOrderId],
+            );
+          }
         }
       }
 
@@ -1611,6 +1935,109 @@ export class EnrichedOrdersService {
         this.logger.warn(`Rollback failed: ${rbErr.message}`);
       }
       this.logger.error("Failed to create order", error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async createDraftFromOrder(
+    sourceOrderId: number,
+    userId?: number,
+  ): Promise<{ success: boolean; orderId: number }> {
+    this.logger.log(`Creating draft order from source order ${sourceOrderId}`);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      // Copy the source order into a new row with Unordered status (0)
+      const result = await queryRunner.query(
+        `INSERT INTO orders (
+          fitter_id, saddle_id, leather_id, factory_id,
+          fitter_stock, customer_id, fitter_reference,
+          horse_name, name, address, zipcode, city, state, country,
+          phone_no, cell_no, email,
+          order_status, ship_name, ship_address, ship_zipcode,
+          ship_city, ship_state, ship_country,
+          order_time, payment, payment_time, order_step,
+          price_saddle, price_tradein, price_deposit, price_discount,
+          price_fittingeval, price_callfee, price_girth,
+          price_shipping, price_tax, price_additional,
+          special_notes, serial_number, custom_order, changed,
+          repair, demo, sponsored, rushed,
+          oms_version, currency, order_data, seat_sizes
+        )
+        SELECT
+          fitter_id, saddle_id, leather_id, factory_id,
+          fitter_stock, customer_id, '',
+          horse_name, name, address, zipcode, city, state, country,
+          phone_no, cell_no, email,
+          0, ship_name, ship_address, ship_zipcode,
+          ship_city, ship_state, ship_country,
+          EXTRACT(EPOCH FROM NOW())::integer, '', 0, 1,
+          price_saddle, 0, 0, 0,
+          0, 0, 0,
+          0, 0, 0,
+          special_notes, '', custom_order, 0,
+          repair, demo, sponsored, rushed,
+          2, currency, '', seat_sizes
+        FROM orders WHERE id = $1
+        RETURNING id`,
+        [sourceOrderId],
+      );
+
+      if (!result || result.length === 0) {
+        throw new Error(`Source order ${sourceOrderId} not found`);
+      }
+
+      const newOrderId = result[0].id;
+
+      // Copy saddle options from the source order
+      await queryRunner.query(
+        `INSERT INTO orders_info (order_id, option_id, option_item_id, clone_number, color, leathertype, custom)
+         SELECT $1, option_id, option_item_id, clone_number, color, leathertype, custom
+         FROM orders_info WHERE order_id = $2`,
+        [newOrderId, sourceOrderId],
+      );
+
+      // Insert audit log entry
+      try {
+        await queryRunner.query(
+          `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
+           VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, 0, 0)`,
+          [
+            userId || 0,
+            newOrderId,
+            `Draft created from order #${sourceOrderId}.`,
+          ],
+        );
+      } catch (logErr) {
+        this.logger.warn(
+          `Failed to log draft creation for ${newOrderId}: ${logErr.message}`,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      await this.invalidateCache();
+
+      this.logger.log(
+        `Successfully created draft order ${newOrderId} from source ${sourceOrderId}`,
+      );
+      return { success: true, orderId: newOrderId };
+    } catch (error) {
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rbErr) {
+        this.logger.warn(`Rollback failed: ${rbErr.message}`);
+      }
+      this.logger.error(
+        `Failed to create draft from order ${sourceOrderId}`,
+        error,
+      );
       throw error;
     } finally {
       await queryRunner.release();

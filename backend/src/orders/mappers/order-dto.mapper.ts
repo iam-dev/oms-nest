@@ -31,7 +31,7 @@ export class OrderMapper {
     dto.balanceOwing = order.balanceOwing;
     dto.measurements = order.measurements ? { ...order.measurements } : null;
     dto.isUrgent = order.isUrgent;
-    // NOTE: seatSizes removed - legacy system stores seat size in special_notes field
+    dto.seatSizes = order.seatSizes;
     dto.customerName = order.customerName;
     dto.saddleId = order.saddleId;
     dto.isOverdue = order.isOverdue();

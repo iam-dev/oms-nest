@@ -313,6 +313,20 @@ jobs:
           --namespace=${{ env.K8S_NAMESPACE }} \
           --timeout=300s
 
+    - name: Run database migrations
+      run: |
+        echo "Checking for pending database migrations..."
+        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend \
+          -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
+          | awk -F'\t' '$2 == "" { print $1; exit }')
+        if [ -z "$POD" ]; then
+          echo "::error::No ready backend pod found for migrations"
+          exit 1
+        fi
+        echo "Using backend pod: $POD"
+        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- \
+          node dist/src/database/run-migrations.js
+
     - name: Deploy frontend application
       run: |
         kubectl apply -f kubernetes/staging-v2/frontend-deployment.yaml
@@ -326,9 +340,6 @@ jobs:
 
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
-
-    # Note: Migrations are run externally on the PostgreSQL database
-    # The production container doesn't have dev dependencies (env-cmd)
 
     - name: Verify deployment
       run: |

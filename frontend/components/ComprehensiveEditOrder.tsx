@@ -25,6 +25,8 @@ interface EditFormOptions {
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null }>;
   optionItems: Array<{ id: number; name: string; optionId: number }>;
   statuses: Array<{ id: number; name: string }>;
+  presets: Array<{ id: number; name: string; sequence: number }>;
+  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
 }
 
 // Leather option IDs - these use leather_types instead of options_items
@@ -36,6 +38,7 @@ interface ComprehensiveEditOrderProps {
     orderId: number;
   };
   isDuplicate?: boolean;
+  draftOrderId?: number;
   isLoading?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -54,7 +57,7 @@ const currencyMap: Record<number, string> = {
   0: 'USD', 1: 'USD', 2: 'EUR', 3: 'GBP', 4: 'AUD', 5: 'CAD', 6: 'CHF', 7: 'DE',
 };
 
-export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading = false, error, onClose, onBack }: ComprehensiveEditOrderProps) {
+export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderId, isLoading = false, error, onClose, onBack }: ComprehensiveEditOrderProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [loadingData, setLoadingData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -121,8 +124,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading =
   const [orderReference, setOrderReference] = useState('');
   const [orderStatus, setOrderStatus] = useState('');
   const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
-  const [customerNotes, setCustomerNotes] = useState('');
-  const [internalNotes, setInternalNotes] = useState('');
 
   const orderId = order?.orderId || Number(order?.id) || 0;
 
@@ -381,7 +382,10 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading =
         saddleOptions,
       };
 
-      if (isDuplicate) {
+      if (isDuplicate && draftOrderId) {
+        await updateOrder(draftOrderId, payload);
+        toast.success(`Order duplicated successfully! New order #${draftOrderId}`);
+      } else if (isDuplicate) {
         const result = await createOrderFromPayload(payload);
         toast.success(`Order duplicated successfully! New order #${result.orderId}`);
       } else {
@@ -479,7 +483,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading =
             {currentStep === 1 ? 'Back to Orders' : 'Back'}
           </Button>
           <DialogTitle className="text-lg">
-            {isDuplicate ? `Duplicate Order #${orderId}` : (order ? `Edit Order #${orderId}` : 'New Order')} | Step {currentStep}: {steps[currentStep - 1].title}
+            {isDuplicate ? `New Order #${draftOrderId || orderId} (from #${orderId})` : (order ? `Edit Order #${orderId}` : 'New Order')} | Step {currentStep}: {steps[currentStep - 1].title}
           </DialogTitle>
           <div className="w-32" />
         </div>
@@ -644,12 +648,31 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading =
                   {/* Preset */}
                   <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Preset:</Label>
-                    <Select defaultValue="none">
+                    <Select
+                      defaultValue="none"
+                      onValueChange={(val) => {
+                        if (val === 'none' || !editOptions?.presetItems) return;
+                        const presetId = parseInt(val, 10);
+                        const items = editOptions.presetItems.filter(pi => pi.presetId === presetId);
+                        if (items.length > 0) {
+                          const newSelections: Record<number, string> = { ...optionSelections };
+                          for (const item of items) {
+                            newSelections[item.optionId] = String(item.itemId);
+                          }
+                          setOptionSelections(newSelections);
+                        }
+                      }}
+                    >
                       <SelectTrigger className="h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">- No preset selected -</SelectItem>
+                        {editOptions?.presets?.map(p => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1067,24 +1090,14 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, isLoading =
               </div>
 
               <div className="bg-white rounded-lg border p-6">
-                <h3 className="font-semibold mb-4 text-lg">Notes</h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Customer Notes</Label>
-                    <Textarea
-                      value={customerNotes}
-                      onChange={(e) => setCustomerNotes(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label>Internal Notes</Label>
-                    <Textarea
-                      value={internalNotes}
-                      onChange={(e) => setInternalNotes(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
+                <h3 className="font-semibold mb-4 text-lg">Special Notes</h3>
+                <div>
+                  <Textarea
+                    placeholder="Add any special instructions for the order..."
+                    value={specialNotes}
+                    onChange={(e) => setSpecialNotes(e.target.value)}
+                    rows={3}
+                  />
                 </div>
               </div>
             </div>

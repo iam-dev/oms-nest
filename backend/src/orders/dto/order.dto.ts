@@ -175,7 +175,12 @@ export class OrderDto {
   })
   changed: number | null;
 
-  // NOTE: seatSizes removed - legacy system stores seat size in special_notes field
+  @ApiPropertyOptional({
+    description: "Seat sizes for the order",
+    example: ["17", "17.5"],
+    nullable: true,
+  })
+  seatSizes: string[] | null;
 
   @ApiProperty({
     description: "Customer name for search optimization",

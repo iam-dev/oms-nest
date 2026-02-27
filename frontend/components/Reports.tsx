@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { OrdersTable } from '@/components/shared/OrdersTable';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +32,15 @@ import { logger } from '@/utils/logger';
 import { getEnrichedOrders } from '../services/enrichedOrders';
 import { extractDynamicFactories, extractDynamicSeatSizes, extractSeatSizes, normalizeSeatSize } from '../utils/orderProcessing';
 import { exportToXlsx } from '../utils/exportXlsx';
+import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
+
+const saleTypeOptions = [
+  { label: 'Normal orders', value: 'normal' },
+  { label: 'Demo orders', value: 'demo' },
+  { label: 'Sponsored orders', value: 'sponsored' },
+  { label: 'Urgent orders', value: 'urgent' },
+  { label: 'Repair orders', value: 'repair' },
+];
 
 export default function Reports() {
   const [page, setPage] = useState(1);
@@ -78,11 +87,35 @@ export default function Reports() {
     return Array.from(saddles).sort().map(name => ({ label: name, value: name }));
   }, [orders]);
 
+  // Extract unique customer names from orders for filter dropdown
+  const customersList = React.useMemo(() => {
+    const customers = new Set<string>();
+    orders.forEach(order => {
+      const name = getCustomerName(order);
+      if (name && typeof name === 'string' && name.trim() && !name.startsWith('Unknown')) {
+        customers.add(name.trim());
+      }
+    });
+    return Array.from(customers).sort().map(name => ({ label: name, value: name }));
+  }, [orders]);
+
   // Extract unique customer countries from orders
-  const dynamicCountries = React.useMemo(() => {
+  const dynamicCustomerCountries = React.useMemo(() => {
     const countriesSet = new Set<string>();
     orders.forEach(order => {
       const country = order.customer_country || order.customerCountry;
+      if (country && typeof country === 'string' && country.trim()) {
+        countriesSet.add(country.trim());
+      }
+    });
+    return Array.from(countriesSet).sort();
+  }, [orders]);
+
+  // Extract unique fitter countries from orders
+  const dynamicFitterCountries = React.useMemo(() => {
+    const countriesSet = new Set<string>();
+    orders.forEach(order => {
+      const country = order.fitter_country || order.fitterCountry;
       if (country && typeof country === 'string' && country.trim()) {
         countriesSet.add(country.trim());
       }
@@ -121,10 +154,14 @@ export default function Reports() {
           filters.seatSizes = headerFilters[key];
         } else if (key === 'customerCountry') {
           filters.customerCountry = headerFilters[key];
+        } else if (key === 'fitterCountry') {
+          filters.fitterCountry = headerFilters[key];
         } else if (key === 'saddle') {
           filters.saddleName = headerFilters[key];
         } else if (key === 'kneeRoll') {
           filters.kneeRoll = headerFilters[key];
+        } else if (key === 'saleType') {
+          filters.saleType = headerFilters[key];
         }
       }
     });
@@ -165,17 +202,19 @@ export default function Reports() {
     fitter: '',
     supplier: '',
   });
-  const [selectedFitter, setSelectedFitter] = useState('all-fitters');
-  const [selectedStatus, setSelectedStatus] = useState('all-statuses');
-  const [selectedSaleType, setSelectedSaleType] = useState('all-types');
-  const [selectedCustomer, setSelectedCustomer] = useState('all-customers');
-  const [selectedFactory, setSelectedFactory] = useState('all-factories');
-  const [selectedSaddle, setSelectedSaddle] = useState('all-saddles');
-  const [selectedCustomerCountry, setSelectedCustomerCountry] = useState('all-customer-countries');
-  const [selectedFitterCountry, setSelectedFitterCountry] = useState('all-fitter-countries');
-  const [selectedSeatSize, setSelectedSeatSize] = useState('all-sizes');
+  // Multi-select filter arrays
+  const [selectedFitters, setSelectedFitters] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedSaleTypes, setSelectedSaleTypes] = useState<string[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [selectedFactories, setSelectedFactories] = useState<string[]>([]);
+  const [selectedSaddles, setSelectedSaddles] = useState<string[]>([]);
+  const [selectedCustomerCountries, setSelectedCustomerCountries] = useState<string[]>([]);
+  const [selectedFitterCountries, setSelectedFitterCountries] = useState<string[]>([]);
+  const [selectedSeatSizes, setSelectedSeatSizes] = useState<string[]>([]);
+  const [selectedKneeRolls, setSelectedKneeRolls] = useState<string[]>([]);
+  // Urgent stays single-select (boolean toggle)
   const [selectedUrgent, setSelectedUrgent] = useState('all');
-  const [selectedKneeRoll, setSelectedKneeRoll] = useState('all-knee-rolls');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [date, setDate] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
@@ -198,6 +237,15 @@ export default function Reports() {
     });
     return Array.from(values).sort();
   }, [orders]);
+
+  // Sync multi-select state arrays to headerFilters (comma-separated)
+  const updateMultiFilter = useCallback((key: string, values: string[]) => {
+    setHeaderFilters(prev => ({
+      ...prev,
+      [key]: values.join(',')
+    }));
+    setPage(1);
+  }, []);
 
   const columns = getOrderTableColumns(
     headerFilters,
@@ -230,20 +278,33 @@ export default function Reports() {
     supplier: getSupplierName(order) || ''
   }));
 
-  // Filteren op genormaliseerde data
+  // Client-side post-filtering with multi-value support
   const filteredOrders = processedOrders.filter(order => {
     const matchesOrderId = !headerFilters.orderId || (order.orderId || '').toLowerCase().includes(headerFilters.orderId.toLowerCase());
     const matchesReference = !headerFilters.reference || (order.reference || '').toLowerCase().includes(headerFilters.reference.toLowerCase());
+
     const matchesSeatSize = !headerFilters.seatSize || (() => {
+      const filterValues = headerFilters.seatSize.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
       const sizes = order.seat_sizes || order.seatSizes || [];
       if (Array.isArray(sizes) && sizes.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return sizes.some((s: any) => normalizeSeatSize(String(s)) === headerFilters.seatSize);
+        return filterValues.some(fv => sizes.some((s: string | number) => normalizeSeatSize(String(s)) === fv));
       }
-      return order.seatSize === headerFilters.seatSize;
+      return filterValues.some(fv => order.seatSize === fv);
     })();
-    const matchesOrderStatus = !headerFilters.orderStatus || getStatus(order) === headerFilters.orderStatus;
-    const matchesFitter = !headerFilters.fitter || getFitterName(order).toLowerCase().includes(headerFilters.fitter.toLowerCase());
+
+    const matchesOrderStatus = !headerFilters.status || (() => {
+      const filterValues = headerFilters.status.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      return filterValues.some(fv => getStatus(order) === fv);
+    })();
+
+    const matchesFitter = !headerFilters.fitter || (() => {
+      const filterValues = headerFilters.fitter.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      return filterValues.some(fv => getFitterName(order).toLowerCase().includes(fv.toLowerCase()));
+    })();
+
     const matchesUrgent = !headerFilters.urgent || ((orderUrgent => {
       const val = getUrgent(orderUrgent);
       const strVal = String(val);
@@ -252,15 +313,67 @@ export default function Reports() {
       if (strVal === 'false' || strVal === 'No' || strVal === '0') return 'false';
       return strVal;
     })(order) === headerFilters.urgent);
-    const matchesCustomer = !headerFilters.customer || getCustomerName(order).toLowerCase().includes(headerFilters.customer.toLowerCase());
-    const matchesSupplier = !headerFilters.supplier || (order.supplier || '').toLowerCase().includes(headerFilters.supplier.toLowerCase());
+
+    const matchesCustomer = !headerFilters.customer || (() => {
+      const filterValues = headerFilters.customer.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      return filterValues.some(fv => getCustomerName(order).toLowerCase().includes(fv.toLowerCase()));
+    })();
+
+    const matchesSupplier = !headerFilters.supplier || (() => {
+      const filterValues = headerFilters.supplier.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      return filterValues.some(fv => (order.supplier || '').toLowerCase().includes(fv.toLowerCase()));
+    })();
+
     const matchesSaddle = !headerFilters.saddle || (() => {
+      const filterValues = headerFilters.saddle.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
       const brand = order.brand_name || order.brandName || '';
       const model = order.model_name || order.modelName || '';
       const saddleName = [brand, model].filter(Boolean).join(' - ');
-      return saddleName.toLowerCase().includes(headerFilters.saddle.toLowerCase());
+      return filterValues.some(fv => saddleName.toLowerCase().includes(fv.toLowerCase()));
     })();
-    const matchesCustomerCountry = !headerFilters.customerCountry || (order.customerCountry || order.customer_country || order.customer?.country || '').toLowerCase().includes(headerFilters.customerCountry.toLowerCase());
+
+    const matchesCustomerCountry = !headerFilters.customerCountry || (() => {
+      const filterValues = headerFilters.customerCountry.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      const country = (order.customerCountry || order.customer_country || order.customer?.country || '').toLowerCase();
+      return filterValues.some(fv => country.includes(fv.toLowerCase()));
+    })();
+
+    const matchesFitterCountry = !headerFilters.fitterCountry || (() => {
+      const filterValues = headerFilters.fitterCountry.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      const country = (order.fitter_country || order.fitterCountry || '').toLowerCase();
+      return filterValues.some(fv => country.includes(fv.toLowerCase()));
+    })();
+
+    const matchesKneeRoll = !headerFilters.kneeRoll || (() => {
+      const filterValues = headerFilters.kneeRoll.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      const kr = (order.knee_roll || order.kneeRoll || '').toLowerCase();
+      return filterValues.some(fv => kr.includes(fv.toLowerCase()));
+    })();
+
+    const matchesSaleType = !headerFilters.saleType || (() => {
+      const filterValues = headerFilters.saleType.split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      return filterValues.some(fv => {
+        if (fv === 'demo') return order.demo === 1 || order.demo === true;
+        if (fv === 'sponsored') return order.sponsored === 1 || order.sponsored === true;
+        if (fv === 'urgent') return order.urgent === true || order.urgency === 1;
+        if (fv === 'repair') return order.repair === 1 || order.repair === true;
+        if (fv === 'normal') {
+          const isDemo = order.demo === 1 || order.demo === true;
+          const isSponsored = order.sponsored === 1 || order.sponsored === true;
+          const isUrgent = order.urgent === true || order.urgency === 1;
+          const isRepair = order.repair === 1 || order.repair === true;
+          return !isDemo && !isSponsored && !isUrgent && !isRepair;
+        }
+        return false;
+      });
+    })();
 
     let matchesDate = true;
     if (date.from || date.to) {
@@ -280,6 +393,9 @@ export default function Reports() {
       matchesSupplier &&
       matchesSaddle &&
       matchesCustomerCountry &&
+      matchesFitterCountry &&
+      matchesKneeRoll &&
+      matchesSaleType &&
       matchesDate
     );
   });
@@ -413,202 +529,109 @@ export default function Reports() {
               </Popover>
             </div>
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Fitters</label>
-              <Select value={selectedFitter} onValueChange={(value) => {
-                setSelectedFitter(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  fitter: value === 'all-fitters' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-fitters">All Fitters</SelectItem>
-                  {fittersList.map(fitter => (
-                    <SelectItem key={fitter.value} value={fitter.label}>{fitter.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Fitters"
+              options={fittersList}
+              selected={selectedFitters}
+              onChangeSelected={(values) => {
+                setSelectedFitters(values);
+                updateMultiFilter('fitter', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Order statuses</label>
-              <Select value={selectedStatus} onValueChange={(value) => {
-                setSelectedStatus(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  status: value === 'all-statuses' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-statuses">All Statuses</SelectItem>
-                  {orderStatuses.map(status => (
-                    <SelectItem key={status} value={status}>{status}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Order statuses"
+              options={orderStatuses.map(s => ({ label: s, value: s }))}
+              selected={selectedStatuses}
+              onChangeSelected={(values) => {
+                setSelectedStatuses(values);
+                updateMultiFilter('status', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Saletypes</label>
-              <Select value={selectedSaleType} onValueChange={setSelectedSaleType}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-types">All Types</SelectItem>
-                  <SelectItem value="retail">Retail</SelectItem>
-                  <SelectItem value="wholesale">Wholesale</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Saletypes"
+              options={saleTypeOptions}
+              selected={selectedSaleTypes}
+              onChangeSelected={(values) => {
+                setSelectedSaleTypes(values);
+                updateMultiFilter('saleType', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Customers</label>
-              <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-customers">All Customers</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Customers"
+              options={customersList}
+              selected={selectedCustomers}
+              onChangeSelected={(values) => {
+                setSelectedCustomers(values);
+                updateMultiFilter('customer', values);
+              }}
+            />
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <label className="w-32">Factories</label>
-              <Select value={selectedFactory} onValueChange={(value) => {
-                setSelectedFactory(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  supplier: value === 'all-factories' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-factories">All Factories</SelectItem>
-                  {suppliers.map(supplier => (
-                    <SelectItem key={supplier.value} value={supplier.label}>{supplier.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Factories"
+              options={suppliers}
+              selected={selectedFactories}
+              onChangeSelected={(values) => {
+                setSelectedFactories(values);
+                updateMultiFilter('supplier', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Saddles</label>
-              <Select value={selectedSaddle} onValueChange={(value) => {
-                setSelectedSaddle(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  saddle: value === 'all-saddles' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-saddles">All Saddles</SelectItem>
-                  {modelsList.map(model => (
-                    <SelectItem key={model.value} value={model.label}>{model.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Saddles"
+              options={modelsList}
+              selected={selectedSaddles}
+              onChangeSelected={(values) => {
+                setSelectedSaddles(values);
+                updateMultiFilter('saddle', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Customer Countries</label>
-              <Select value={selectedCustomerCountry} onValueChange={(value) => {
-                setSelectedCustomerCountry(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  customerCountry: value === 'all-customer-countries' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-customer-countries">All Countries</SelectItem>
-                  {dynamicCountries.map(country => (
-                    <SelectItem key={country} value={country}>{country}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Customer Countries"
+              options={dynamicCustomerCountries.map(c => ({ label: c, value: c }))}
+              selected={selectedCustomerCountries}
+              onChangeSelected={(values) => {
+                setSelectedCustomerCountries(values);
+                updateMultiFilter('customerCountry', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Fitter Countries</label>
-              <Select value={selectedFitterCountry} onValueChange={setSelectedFitterCountry}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-fitter-countries">All Countries</SelectItem>
-                  {dynamicCountries.map(country => (
-                    <SelectItem key={country} value={country}>{country}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Fitter Countries"
+              options={dynamicFitterCountries.map(c => ({ label: c, value: c }))}
+              selected={selectedFitterCountries}
+              onChangeSelected={(values) => {
+                setSelectedFitterCountries(values);
+                updateMultiFilter('fitterCountry', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Seatsizes</label>
-              <Select value={selectedSeatSize} onValueChange={(value) => {
-                setSelectedSeatSize(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  seatSize: value === 'all-sizes' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-sizes">All Sizes</SelectItem>
-                  {dynamicSeatSizes.map(size => (
-                    <SelectItem key={size} value={size}>{size}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Seatsizes"
+              options={Array.from(new Set([...['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'], ...dynamicSeatSizes]))
+                .sort((a, b) => parseFloat(a) - parseFloat(b))
+                .map(size => ({ label: size, value: size }))}
+              selected={selectedSeatSizes}
+              onChangeSelected={(values) => {
+                setSelectedSeatSizes(values);
+                updateMultiFilter('seatSize', values);
+              }}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="w-32">Knee Roll</label>
-              <Select value={selectedKneeRoll} onValueChange={(value) => {
-                setSelectedKneeRoll(value);
-                setHeaderFilters(prev => ({
-                  ...prev,
-                  kneeRoll: value === 'all-knee-rolls' ? '' : value
-                }));
-                setPage(1);
-              }}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Please select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-knee-rolls">All Knee Rolls</SelectItem>
-                  {kneeRollOptions.map(kr => (
-                    <SelectItem key={kr} value={kr}>{kr}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelectFilter
+              label="Knee Roll"
+              options={kneeRollOptions.map(kr => ({ label: kr, value: kr }))}
+              selected={selectedKneeRolls}
+              onChangeSelected={(values) => {
+                setSelectedKneeRolls(values);
+                updateMultiFilter('kneeRoll', values);
+              }}
+            />
 
             <div className="flex items-center gap-2">
               <label className="w-32">Urgent</label>
@@ -652,34 +675,29 @@ export default function Reports() {
               </Button>
               
               {/* Reset All Filters Button */}
-              {(Object.keys(headerFilters).some(key => headerFilters[key]) || 
-                selectedFitter !== 'all-fitters' || 
-                selectedStatus !== 'all-statuses' || 
-                selectedFactory !== 'all-factories' || 
-                selectedSeatSize !== 'all-sizes' || 
+              {(Object.keys(headerFilters).some(key => headerFilters[key]) ||
                 selectedUrgent !== 'all' ||
                 date.from || date.to) && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="border-red-600 text-red-600 hover:bg-red-50"
                   onClick={() => {
                     logger.log('Resetting all Reports filters');
-                    // Reset header filters
                     setHeaderFilters({});
-                    // Reset dropdown states
-                    setSelectedFitter('all-fitters');
-                    setSelectedStatus('all-statuses');
-                    setSelectedSaleType('all-types');
-                    setSelectedCustomer('all-customers');
-                    setSelectedFactory('all-factories');
-                    setSelectedSaddle('all-saddles');
-                    setSelectedCustomerCountry('all-customer-countries');
-                    setSelectedFitterCountry('all-fitter-countries');
-                    setSelectedSeatSize('all-sizes');
+                    setSelectedFitters([]);
+                    setSelectedStatuses([]);
+                    setSelectedSaleTypes([]);
+                    setSelectedCustomers([]);
+                    setSelectedFactories([]);
+                    setSelectedSaddles([]);
+                    setSelectedCustomerCountries([]);
+                    setSelectedFitterCountries([]);
+                    setSelectedSeatSizes([]);
+                    setSelectedKneeRolls([]);
                     setSelectedUrgent('all');
-                    // Reset dates
                     setDate({ from: undefined, to: undefined });
-                    // Reset pagination
+                    setOrderedDate({ from: undefined, to: undefined });
+                    setPaymentDate({ from: undefined, to: undefined });
                     setPage(1);
                     setSearchTerm('');
                   }}

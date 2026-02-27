@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
 import { CreateRepairDialog } from './CreateRepairDialog';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
-import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
+import { fetchOrderDetail, createDraftOrder, type OrderDetailData } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
 
@@ -86,6 +86,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   const [sendTo, setSendTo] = useState('fitter-factory');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
+  const [draftOrderId, setDraftOrderId] = useState<number | null>(null);
   const [isRepairOpen, setIsRepairOpen] = useState(false);
 
   useEffect(() => {
@@ -275,8 +276,14 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
     }
   };
 
-  const handleDuplicateOrder = () => {
-    setIsDuplicateOpen(true);
+  const handleDuplicateOrder = async () => {
+    try {
+      const result = await createDraftOrder(orderId);
+      setDraftOrderId(result.orderId);
+      setIsDuplicateOpen(true);
+    } catch (err) {
+      logger.error('Failed to create draft order:', err);
+    }
   };
 
   // Loading state
@@ -666,15 +673,22 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
         />
       </Dialog>
 
-      <Dialog open={isDuplicateOpen} onOpenChange={setIsDuplicateOpen}>
-        <ComprehensiveEditOrder
-          order={{ id: String(orderId), orderId: Number(displayOrderId) }}
-          isDuplicate={true}
-          onClose={() => {
-            setIsDuplicateOpen(false);
-            onOrderChanged?.();
-          }}
-        />
+      <Dialog open={isDuplicateOpen} onOpenChange={(open) => {
+        setIsDuplicateOpen(open);
+        if (!open) setDraftOrderId(null);
+      }}>
+        {draftOrderId && (
+          <ComprehensiveEditOrder
+            order={{ id: String(orderId), orderId: Number(displayOrderId) }}
+            isDuplicate={true}
+            draftOrderId={draftOrderId}
+            onClose={() => {
+              setIsDuplicateOpen(false);
+              setDraftOrderId(null);
+              onOrderChanged?.();
+            }}
+          />
+        )}
       </Dialog>
 
       <Dialog open={isRepairOpen} onOpenChange={setIsRepairOpen}>

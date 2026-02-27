@@ -37,7 +37,7 @@ const COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV !== "development",
   sameSite: "lax" as const,
   path: "/",
-  maxAge: 15 * 60 * 1000, // 15 minutes
+  maxAge: 10 * 60 * 60 * 1000, // 10 hours
 };
 
 const REFRESH_COOKIE_OPTIONS = {

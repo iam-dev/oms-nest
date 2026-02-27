@@ -252,6 +252,7 @@ export interface UpdateOrderPayload {
     optionItemId: number;
     custom?: string;
   }>;
+  seatSizes?: string[];
   repairSourceOrderId?: number;
 }
 
@@ -273,6 +274,27 @@ export async function createOrderFromPayload(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || `Failed to create order: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function createDraftOrder(
+  sourceOrderId: number,
+): Promise<{ success: boolean; orderId: number }> {
+  logger.log('Creating draft order from source:', sourceOrderId);
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/draft-from/${sourceOrderId}`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to create draft order: ${response.status}`);
   }
 
   return response.json();

@@ -312,7 +312,7 @@ describe('ComprehensiveEditOrder component', () => {
     it('shows "Duplicate Order" in the header when isDuplicate is true', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
 
-      expect(screen.getByTestId('dialog-title')).toHaveTextContent('Duplicate Order #100');
+      expect(screen.getByTestId('dialog-title')).toHaveTextContent('New Order #100 (from #100)');
     });
 
     it('includes the current step number and step name in the title', async () => {
@@ -1020,8 +1020,8 @@ describe('ComprehensiveEditOrder component', () => {
       expect(screen.getByText('Flags')).toBeInTheDocument();
     });
 
-    it('renders the "Notes" section heading', () => {
-      expect(screen.getByText('Notes')).toBeInTheDocument();
+    it('renders the "Special Notes" section heading', () => {
+      expect(screen.getByText('Special Notes')).toBeInTheDocument();
     });
 
     it('renders status options from the loaded edit options', () => {

@@ -12,9 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Search, User, Package, Settings, Plus } from 'lucide-react';
 import { fetchOrderEditData, searchCustomers, searchFitters, saveOrderEditData } from '@/services/orderEditView';
 import { createOrderFromPayload, UpdateOrderPayload } from '@/services/enrichedOrders';
+import { API_URL } from '@/services/api-config';
 import { 
   ComprehensiveOrderData, 
   OrderEditFormState,
@@ -26,6 +27,17 @@ import { logger } from '@/utils/logger';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DuplicateData = Record<string, any>;
+
+interface EditFormOptions {
+  fitters: Array<{ id: number; username: string; fullName: string }>;
+  saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
+  leatherTypes: Array<{ id: number; name: string; price1: number }>;
+  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number }>;
+  optionItems: Array<{ id: number; name: string; optionId: number; price1: number }>;
+  statuses: Array<{ id: number; name: string }>;
+  presets: Array<{ id: number; name: string; sequence: number }>;
+  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
+}
 
 interface EditOrderProps {
   order?: {
@@ -99,6 +111,53 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [fitterSearchTerm, setFitterSearchTerm] = useState('');
   const [fitterSearchResults, setFitterSearchResults] = useState<Fitter[]>([]);
   const [fitterSearchLoading, setFitterSearchLoading] = useState(false);
+
+  // Edit options from backend (fitters, saddles, presets, etc.)
+  const [editOptions, setEditOptions] = useState<EditFormOptions | null>(null);
+  const [selectedSaddleId, setSelectedSaddleId] = useState<string>('');
+  const [selectedFitterId, setSelectedFitterId] = useState<string>('');
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('none');
+  const [selectedLeatherId, setSelectedLeatherId] = useState<string>('');
+
+  // Saddle option selections state
+  const [optionSelections, setOptionSelections] = useState<Record<number, string>>({});
+  const [optionCustom, setOptionCustom] = useState<Record<number, string>>({});
+  const [selectedExtras, setSelectedExtras] = useState<Record<number, boolean>>({});
+
+  // New customer form state
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '', city: '', state: '', zipcode: '', country: '' });
+
+  // New fitter form state
+  const [showNewFitterForm, setShowNewFitterForm] = useState(false);
+  const [newFitterSaving, setNewFitterSaving] = useState(false);
+  const [newFitter, setNewFitter] = useState({ firstName: '', lastName: '', email: '' });
+
+  // Fetch edit options from backend
+  const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
+    const url = forSaddleId
+      ? `${API_URL}/api/v1/enriched_orders/edit-options?saddleId=${forSaddleId}`
+      : `${API_URL}/api/v1/enriched_orders/edit-options`;
+    try {
+      const r = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'include',
+      });
+      if (!r.ok) throw new Error(`Failed to fetch options: ${r.status}`);
+      return r.json() as Promise<EditFormOptions>;
+    } catch (err) {
+      logger.warn('Failed to fetch edit options:', err);
+      return null;
+    }
+  }, []);
+
+  // Fetch edit options on mount
+  useEffect(() => {
+    fetchEditOptions().then(opts => {
+      if (opts) setEditOptions(opts);
+    });
+  }, [fetchEditOptions]);
 
   const loadOrderData = useCallback(async () => {
     if (!order?.id) return;
@@ -247,6 +306,10 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         requestedDeliveryDate: (data.order as any).requestedDeliveryDate
       });
+
+      // Set selected fitter ID for dropdown from loaded data
+      const loadedFitter = (data.order as Record<string, unknown>)?.fitter as Record<string, unknown> | undefined;
+      if (loadedFitter?.id) setSelectedFitterId(String(loadedFitter.id));
 
       // Override form data with duplicate data when duplicating an order
       if (isDuplicate && duplicateData) {
@@ -413,6 +476,26 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             shipCountry: formData.shippingAddress?.country,
             // Fitter
             fitterId: formData.fitter?.id ? Number(formData.fitter.id) : undefined,
+            // Saddle
+            saddleId: selectedSaddleId ? parseInt(selectedSaddleId, 10) : undefined,
+            leatherId: selectedLeatherId ? parseInt(selectedLeatherId, 10) : undefined,
+            // Saddle options
+            saddleOptions: [
+              // Regular option selections
+              ...Object.entries(optionSelections).map(([optId, itemId]) => ({
+                optionId: Number(optId),
+                optionItemId: Number(itemId),
+                custom: optionCustom[Number(optId)] || '',
+              })),
+              // Extras (type=2 options, stored with optionItemId=0)
+              ...Object.entries(selectedExtras)
+                .filter(([, checked]) => checked)
+                .map(([optId]) => ({
+                  optionId: Number(optId),
+                  optionItemId: 0,
+                  custom: '',
+                })),
+            ],
             // Pricing
             priceSaddle: formData.pricing.subtotal,
             priceDiscount: formData.pricing.discount,
@@ -422,7 +505,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
           await createOrderFromPayload(createPayload);
           logger.log(isDuplicate ? 'Duplicate order created successfully' : 'New order created successfully');
         } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const orderToSave = {
             ...comprehensiveData?.order,
             ...formData,
@@ -471,9 +553,121 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     setFitterSearchResults([]);
   };
 
+  const handleCreateCustomer = async () => {
+    if (!newCustomer.name.trim()) return;
+    setNewCustomerSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/customers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: newCustomer.name,
+          email: newCustomer.email || undefined,
+          phoneNo: newCustomer.phone || undefined,
+          cellNo: newCustomer.phone || undefined,
+          address: newCustomer.address || undefined,
+          city: newCustomer.city || undefined,
+          state: newCustomer.state || undefined,
+          zipcode: newCustomer.zipcode || undefined,
+          country: newCustomer.country || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed to create customer: ${res.status}`);
+      const created = await res.json();
+      const customer: Customer = {
+        id: created.id,
+        name: created.name || newCustomer.name,
+        email: created.email || newCustomer.email,
+        phone: created.phoneNo || newCustomer.phone,
+      };
+      selectCustomer(customer);
+      setShowNewCustomerForm(false);
+      setNewCustomer({ name: '', email: '', phone: '', address: '', city: '', state: '', zipcode: '', country: '' });
+    } catch (err) {
+      logger.error('Error creating customer:', err);
+    } finally {
+      setNewCustomerSaving(false);
+    }
+  };
+
+  const handleCreateFitter = async () => {
+    if (!newFitter.firstName.trim() || !newFitter.lastName.trim()) return;
+    setNewFitterSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/fitters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          firstName: newFitter.firstName,
+          lastName: newFitter.lastName,
+          emailaddress: newFitter.email || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed to create fitter: ${res.status}`);
+      const created = await res.json();
+      const fitter: Fitter = {
+        id: created.id,
+        name: `${newFitter.firstName} ${newFitter.lastName}`,
+        email: newFitter.email,
+      };
+      selectFitter(fitter);
+      // Also update the fitter dropdown on Step 1
+      setSelectedFitterId(String(created.id));
+      setFormData(prev => ({
+        ...prev,
+        fitter: { id: created.id, name: `${newFitter.firstName} ${newFitter.lastName}` }
+      }));
+      // Refresh edit options to include new fitter in dropdown
+      fetchEditOptions(selectedSaddleId || undefined).then(opts => {
+        if (opts) setEditOptions(opts);
+      });
+      setShowNewFitterForm(false);
+      setNewFitter({ firstName: '', lastName: '', email: '' });
+    } catch (err) {
+      logger.error('Error creating fitter:', err);
+    } finally {
+      setNewFitterSaving(false);
+    }
+  };
+
   const updateFormData = (updates: Partial<OrderEditFormState>) => {
     setFormData(prev => ({ ...prev, ...updates }));
   };
+
+  // Leather option IDs - these use leather_types instead of options_items
+  const LEATHER_OPTION_IDS = [5, 6, 10, 11, 12, 13, 14, 21, 22];
+
+  // Get available items for a given option
+  const getItemsForOption = (optionId: number): Array<{ id: number; name: string; price1: number }> => {
+    if (!editOptions) return [];
+    if (LEATHER_OPTION_IDS.includes(optionId)) {
+      return editOptions.leatherTypes;
+    }
+    return editOptions.optionItems.filter(i => i.optionId === optionId);
+  };
+
+  // Sorted options by sequence
+  const sortedOptions = editOptions?.options?.sort((a, b) => a.sequence - b.sequence) || [];
+  // Separate regular options (type 0/1) from extras (type 2)
+  const regularOptions = sortedOptions.filter(o => o.type !== 2);
+  const extraOptions = sortedOptions.filter(o => o.type === 2);
+
+  // Auto-fill option selections from preset
+  const applyPreset = useCallback((presetId: string) => {
+    setSelectedPresetId(presetId);
+    if (presetId === 'none' || !editOptions?.presetItems) return;
+    const pid = Number(presetId);
+    const items = editOptions.presetItems.filter(pi => pi.presetId === pid);
+    const selections: Record<number, string> = {};
+    for (const item of items) {
+      selections[item.optionId] = String(item.itemId);
+    }
+    setOptionSelections(selections);
+    setOptionCustom({});
+    setSelectedExtras({});
+  }, [editOptions?.presetItems]);
 
   return (
     <DialogContent className="max-w-[1400px] h-[90vh] p-0 flex flex-col">
@@ -575,13 +769,25 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   <Label className="text-sm font-medium pt-2">
                     Fitter: <span className="text-red-500">*</span>
                   </Label>
-                  <Select defaultValue="Engie Kwakkel">
+                  <Select value={selectedFitterId} onValueChange={(val) => {
+                    setSelectedFitterId(val);
+                    const fitter = editOptions?.fitters?.find(f => String(f.id) === val);
+                    if (fitter) {
+                      setFormData(prev => ({
+                        ...prev,
+                        fitter: { id: fitter.id, name: fitter.fullName || fitter.username }
+                      }));
+                    }
+                  }}>
                     <SelectTrigger className="h-9">
-                      <SelectValue />
+                      <SelectValue placeholder="- Choose fitter -" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Robyn Drake">Robyn Drake</SelectItem>
-                      <SelectItem value="Engie Kwakkel">Engie Kwakkel</SelectItem>
+                      {editOptions?.fitters?.map(f => (
+                        <SelectItem key={f.id} value={String(f.id)}>
+                          {f.fullName || f.username}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -624,25 +830,148 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   <Label className="text-sm font-medium pt-2">
                     Brand & Model: <span className="text-red-500">*</span>
                   </Label>
-                  <Select defaultValue="Icon Flight">
+                  <Select value={selectedSaddleId} onValueChange={async (val) => {
+                    setSelectedSaddleId(val);
+                    setSelectedPresetId('none');
+                    setSelectedLeatherId('');
+                    setOptionSelections({});
+                    setOptionCustom({});
+                    setSelectedExtras({});
+                    // Refetch options filtered by the selected saddle
+                    const newOptions = await fetchEditOptions(val);
+                    if (newOptions) setEditOptions(newOptions);
+                  }}>
                     <SelectTrigger className="h-9">
-                      <SelectValue />
+                      <SelectValue placeholder="- Choose model -" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Custom Advantage R">Custom Advantage R</SelectItem>
-                      <SelectItem value="Icon Flight">Icon Flight(OM wool laced in)</SelectItem>
+                      {editOptions?.saddles?.map(s => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.displayName}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
                   <Label className="text-sm font-medium pt-2">Preset:</Label>
-                  <Select defaultValue="none">
+                  <Select value={selectedPresetId} onValueChange={applyPreset}>
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">- No preset selected -</SelectItem>
+                      {editOptions?.presets?.map(p => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+
+                  {/* Leathertype - shown when preset is selected */}
+                  {selectedPresetId !== 'none' && (
+                    <>
+                      <Label className="text-sm font-medium pt-2">
+                        Leathertype: <span className="text-red-500">*</span>
+                      </Label>
+                      <Select value={selectedLeatherId} onValueChange={setSelectedLeatherId}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="- Choose -" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {editOptions?.leatherTypes?.map(lt => (
+                            <SelectItem key={lt.id} value={String(lt.id)}>
+                              {lt.name}{lt.price1 > 0 ? ` (+$${lt.price1.toFixed(2)})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
+                  )}
+
+                  {/* Dynamic saddle options - shown when preset is selected */}
+                  {selectedPresetId !== 'none' && regularOptions.map(opt => {
+                    const items = getItemsForOption(opt.optionId);
+                    if (items.length === 0) return null;
+
+                    return (
+                      <React.Fragment key={opt.optionId}>
+                        <Label className="text-sm font-medium pt-2">
+                          {opt.optionName}: <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="space-y-1">
+                          <Select
+                            value={optionSelections[opt.optionId] || ''}
+                            onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [opt.optionId]: val }))}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="- Choose -" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {items.map(item => (
+                                <SelectItem key={item.id} value={String(item.id)}>
+                                  {item.name}{item.price1 > 0 ? ` (+$${item.price1.toFixed(2)})` : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {optionCustom[opt.optionId] !== undefined && (
+                            <div className="ml-2 flex items-center gap-2">
+                              <Label className="text-xs font-medium text-gray-600 whitespace-nowrap">Specify color: <span className="text-red-500">*</span></Label>
+                              <Input
+                                className="h-8 text-sm flex-1"
+                                value={optionCustom[opt.optionId] || ''}
+                                onChange={(e) => setOptionCustom(prev => ({ ...prev, [opt.optionId]: e.target.value }))}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+
+                  {/* Extras (type=2 options) - shown as checkboxes when preset is selected */}
+                  {selectedPresetId !== 'none' && extraOptions.length > 0 && (
+                    <>
+                      <div className="col-span-2 border-t mt-2 pt-3">
+                        <Label className="text-sm font-semibold">Extras:</Label>
+                      </div>
+                      {extraOptions.map(extra => (
+                        <React.Fragment key={extra.optionId}>
+                          <div className="col-span-2">
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`extra-${extra.optionId}`}
+                                checked={!!selectedExtras[extra.optionId]}
+                                onCheckedChange={(checked) => {
+                                  setSelectedExtras(prev => ({
+                                    ...prev,
+                                    [extra.optionId]: !!checked,
+                                  }));
+                                }}
+                              />
+                              <label htmlFor={`extra-${extra.optionId}`} className="text-sm">
+                                {extra.optionName}
+                                {extra.price1 > 0 ? ` (+$${extra.price1.toFixed(2)})` : ''}
+                              </label>
+                            </div>
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                {/* Special Notes - below the grid */}
+                <div className="mt-4">
+                  <Label className="text-sm font-medium">Special notes:</Label>
+                  <Textarea
+                    className="mt-1"
+                    placeholder=""
+                    value={formData.notes || ''}
+                    onChange={(e) => updateFormData({ notes: e.target.value })}
+                    rows={4}
+                  />
                 </div>
               </div>
 
@@ -812,8 +1141,60 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         ))}
                       </div>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setShowNewCustomerForm(!showNewCustomerForm)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {showNewCustomerForm ? 'Cancel' : 'Add New Customer'}
+                    </Button>
                   </div>
-                  
+
+                  {showNewCustomerForm && (
+                    <div className="border rounded-md p-4 space-y-3 bg-blue-50">
+                      <h4 className="font-medium text-sm">New Customer</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                          <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
+                          <Input className="h-8 text-sm" value={newCustomer.name} onChange={(e) => setNewCustomer(prev => ({ ...prev, name: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Email</Label>
+                          <Input className="h-8 text-sm" type="email" value={newCustomer.email} onChange={(e) => setNewCustomer(prev => ({ ...prev, email: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Phone</Label>
+                          <Input className="h-8 text-sm" value={newCustomer.phone} onChange={(e) => setNewCustomer(prev => ({ ...prev, phone: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs">Address</Label>
+                          <Input className="h-8 text-sm" value={newCustomer.address} onChange={(e) => setNewCustomer(prev => ({ ...prev, address: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">City</Label>
+                          <Input className="h-8 text-sm" value={newCustomer.city} onChange={(e) => setNewCustomer(prev => ({ ...prev, city: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">State</Label>
+                          <Input className="h-8 text-sm" value={newCustomer.state} onChange={(e) => setNewCustomer(prev => ({ ...prev, state: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Zipcode</Label>
+                          <Input className="h-8 text-sm" value={newCustomer.zipcode} onChange={(e) => setNewCustomer(prev => ({ ...prev, zipcode: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Country</Label>
+                          <Input className="h-8 text-sm" value={newCustomer.country} onChange={(e) => setNewCustomer(prev => ({ ...prev, country: e.target.value }))} />
+                        </div>
+                      </div>
+                      <Button size="sm" onClick={handleCreateCustomer} disabled={!newCustomer.name.trim() || newCustomerSaving}>
+                        {newCustomerSaving ? 'Saving...' : 'Create Customer'}
+                      </Button>
+                    </div>
+                  )}
+
                   {formData.customer && (
                     <div className="bg-gray-50 p-4 rounded-md">
                       <h4 className="font-medium">{formData.customer.name}</h4>
@@ -862,8 +1243,40 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         ))}
                       </div>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setShowNewFitterForm(!showNewFitterForm)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {showNewFitterForm ? 'Cancel' : 'Add New Fitter'}
+                    </Button>
                   </div>
-                  
+
+                  {showNewFitterForm && (
+                    <div className="border rounded-md p-4 space-y-3 bg-blue-50">
+                      <h4 className="font-medium text-sm">New Fitter</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
+                          <Input className="h-8 text-sm" value={newFitter.firstName} onChange={(e) => setNewFitter(prev => ({ ...prev, firstName: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
+                          <Input className="h-8 text-sm" value={newFitter.lastName} onChange={(e) => setNewFitter(prev => ({ ...prev, lastName: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs">Email</Label>
+                          <Input className="h-8 text-sm" type="email" value={newFitter.email} onChange={(e) => setNewFitter(prev => ({ ...prev, email: e.target.value }))} />
+                        </div>
+                      </div>
+                      <Button size="sm" onClick={handleCreateFitter} disabled={(!newFitter.firstName.trim() || !newFitter.lastName.trim()) || newFitterSaving}>
+                        {newFitterSaving ? 'Saving...' : 'Create Fitter'}
+                      </Button>
+                    </div>
+                  )}
+
                   {formData.fitter && (
                     <div className="bg-gray-50 p-4 rounded-md">
                       <h4 className="font-medium">{formData.fitter.name}</h4>
@@ -1002,27 +1415,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border p-6">
-                <h3 className="font-semibold mb-4 text-lg">Notes</h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Customer Notes</Label>
-                    <Textarea
-                      value={formData.notes || ''}
-                      onChange={(e) => updateFormData({ notes: e.target.value })}
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label>Internal Notes</Label>
-                    <Textarea
-                      value={formData.internalNotes || ''}
-                      onChange={(e) => updateFormData({ internalNotes: e.target.value })}
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>

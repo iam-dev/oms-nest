@@ -151,11 +151,12 @@ export default function Dashboard() {
       
       logger.log('Dashboard: Fetching orders with filters:', filters);
       logger.log('Dashboard: Current page:', currentPage);
-      
+
       getEnrichedOrders({
         page: currentPage,
         partial: false,
         filters,
+        bustCache: dateFilterTrigger > 0,
       })
       .then(data => {
         logger.log('Dashboard: Received API response:', {
@@ -749,6 +750,11 @@ export default function Dashboard() {
             onClose={() => {
               setIsOrderModalOpen(false);
               setSelectedOrder(null);
+            }}
+            onOrderChanged={() => {
+              setIsOrderModalOpen(false);
+              setSelectedOrder(null);
+              setDateFilterTrigger(t => t + 1);
             }}
           />
         )}

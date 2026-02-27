@@ -105,9 +105,9 @@ export function getOrderTableColumns(
           value={headerFilters.seatSize || ''}
           onFilter={value => setHeaderFilters('seatSize', value)}
           type="enum"
-          data={dynamicSeatSizes.length > 0 
-            ? dynamicSeatSizes.map(size => ({ label: size, value: size }))
-            : ['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'].map(size => ({ label: size, value: size }))
+          data={Array.from(new Set([...['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'], ...dynamicSeatSizes]))
+            .sort((a, b) => parseFloat(a) - parseFloat(b))
+            .map(size => ({ label: size, value: size }))
           }
           entityType="order"
         />
