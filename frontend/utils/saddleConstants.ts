@@ -1,14 +1,14 @@
 // Saddle type constants
 
 export const SADDLE_TYPES: Record<number, string> = {
-  0: 'Jumping',
-  1: 'Dressage',
+  0: 'Dressage',
+  1: 'Jumping',
   2: 'All-Purpose',
 };
 
 export const SADDLE_TYPE_OPTIONS = [
-  { value: 0, label: 'Jumping' },
-  { value: 1, label: 'Dressage' },
+  { value: 0, label: 'Dressage' },
+  { value: 1, label: 'Jumping' },
   { value: 2, label: 'All-Purpose' },
 ];
 

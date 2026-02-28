@@ -19,7 +19,7 @@ export interface Model {
   factoryAud?: number;
   factoryDe?: number;
   factoryNl?: number;
-  // Saddle type: 0=Jumping, 1=Dressage, 2=All-Purpose
+  // Saddle type: 0=Dressage, 1=Jumping, 2=All-Purpose
   type?: number;
   createdAt?: string;
   updatedAt?: string;
