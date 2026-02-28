@@ -30,7 +30,8 @@ import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { seatSizes, statuses, orderStatuses } from '../utils/orderConstants';
 import { logger } from '@/utils/logger';
 import { getEnrichedOrders } from '../services/enrichedOrders';
-import { extractDynamicFactories, extractDynamicSeatSizes, extractSeatSizes, normalizeSeatSize } from '../utils/orderProcessing';
+import { extractDynamicFactories, extractDynamicSeatSizes, extractSeatSizes } from '../utils/orderProcessing';
+import { fetchEntities } from '../services/api';
 import { exportToXlsx } from '../utils/exportXlsx';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
 
@@ -56,10 +57,30 @@ export default function Reports() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Extract unique factory names from orders for filter dropdown
+  // Fetch all factories from API for complete filter dropdown
+  const [allFactoryNames, setAllFactoryNames] = useState<Array<{label: string, value: string}>>([]);
+  useEffect(() => {
+    fetchEntities({ entity: 'factories', page: 1, extraParams: { limit: 500, pagination: false } })
+      .then(data => {
+        const members = data['hydra:member'] || [];
+        const names = members
+          .map((f: Record<string, unknown>) => (f.name || f.displayName || '') as string)
+          .filter((n: string) => n.trim())
+          .sort();
+        setAllFactoryNames(names.map((n: string) => ({ label: n, value: n })));
+      })
+      .catch(() => { /* fallback to order-derived list */ });
+  }, []);
+
+  // Merge API factories with order-derived factories for complete dropdown
   const suppliers = React.useMemo(() => {
-    return extractDynamicFactories(orders);
-  }, [orders]);
+    const orderFactories = extractDynamicFactories(orders);
+    if (allFactoryNames.length === 0) return orderFactories;
+    const merged = new Map<string, {label: string, value: string}>();
+    for (const f of allFactoryNames) merged.set(f.value, f);
+    for (const f of orderFactories) merged.set(f.value, f);
+    return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [orders, allFactoryNames]);
   
   // Extract unique fitter names from orders for filter dropdown
   const fittersList = React.useMemo(() => {
@@ -181,7 +202,11 @@ export default function Reports() {
           memberArr = data;
         }
         setOrders(memberArr);
-        setTotalPages(data['hydra:view']?.['hydra:last'] ? parseInt(new URL(data['hydra:view']['hydra:last'], 'http://dummy').searchParams.get('page') || '1') : 1);
+        setTotalPages(
+          data['hydra:view']?.['hydra:last']
+            ? parseInt(new URL(data['hydra:view']['hydra:last'], 'http://dummy').searchParams.get('page') || '1')
+            : data.pages || Math.ceil((data['hydra:totalItems'] || memberArr.length) / 50) || 1
+        );
         setLoading(false);
       })
       .catch(() => {
@@ -283,15 +308,10 @@ export default function Reports() {
     const matchesOrderId = !headerFilters.orderId || (order.orderId || '').toLowerCase().includes(headerFilters.orderId.toLowerCase());
     const matchesReference = !headerFilters.reference || (order.reference || '').toLowerCase().includes(headerFilters.reference.toLowerCase());
 
-    const matchesSeatSize = !headerFilters.seatSize || (() => {
-      const filterValues = headerFilters.seatSize.split(',').map(v => v.trim()).filter(Boolean);
-      if (filterValues.length === 0) return true;
-      const sizes = order.seat_sizes || order.seatSizes || [];
-      if (Array.isArray(sizes) && sizes.length > 0) {
-        return filterValues.some(fv => sizes.some((s: string | number) => normalizeSeatSize(String(s)) === fv));
-      }
-      return filterValues.some(fv => order.seatSize === fv);
-    })();
+    // Seat size filtering is handled server-side via the seatSizes query parameter.
+    // Client-side re-filtering was removing valid results (orders matched by server via
+    // orders_info or special_notes that have seat_sizes: null in the JSONB column).
+    const matchesSeatSize = true;
 
     const matchesOrderStatus = !headerFilters.status || (() => {
       const filterValues = headerFilters.status.split(',').map(v => v.trim()).filter(Boolean);

@@ -36,8 +36,7 @@ The backend supports multiple environment files via [`env-cmd`](https://www.npmj
 | File | Purpose |
 |------|---------|
 | `backend/.env` | Default environment (used by `start:dev`) |
-| `backend/.e
-arelocal` | Local overrides (your machine-specific settings) |
+| `backend/.env.local` | Local overrides (your machine-specific settings) |
 | `backend/.env.staging` | Staging/production-data database connection |
 
 ```bash

@@ -7,7 +7,8 @@ import { EntityTable } from '@/components/shared/EntityTable';
 import { useTableFilters, usePagination, useEntityData } from '@/hooks';
 import { getFitterTableColumns } from '@/utils/fitterTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { updateFitter, deleteFitter, createFitter, type Fitter } from '@/services/fitters';
+import { updateFitter, deleteFitter, createFitter, blockFitter, type Fitter } from '@/services/fitters';
+import { toast } from 'sonner';
 import { FitterDetailModal } from '@/components/shared/FitterDetailModal';
 import { FitterEditModal } from '@/components/shared/FitterEditModal';
 import { logger } from '@/utils/logger';
@@ -128,6 +129,21 @@ export default function Fitters() {
     }
   };
 
+  // Handle block/unblock fitter
+  const handleBlockFitter = async (fitter: Fitter) => {
+    const action = fitter.enabled ? 'block' : 'unblock';
+    if (window.confirm(`Are you sure you want to ${action} fitter "${fitter.name || fitter.username}"?`)) {
+      try {
+        const result = await blockFitter(fitter.id);
+        toast.success(`Fitter "${fitter.name || fitter.username}" ${result.enabled ? 'unblocked' : 'blocked'} successfully`);
+        refetch();
+      } catch (error) {
+        logger.error('Error toggling fitter block:', error);
+        toast.error(`Failed to ${action} fitter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
   // Handle close modals
   const handleCloseModals = () => {
     setShowDetailModal(false);
@@ -176,6 +192,8 @@ export default function Fitters() {
         onView={handleViewFitter}
         onEdit={handleEditFitter}
         onDelete={handleDeleteFitter}
+        onBlock={handleBlockFitter}
+        actionButtons={{ view: true, edit: true, delete: true, block: true }}
       />
 
       {/* Fitter Detail Modal */}

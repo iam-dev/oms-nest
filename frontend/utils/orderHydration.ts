@@ -1,17 +1,19 @@
-export function renderEntity(entity: any, type: 'customer' | 'factory' | 'fitter') {
-  if (!entity) return `Unknown ${type.charAt(0).toUpperCase() + type.slice(1)}`;
-  if (typeof entity === 'object') {
-    if (typeof entity.name === 'string' && entity.name.trim()) return entity.name;
-    return `Unknown ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+export function renderEntity(entity: unknown, type: 'customer' | 'factory' | 'fitter'): string {
+  const fallback = type === 'customer' ? '' : `Unknown ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+  if (!entity) return fallback;
+  if (typeof entity === 'object' && entity !== null) {
+    const obj = entity as Record<string, unknown>;
+    if (typeof obj.name === 'string' && obj.name.trim()) return obj.name;
+    return fallback;
   }
   if (typeof entity === 'string') {
-    if (entity.startsWith(`/customers/`)) return 'Unknown Customer';
-    if (entity.startsWith(`/factories/`)) return 'Unknown Factory';
-    if (entity.startsWith(`/fitters/`)) return 'Unknown Fitter';
+    if (entity.startsWith('/customers/')) return '';
+    if (entity.startsWith('/factories/')) return 'Unknown Factory';
+    if (entity.startsWith('/fitters/')) return 'Unknown Fitter';
     return entity;
   }
   if (typeof entity === 'number') {
-    return `Unknown ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+    return fallback;
   }
   return String(entity);
 }

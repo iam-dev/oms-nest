@@ -99,6 +99,31 @@ export class FitterController {
     return this.fitterService.findAll(page, limit, city, country);
   }
 
+  @Patch(":id/toggle-block")
+  @AuditLog({ entity: "Fitter" })
+  @ApiOperation({
+    summary: "Toggle fitter block status",
+    description: "Toggles the blocked/enabled state of a fitter user account",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Fitter ID (integer)",
+    example: 12345,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Block status toggled",
+    schema: {
+      type: "object",
+      properties: { enabled: { type: "boolean" } },
+    },
+  })
+  async toggleBlock(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<{ enabled: boolean }> {
+    return this.fitterService.toggleBlock(id);
+  }
+
   @Get("active")
   @ApiOperation({
     summary: "Get active fitters",

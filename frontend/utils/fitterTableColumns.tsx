@@ -8,6 +8,11 @@ export type SetFitterHeaderFilters = (key: string, value: string) => void;
 export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHeaderFilters: SetFitterHeaderFilters) {
   return [
     {
+      key: 'id',
+      title: 'ID',
+      render: (v: unknown) => String(v ?? ''),
+    },
+    {
       key: 'name',
       title: (
         <TableHeaderFilter

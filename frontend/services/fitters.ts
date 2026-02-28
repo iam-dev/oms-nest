@@ -132,6 +132,25 @@ export async function updateFitter(id: number, fitterData: Partial<Fitter>): Pro
   return result;
 }
 
+export async function blockFitter(id: number): Promise<{ enabled: boolean }> {
+  const response = await fetch(`${API_URL}/api/v1/fitters/${id}/toggle-block`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Fitter block toggle failed:', response.status, errorText);
+    throw new Error(`Failed to toggle fitter block: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 export async function deleteFitter(id: number): Promise<void> {
   logger.log('Deleting fitter with ID:', id);
 

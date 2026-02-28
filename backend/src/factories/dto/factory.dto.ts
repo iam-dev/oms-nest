@@ -128,4 +128,22 @@ export class FactoryDto {
     example: "aikenusa",
   })
   username?: string;
+
+  @ApiPropertyOptional({
+    description: "Company/user name from credentials table",
+    example: "Aiken USA",
+  })
+  name?: string;
+
+  @ApiPropertyOptional({
+    description: "Whether the factory user account is enabled (not blocked)",
+    example: true,
+  })
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Last login timestamp of the factory user",
+    example: "2024-01-15T10:30:00Z",
+  })
+  lastLogin?: Date | string;
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { DataTable, Column } from '@/components/shared/DataTable';
 import { Button } from '@/components/ui/button';
-import { Eye, Edit, Trash, CheckCircle2 } from 'lucide-react';
+import { Eye, Edit, Trash, CheckCircle2, Lock } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 export interface EntityTableProps<T> {
@@ -25,6 +25,7 @@ export interface EntityTableProps<T> {
   onEdit?: (entity: T) => void;
   onDelete?: (entity: T) => void;
   onApprove?: (entity: T) => void;
+  onBlock?: (entity: T) => void;
   // Customization
   entityType?: 'order' | 'customer' | 'product' | 'fitter' | 'user' | 'warehouse' | 'supplier' | 'factory' | 'access-filter-group' | 'country-manager' | 'saddle' | 'brand' | 'option' | 'preset' | 'leathertype' | 'extra';
   showActions?: boolean;
@@ -34,6 +35,7 @@ export interface EntityTableProps<T> {
     edit?: boolean;
     delete?: boolean;
     approve?: boolean;
+    block?: boolean;
   };
 }
 
@@ -53,10 +55,11 @@ export function EntityTable<T extends { id?: string | number }>({
   onEdit,
   onDelete,
   onApprove,
+  onBlock,
   entityType = 'order',
   showActions = true,
   searchPlaceholder,
-  actionButtons = { view: true, edit: true, delete: true, approve: false },
+  actionButtons = { view: true, edit: true, delete: true, approve: false, block: false },
 }: EntityTableProps<T>) {
   // Add actions column if showActions is true
   const columnsWithActions: Column<T>[] = showActions
@@ -119,6 +122,22 @@ export function EntityTable<T extends { id?: string | number }>({
                   </Tooltip>
                 )}
                 
+                {actionButtons.block && onBlock && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onBlock(row)}
+                        className="h-8 w-8 text-orange-500 hover:text-orange-700"
+                      >
+                        <Lock className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Block/Unblock {entityType}</TooltipContent>
+                  </Tooltip>
+                )}
+
                 {actionButtons.delete && onDelete && (
                   <Tooltip>
                     <TooltipTrigger asChild>

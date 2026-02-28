@@ -7,7 +7,7 @@ import { EntityTable } from '@/components/shared/EntityTable';
 import { useTableFilters, usePagination, useEntityData } from '@/hooks';
 import { getSupplierTableColumns } from '@/utils/supplierTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { createSupplier, updateSupplier, deleteSupplier, type Supplier } from '@/services/suppliers';
+import { createSupplier, updateSupplier, deleteSupplier, blockFactory, type Supplier } from '@/services/suppliers';
 import { SupplierDetailModal } from '@/components/shared/SupplierDetailModal';
 import { SupplierEditModal } from '@/components/shared/SupplierEditModal';
 import { toast } from 'sonner';
@@ -216,6 +216,21 @@ export default function Factories() {
     }
   };
 
+  // Handle block/unblock factory
+  const handleBlockFactory = async (supplier: Supplier) => {
+    const action = supplier.enabled ? 'block' : 'unblock';
+    if (window.confirm(`Are you sure you want to ${action} factory "${supplier.name}"?`)) {
+      try {
+        const result = await blockFactory(supplier.id);
+        toast.success(`Factory "${supplier.name}" ${result.enabled ? 'unblocked' : 'blocked'} successfully`);
+        refetch(true);
+      } catch (error) {
+        logger.error('Error toggling factory block:', error);
+        toast.error(`Failed to ${action} factory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
   // Handle close modals
   const handleCloseModals = () => {
     setShowDetailModal(false);
@@ -257,6 +272,8 @@ export default function Factories() {
         onView={handleViewSupplier}
         onEdit={handleEditSupplier}
         onDelete={handleDeleteSupplier}
+        onBlock={handleBlockFactory}
+        actionButtons={{ view: true, edit: true, delete: true, block: true }}
         searchPlaceholder="Search by name, username, city, or country..."
       />
 

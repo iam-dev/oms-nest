@@ -859,6 +859,19 @@ export class EnrichedOrdersService {
     const column = columnMap[orderBy] || "o.order_time";
     const dir = direction === "ASC" ? "ASC" : "DESC";
 
+    // When filtering by multiple seat sizes, sort by seat size first so results
+    // for all selected sizes appear on the first pages instead of being buried
+    const seatSizeFilter = query.seatSizes || query.seatSize;
+    if (seatSizeFilter) {
+      const seatSizeValues = String(seatSizeFilter)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (seatSizeValues.length > 1) {
+        return `ORDER BY o.seat_sizes ASC NULLS LAST, o.id DESC`;
+      }
+    }
+
     return `ORDER BY ${column} ${dir}`;
   }
 
@@ -1086,8 +1099,8 @@ export class EnrichedOrdersService {
             oi.custom,
             o.sequence,
             CASE
+              WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
               WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
-              WHEN oi.custom != '' THEN oi.custom
               ELSE oitm.name
             END as "displayValue"
           FROM orders_info oi

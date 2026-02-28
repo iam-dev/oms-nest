@@ -3,7 +3,7 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { NotFoundException } from "@nestjs/common";
 import { FactoryService } from "../../../src/factories/factory.service";
 import { FactoryEntity } from "../../../src/factories/infrastructure/persistence/relational/entities/factory.entity";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 
 describe("FactoryService", () => {
   let service: FactoryService;
@@ -51,11 +51,23 @@ describe("FactoryService", () => {
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     leftJoinAndSelect: jest.fn().mockReturnThis(),
+    leftJoinAndMapOne: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
     getCount: jest.fn().mockResolvedValue(1),
     getMany: jest.fn().mockResolvedValue([mockFactoryEntity]),
+    getRawAndEntities: jest.fn().mockResolvedValue({
+      entities: [mockFactoryEntity],
+      raw: [
+        {
+          u_name: "Test Factory",
+          u_username: "testfactory",
+          u_enabled: true,
+          u_last_login: null,
+        },
+      ],
+    }),
   };
 
   beforeEach(async () => {
@@ -71,6 +83,12 @@ describe("FactoryService", () => {
             find: jest.fn(),
             count: jest.fn(),
             createQueryBuilder: jest.fn(() => mockQueryBuilder),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            query: jest.fn().mockResolvedValue([]),
           },
         },
       ],
