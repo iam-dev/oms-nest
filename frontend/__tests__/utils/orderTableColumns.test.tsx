@@ -36,7 +36,7 @@ describe('Order Table Columns', () => {
     it('generates all expected columns', () => {
       const columns = getOrderTableColumns(mockHeaderFilters, mockSetHeaderFilters, mockSuppliers, mockSeatSizes);
 
-      expect(columns).toHaveLength(10);
+      expect(columns).toHaveLength(11);
 
       const columnKeys = columns.map(col => col.key);
       expect(columnKeys).toContain('id');
@@ -448,7 +448,7 @@ describe('Order Table Columns', () => {
   describe('Empty Filter Handling', () => {
     it('handles empty filters gracefully', () => {
       const columns = getOrderTableColumns({}, mockSetHeaderFilters, [], []);
-      expect(columns).toHaveLength(10);
+      expect(columns).toHaveLength(11);
 
       const statusCol = columns.find(col => col.key === 'status');
       expect(statusCol?.title).toBeDefined();

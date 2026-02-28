@@ -155,7 +155,7 @@ export default function Reports() {
         if (key === 'orderId') {
           filters.orderId = headerFilters[key];
         } else if (key === 'reference') {
-          filters.reference = headerFilters[key];
+          filters.fitterReference = headerFilters[key];
         } else if (key === 'customer') {
           filters.customerName = headerFilters[key];
         } else if (key === 'status') {
@@ -181,6 +181,8 @@ export default function Reports() {
           filters.saddleName = headerFilters[key];
         } else if (key === 'kneeRoll') {
           filters.kneeRoll = headerFilters[key];
+        } else if (key === 'leatherType') {
+          filters.leatherType = headerFilters[key];
         } else if (key === 'saleType') {
           filters.saleType = headerFilters[key];
         }
@@ -238,6 +240,7 @@ export default function Reports() {
   const [selectedFitterCountries, setSelectedFitterCountries] = useState<string[]>([]);
   const [selectedSeatSizes, setSelectedSeatSizes] = useState<string[]>([]);
   const [selectedKneeRolls, setSelectedKneeRolls] = useState<string[]>([]);
+  const [selectedLeatherTypes, setSelectedLeatherTypes] = useState<string[]>([]);
   // Urgent stays single-select (boolean toggle)
   const [selectedUrgent, setSelectedUrgent] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -258,6 +261,18 @@ export default function Reports() {
       const kr = order.knee_roll || order.kneeRoll;
       if (kr && typeof kr === 'string' && kr.trim()) {
         values.add(kr.trim());
+      }
+    });
+    return Array.from(values).sort();
+  }, [orders]);
+
+  // Extract unique leather type values from orders
+  const leatherTypeOptions = React.useMemo(() => {
+    const values = new Set<string>();
+    orders.forEach(order => {
+      const lt = order.leather_name || order.leatherName || order.leatherType;
+      if (lt && typeof lt === 'string' && lt.trim()) {
+        values.add(lt.trim());
       }
     });
     return Array.from(values).sort();
@@ -306,7 +321,9 @@ export default function Reports() {
   // Client-side post-filtering with multi-value support
   const filteredOrders = processedOrders.filter(order => {
     const matchesOrderId = !headerFilters.orderId || (order.orderId || '').toLowerCase().includes(headerFilters.orderId.toLowerCase());
-    const matchesReference = !headerFilters.reference || (order.reference || '').toLowerCase().includes(headerFilters.reference.toLowerCase());
+    const matchesReference = !headerFilters.reference || (
+      (order.fitterReference || order.fitter_reference || '') as string
+    ).toLowerCase().includes(headerFilters.reference.toLowerCase());
 
     // Seat size filtering is handled server-side via the seatSizes query parameter.
     // Client-side re-filtering was removing valid results (orders matched by server via
@@ -376,6 +393,13 @@ export default function Reports() {
       return filterValues.some(fv => kr.includes(fv.toLowerCase()));
     })();
 
+    const matchesLeatherType = !headerFilters.leatherType || (() => {
+      const filterValues = headerFilters.leatherType.split(',').map(v => v.trim()).filter(Boolean);
+      if (filterValues.length === 0) return true;
+      const lt = (order.leather_name || order.leatherName || order.leatherType || '').toLowerCase();
+      return filterValues.some(fv => lt.toLowerCase().includes(fv.toLowerCase()));
+    })();
+
     const matchesSaleType = !headerFilters.saleType || (() => {
       const filterValues = headerFilters.saleType.split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
       if (filterValues.length === 0) return true;
@@ -415,6 +439,7 @@ export default function Reports() {
       matchesCustomerCountry &&
       matchesFitterCountry &&
       matchesKneeRoll &&
+      matchesLeatherType &&
       matchesSaleType &&
       matchesDate
     );
@@ -653,6 +678,16 @@ export default function Reports() {
               }}
             />
 
+            <MultiSelectFilter
+              label="Leather Type"
+              options={leatherTypeOptions.map(lt => ({ label: lt, value: lt }))}
+              selected={selectedLeatherTypes}
+              onChangeSelected={(values) => {
+                setSelectedLeatherTypes(values);
+                updateMultiFilter('leatherType', values);
+              }}
+            />
+
             <div className="flex items-center gap-2">
               <label className="w-32">Urgent</label>
               <Select value={selectedUrgent} onValueChange={(value) => {
@@ -714,6 +749,7 @@ export default function Reports() {
                     setSelectedFitterCountries([]);
                     setSelectedSeatSizes([]);
                     setSelectedKneeRolls([]);
+                    setSelectedLeatherTypes([]);
                     setSelectedUrgent('all');
                     setDate({ from: undefined, to: undefined });
                     setOrderedDate({ from: undefined, to: undefined });

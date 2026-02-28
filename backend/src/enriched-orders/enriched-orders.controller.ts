@@ -364,6 +364,14 @@ export class EnrichedOrdersController {
         : undefined,
       // Sale type filter
       saleType: query.saleType ? String(query.saleType).trim() : undefined,
+      // Leather type filter
+      leatherType: query.leatherType
+        ? String(query.leatherType).trim()
+        : undefined,
+      // Fitter reference filter
+      fitterReference: query.fitterReference
+        ? String(query.fitterReference).trim()
+        : undefined,
     };
   }
 

@@ -224,6 +224,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
       }
 
       alert(`Order status changed to "${orderStatus}"`);
+      onOrderChanged?.();
     } catch (err) {
       logger.error('Failed to change order status:', err);
       alert('Failed to change order status. The backend endpoint may not be implemented yet.');
@@ -348,9 +349,26 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
             </div>
             <span className="text-base">Order {displayOrderId}</span>
             {detailData?.repairSourceOrderId && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-2">
-                Repair of #{detailData.repairSourceOrderId}
-              </span>
+              <button
+                onClick={() => {
+                  onClose?.();
+                  window.location.href = `/orders?viewOrder=${detailData.repairSourceOrderId}`;
+                }}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-2 hover:bg-amber-200 cursor-pointer transition-colors"
+              >
+                Repair of #{detailData.repairSourceOrderId} &rarr;
+              </button>
+            )}
+            {detailData?.repairOrderIds && detailData.repairOrderIds.length > 0 && (
+              <button
+                onClick={() => {
+                  onClose?.();
+                  window.location.href = `/repairs?viewOrder=${detailData.repairOrderIds![0]}`;
+                }}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2 hover:bg-blue-200 cursor-pointer transition-colors"
+              >
+                Repair: #{detailData.repairOrderIds[0]} &rarr;
+              </button>
             )}
             <span className="text-xs font-normal ml-4">
               Order date: {orderDate}

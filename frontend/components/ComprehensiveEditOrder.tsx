@@ -489,6 +489,27 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         </div>
       </DialogHeader>
 
+      {/* Persistent Status Bar - visible across all steps */}
+      {order && (
+        <div className="bg-white border-b px-6 py-2 flex items-center gap-4 flex-shrink-0">
+          <span className="text-sm font-medium text-gray-700">Status:</span>
+          <Select value={orderStatus} onValueChange={setOrderStatus}>
+            <SelectTrigger className="w-[200px] h-8 text-xs">
+              <SelectValue placeholder="Select status..." />
+            </SelectTrigger>
+            <SelectContent>
+              {editOptions?.statuses?.map(s => (
+                <SelectItem key={s.id} value={s.name}>
+                  {s.name}
+                </SelectItem>
+              )) || (
+                <SelectItem value={orderStatus}>{orderStatus}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Step Indicator */}
       <div className="bg-white border-b px-6 py-4">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
@@ -1034,23 +1055,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       value={orderReference}
                       onChange={(e) => setOrderReference(e.target.value)}
                     />
-                  </div>
-                  <div>
-                    <Label>Status</Label>
-                    <Select value={orderStatus} onValueChange={setOrderStatus}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {editOptions?.statuses?.map(s => (
-                          <SelectItem key={s.id} value={s.name}>
-                            {s.name}
-                          </SelectItem>
-                        )) || (
-                          <SelectItem value={orderStatus}>{orderStatus}</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
                   </div>
                   <div>
                     <Label>Requested Delivery Date</Label>

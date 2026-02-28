@@ -43,9 +43,13 @@ export default function Options() {
         orderBy: 'sequence',
         order: 'asc'
       });
-      
-      setOptions(data['hydra:member'] || []);
-      setTotalItems(data['hydra:totalItems'] || 0);
+
+      // Filter out type=2 (extras) — they have their own management page
+      const members = (data['hydra:member'] || []).filter(
+        (opt) => opt.type !== 2
+      );
+      setOptions(members);
+      setTotalItems(members.length);
       
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {

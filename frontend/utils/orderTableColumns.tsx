@@ -291,6 +291,24 @@ export function getOrderTableColumns(
       },
     },
     {
+      key: 'fitterReference',
+      title: (
+        <TableHeaderFilter
+          title="REFERENCE"
+          value={headerFilters.reference || ''}
+          onFilter={value => setHeaderFilters('reference', value)}
+          type="text"
+          entityType="order"
+        />
+      ),
+      render: (_: unknown, row: unknown) => {
+        if (!row || typeof row !== 'object') return '-';
+        const r = row as Record<string, unknown>;
+        const val = r.fitterReference || r.fitter_reference;
+        return typeof val === 'string' && val ? val : '-';
+      },
+    },
+    {
       key: 'factory',
       title: (
         <TableHeaderFilter

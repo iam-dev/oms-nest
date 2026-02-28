@@ -423,6 +423,7 @@ export interface OrderDetailData {
 
   // Repair linking
   repairSourceOrderId: number | null;
+  repairOrderIds: number[] | null;
 
   // Saddle specifications from orders_info
   saddleSpecs: Array<{

@@ -105,6 +105,10 @@ export class FactoryService {
       dto.username = raw?.u_username || undefined;
       dto.enabled = raw?.u_enabled ?? undefined;
       dto.lastLogin = raw?.u_last_login || undefined;
+      // Use the actual user/credentials name instead of "Factory in {city}"
+      if (raw?.u_name) {
+        dto.displayName = raw.u_name;
+      }
       return dto;
     });
 

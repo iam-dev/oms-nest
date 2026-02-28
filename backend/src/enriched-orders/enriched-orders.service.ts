@@ -61,6 +61,10 @@ export interface EnrichedOrdersQueryDto {
   fitterCountry?: string;
   // Filter by sale type (comma-separated: demo,sponsored,urgent,repair,normal)
   saleType?: string;
+  // Filter by leather type name
+  leatherType?: string;
+  // Filter by fitter reference
+  fitterReference?: string;
 }
 
 export interface PaginationMetadata {
@@ -253,7 +257,9 @@ export class EnrichedOrdersService {
         (SELECT oi2.name FROM orders_info oi
          JOIN options_items oi2 ON oi.option_item_id = oi2.id
          WHERE oi.order_id = o.id AND oi.option_id = 2
-         LIMIT 1) as knee_roll
+         LIMIT 1) as knee_roll,
+        lt.name as leather_name,
+        o.fitter_reference
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN fitters f ON o.fitter_id = f.id
@@ -262,6 +268,7 @@ export class EnrichedOrdersService {
       LEFT JOIN factories fa ON o.factory_id = fa.id
       LEFT JOIN credentials fac ON fa.user_id = fac.user_id
       LEFT JOIN statuses st ON o.order_status = st.id
+      LEFT JOIN leather_types lt ON o.leather_id = lt.id
     `;
 
     const countQuery = `
@@ -273,7 +280,8 @@ export class EnrichedOrdersService {
       LEFT JOIN saddles s ON o.saddle_id = s.id
       LEFT JOIN factories fa ON o.factory_id = fa.id
       LEFT JOIN credentials fac ON fa.user_id = fac.user_id
-      LEFT JOIN statuses st ON o.order_status = st.id`;
+      LEFT JOIN statuses st ON o.order_status = st.id
+      LEFT JOIN leather_types lt ON o.leather_id = lt.id`;
 
     // Add WHERE conditions
     const conditions = this.buildWhereConditions(query);
@@ -831,6 +839,35 @@ export class EnrichedOrdersService {
       }
     }
 
+    // Filter by leather type name
+    // Supports comma-separated values for multi-select
+    if (query.leatherType) {
+      const ltValues = String(query.leatherType)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (ltValues.length === 1) {
+        conditions.push(`lt.name ILIKE $${paramIndex}`);
+        params.push(`%${ltValues[0]}%`);
+        paramIndex++;
+      } else if (ltValues.length > 1) {
+        const orClauses = ltValues.map((v) => {
+          const clause = `lt.name ILIKE $${paramIndex}`;
+          params.push(`%${v}%`);
+          paramIndex++;
+          return clause;
+        });
+        conditions.push(`(${orClauses.join(" OR ")})`);
+      }
+    }
+
+    // Filter by fitter reference
+    if (query.fitterReference) {
+      conditions.push(`o.fitter_reference ILIKE $${paramIndex}`);
+      params.push(`%${query.fitterReference}%`);
+      paramIndex++;
+    }
+
     return {
       where: conditions.length > 0 ? conditions.join(" AND ") : "",
       params,
@@ -934,6 +971,9 @@ export class EnrichedOrdersService {
       keyParts.push(`fitterCountry:${query.fitterCountry}`);
     // Sale type filter
     if (query.saleType) keyParts.push(`saleType:${query.saleType}`);
+    if (query.leatherType) keyParts.push(`leatherType:${query.leatherType}`);
+    if (query.fitterReference)
+      keyParts.push(`fitterReference:${query.fitterReference}`);
 
     return keyParts.join(":");
   }
@@ -1046,7 +1086,10 @@ export class EnrichedOrdersService {
 
           -- Leather
           lt.id as "leatherId",
-          lt.name as "leatherName"
+          lt.name as "leatherName",
+
+          -- Repair cross-references: IDs of orders that are repairs of this order
+          (SELECT array_agg(r.id) FROM orders r WHERE r.repair_source_order_id = o.id AND r.deleted_at IS NULL) as "repairOrderIds"
 
         FROM orders o
         LEFT JOIN customers c ON o.customer_id = c.id
