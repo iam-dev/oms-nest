@@ -39,7 +39,7 @@ export default function Fitters() {
   } = useEntityData<Fitter>({
     entity: 'fitters',
     page: pagination.currentPage,
-    orderBy: 'name',
+    orderBy: 'id',
     extraParams: {
       searchTerm,
       ...filters

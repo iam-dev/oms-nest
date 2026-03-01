@@ -58,7 +58,7 @@ export class FitterRepository implements IFitterRepository {
       });
     }
 
-    queryBuilder.orderBy("fitter.city", "ASC");
+    queryBuilder.orderBy("fitter.id", "DESC");
 
     const total = await queryBuilder.getCount();
     const entities = await queryBuilder

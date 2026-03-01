@@ -258,7 +258,7 @@ export class CustomerRepository implements ICustomerRepository {
       });
     }
 
-    queryBuilder.orderBy("customer.name", "ASC");
+    queryBuilder.orderBy("customer.id", "DESC");
 
     const total = await queryBuilder.getCount();
     const entities = await queryBuilder

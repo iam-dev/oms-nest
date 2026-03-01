@@ -6,6 +6,9 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import ms from "ms";
 import bcrypt from "bcryptjs";
 import { IFitterRepository } from "./domain/fitter.repository";
 import { Fitter } from "./domain/fitter";
@@ -13,6 +16,8 @@ import { UserEntity } from "../users/infrastructure/persistence/relational/entit
 import { CreateFitterDto } from "./dto/create-fitter.dto";
 import { UpdateFitterDto } from "./dto/update-fitter.dto";
 import { FitterDto } from "./dto/fitter.dto";
+import { MailService } from "../mail/mail.service";
+import { AllConfigType } from "../config/config.type";
 
 /**
  * Fitter Application Service
@@ -30,6 +35,9 @@ export class FitterService {
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
     private readonly dataSource: DataSource,
+    private readonly mailService: MailService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService<AllConfigType>,
   ) {}
 
   async create(createFitterDto: CreateFitterDto): Promise<FitterDto> {
@@ -119,6 +127,52 @@ export class FitterService {
     );
 
     const savedFitter = await this.fitterRepository.save(fitter);
+
+    // Send welcome email with password reset link
+    const fitterEmail = createFitterDto.emailaddress;
+    if (fitterEmail && userId) {
+      try {
+        const tokenExpiresIn = this.configService.getOrThrow(
+          "auth.forgotExpires",
+          { infer: true },
+        );
+        const tokenExpires = Date.now() + ms(tokenExpiresIn);
+
+        // Find the user's UUID to create a proper reset token
+        const userRecord = await this.dataSource.query(
+          `SELECT id FROM "user" WHERE legacy_id = $1 LIMIT 1`,
+          [userId],
+        );
+        const userUuid = userRecord[0]?.id;
+
+        if (userUuid) {
+          const hash = await this.jwtService.signAsync(
+            { forgotUserId: userUuid },
+            {
+              secret: this.configService.getOrThrow("auth.forgotSecret", {
+                infer: true,
+              }),
+              expiresIn: tokenExpiresIn,
+            },
+          );
+
+          await this.mailService.welcomeFitter({
+            to: fitterEmail,
+            data: { hash, tokenExpires },
+          });
+
+          this.logger.log(
+            `Welcome email sent to fitter "${createFitterDto.username}" at ${fitterEmail}`,
+          );
+        }
+      } catch (error) {
+        // Don't fail fitter creation if email sending fails
+        this.logger.error(
+          `Failed to send welcome email to ${fitterEmail}: ${error.message}`,
+        );
+      }
+    }
+
     return this.toDto(savedFitter);
   }
 
