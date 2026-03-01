@@ -192,7 +192,7 @@ describe('Fitter CRUD Operations', () => {
       expect(fetch).toHaveBeenCalledWith(
         'http://localhost:3001/api/v1/fitters/123',
         expect.objectContaining({
-          method: 'PUT',
+          method: 'PATCH',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
