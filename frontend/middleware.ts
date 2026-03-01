@@ -62,39 +62,25 @@ const roleMap: Record<string, string[]> = {
 const JWT_SECRET = process.env.JWT_SECRET || '';
 
 export async function middleware(request: NextRequest) {
-  // --- CSP nonce generation (unconditional, all matched routes) ---
+  // --- CSP header generation ---
   const isDev = process.env.NODE_ENV === 'development';
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const connectSrc = isDev
+    ? "connect-src 'self' http://localhost:3001 https://*.ordermysaddle.com"
+    : "connect-src 'self' https://*.ordermysaddle.com";
 
-  const cspDirectives = isDev
-    ? [
-        "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-        "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob:",
-        "font-src 'self'",
-        "connect-src 'self' http://localhost:3001 https://*.ordermysaddle.com",
-        "frame-ancestors 'none'",
-        "base-uri 'self'",
-        "form-action 'self'",
-      ]
-    : [
-        "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
-        "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob:",
-        "font-src 'self'",
-        "connect-src 'self' https://*.ordermysaddle.com",
-        "frame-ancestors 'none'",
-        "base-uri 'self'",
-        "form-action 'self'",
-      ];
+  const cspHeader = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    connectSrc,
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
 
-  const cspHeader = cspDirectives.join('; ');
-
-  // Inject nonce into request headers so the layout can read it
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', cspHeader);
 
   // Token is stored as httpOnly cookie by the backend
