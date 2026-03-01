@@ -899,9 +899,7 @@ describe('ComprehensiveEditOrder component', () => {
     it('sets orderStatus to "Unordered" instead of the original status', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
 
-      await navigateToStep(3);
-
-      // The mocked Select renders data-value attribute from the `value` prop
+      // orderStatus Select is rendered on step 1 (right column sidebar)
       const selects = screen.getAllByTestId('select');
       const statusSelect = selects.find(
         (el) => el.getAttribute('data-value') === 'Unordered'
@@ -960,6 +958,14 @@ describe('ComprehensiveEditOrder component', () => {
       await renderAndWaitForLoad();
 
       expect(screen.getByText('Italian Leather')).toBeInTheDocument();
+    });
+
+    it('renders hardcoded order status options in the sidebar', async () => {
+      await renderAndWaitForLoad();
+
+      // The orderStatus Select on step 1 uses hardcoded values
+      expect(screen.getByText('Unordered')).toBeInTheDocument();
+      expect(screen.getByText('Approved')).toBeInTheDocument();
     });
   });
 
@@ -1022,12 +1028,6 @@ describe('ComprehensiveEditOrder component', () => {
 
     it('renders the "Special Notes" section heading', () => {
       expect(screen.getByText('Special Notes')).toBeInTheDocument();
-    });
-
-    it('renders status options from the loaded edit options', () => {
-      // mockEditOptions.statuses: [{name:'Pending'},{name:'Approved'}]
-      expect(screen.getByText('Pending')).toBeInTheDocument();
-      expect(screen.getByText('Approved')).toBeInTheDocument();
     });
   });
 });
