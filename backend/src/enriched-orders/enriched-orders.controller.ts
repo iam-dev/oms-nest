@@ -79,6 +79,24 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Get("filter-options")
+  async getFilterOptions() {
+    try {
+      this.logger.log("Fetching filter options");
+      return await this.enrichedOrdersService.getFilterOptions();
+    } catch (error) {
+      this.logger.error("Failed to fetch filter options", error);
+      throw new HttpException(
+        {
+          message: "Failed to fetch filter options",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get("edit-options")
   async getEditFormOptions(@Query("saddleId") saddleIdStr?: string) {
     try {
@@ -388,6 +406,9 @@ export class EnrichedOrdersController {
     if (!orderBy) return undefined;
 
     const allowedColumns = [
+      "id",
+      "orderId",
+      "order_time",
       "created_at",
       "urgency",
       "customer_name",
@@ -396,6 +417,7 @@ export class EnrichedOrdersController {
       "model_name",
       "special_notes",
       "status",
+      "order_status",
     ];
 
     return allowedColumns.includes(orderBy) ? orderBy : undefined;

@@ -1,14 +1,10 @@
 "use client";
 
-import React from 'react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { X } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronDown, X, Search } from 'lucide-react';
+
+const MAX_VISIBLE = 100;
 
 interface MultiSelectFilterProps {
   label: string;
@@ -25,13 +21,39 @@ export function MultiSelectFilter({
   onChangeSelected,
   placeholder = "Please select",
 }: MultiSelectFilterProps) {
-  // Filter out already-selected options
-  const availableOptions = options.filter(opt => !selected.includes(opt.value));
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      // Small delay so popover is mounted before focusing
+      const t = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    } else {
+      setSearch('');
+    }
+  }, [open]);
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    const available = options.filter(opt => !selectedSet.has(opt.value));
+    if (!q) return available.slice(0, MAX_VISIBLE);
+    return available
+      .filter(opt => opt.label.toLowerCase().includes(q))
+      .slice(0, MAX_VISIBLE);
+  }, [options, selectedSet, search]);
+
+  const totalAvailable = useMemo(() => {
+    if (!search) return options.length - selected.length;
+    const q = search.toLowerCase();
+    return options.filter(opt => !selectedSet.has(opt.value) && opt.label.toLowerCase().includes(q)).length;
+  }, [options, selectedSet, search, selected.length]);
 
   const handleSelect = (value: string) => {
-    if (value && !selected.includes(value)) {
-      onChangeSelected([...selected, value]);
-    }
+    onChangeSelected([...selected, value]);
   };
 
   const handleRemove = (value: string) => {
@@ -42,21 +64,52 @@ export function MultiSelectFilter({
     <div className="flex items-start gap-2">
       <label className="w-32 pt-2">{label}</label>
       <div className="flex-1">
-        <Select
-          value=""
-          onValueChange={handleSelect}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder={placeholder} />
-          </SelectTrigger>
-          <SelectContent>
-            {availableOptions.map(opt => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="flex h-9 w-[200px] items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <span className="text-muted-foreground truncate">{placeholder}</span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[220px] p-0" align="start">
+            <div className="flex items-center border-b px-2 py-1.5">
+              <Search className="h-3.5 w-3.5 text-muted-foreground mr-1.5 shrink-0" />
+              <input
+                ref={inputRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Type to search..."
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <div className="max-h-[200px] overflow-y-auto">
+              {filtered.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">No results</div>
+              ) : (
+                <>
+                  {filtered.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                      onClick={() => handleSelect(opt.value)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  {totalAvailable > MAX_VISIBLE && (
+                    <div className="py-1.5 px-2 text-xs text-muted-foreground border-t">
+                      Showing {MAX_VISIBLE} of {totalAvailable} — type to narrow
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
         {selected.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1 max-w-[300px]">
             {selected.map(value => {

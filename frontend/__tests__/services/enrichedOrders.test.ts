@@ -146,7 +146,8 @@ describe('Enriched Orders Service', () => {
           customerName: 'John',
           dateFrom: '2024-01-01',
           dateTo: '2024-01-31',
-          'order[createdAt]': 'desc',
+          'orderBy': 'createdAt',
+          'orderDirection': 'DESC',
         }),
         searchTerm: undefined,
       });

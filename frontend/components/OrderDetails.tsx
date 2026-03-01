@@ -384,6 +384,17 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
             <div className="grid grid-cols-3 gap-6">
               {/* Left Column - Saddle Information */}
               <div className="space-y-6">
+                {/* Your order reference - shown when reference exists */}
+                {detailData?.fitterReference && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold text-sm mb-4">Your order reference</h3>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-bold text-gray-700">Your reference</span>
+                      <span className="text-gray-900 italic">{detailData.fitterReference}</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Saddle information - Model & Leathertype */}
                 <div className="border rounded-lg p-4">
                   <h3 className="font-semibold text-sm mb-4">Saddle information</h3>

@@ -216,6 +216,103 @@ export class EnrichedOrdersService {
     }
   }
 
+  async getFilterOptions(): Promise<Record<string, string[]>> {
+    const cacheKey = "enriched_orders:filter_options";
+    const cached =
+      await this.cacheManager.get<Record<string, string[]>>(cacheKey);
+    if (cached) return cached;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      const [
+        fitters,
+        customers,
+        saddles,
+        customerCountries,
+        fitterCountries,
+        kneeRolls,
+        leatherTypes,
+        factories,
+      ] = await Promise.all([
+        queryRunner.query(`
+          SELECT DISTINCT fc.full_name as name FROM orders o
+          JOIN fitters f ON o.fitter_id = f.id
+          JOIN credentials fc ON f.user_id = fc.user_id
+          WHERE o.deleted_at IS NULL AND fc.full_name IS NOT NULL AND fc.full_name != ''
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT COALESCE(c.name, o.name) as name FROM orders o
+          LEFT JOIN customers c ON o.customer_id = c.id
+          WHERE o.deleted_at IS NULL AND COALESCE(c.name, o.name) IS NOT NULL AND COALESCE(c.name, o.name) != ''
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT CONCAT_WS(' - ', NULLIF(s.brand, ''), NULLIF(s.model_name, '')) as name
+          FROM orders o
+          JOIN saddles s ON o.saddle_id = s.id
+          WHERE o.deleted_at IS NULL AND (s.brand IS NOT NULL OR s.model_name IS NOT NULL)
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT c.country as name FROM orders o
+          JOIN customers c ON o.customer_id = c.id
+          WHERE o.deleted_at IS NULL AND c.country IS NOT NULL AND c.country != ''
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT f.country as name FROM orders o
+          JOIN fitters f ON o.fitter_id = f.id
+          WHERE o.deleted_at IS NULL AND f.country IS NOT NULL AND f.country != ''
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT oi2.name FROM orders_info oi
+          JOIN options_items oi2 ON oi.option_item_id = oi2.id
+          JOIN orders o ON oi.order_id = o.id
+          WHERE oi.option_id = 2 AND o.deleted_at IS NULL AND oi2.name IS NOT NULL AND oi2.name != ''
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT lt.name FROM orders o
+          JOIN leather_types lt ON o.leather_id = lt.id
+          WHERE o.deleted_at IS NULL AND lt.name IS NOT NULL AND lt.name != ''
+          ORDER BY name
+        `),
+        queryRunner.query(`
+          SELECT DISTINCT fac.full_name as name FROM orders o
+          JOIN factories fa ON o.factory_id = fa.id
+          JOIN credentials fac ON fa.user_id = fac.user_id
+          WHERE o.deleted_at IS NULL AND o.factory_id > 0
+            AND fac.full_name IS NOT NULL AND fac.full_name != ''
+          ORDER BY name
+        `),
+      ]);
+
+      const extract = (rows: Array<{ name: string }>) =>
+        rows.map((r) => r.name).filter(Boolean);
+
+      const result: Record<string, string[]> = {
+        fitters: extract(fitters),
+        customers: extract(customers),
+        saddles: extract(saddles),
+        customerCountries: extract(customerCountries),
+        fitterCountries: extract(fitterCountries),
+        kneeRolls: extract(kneeRolls),
+        leatherTypes: extract(leatherTypes),
+        factories: extract(factories),
+      };
+
+      await this.cacheManager.set(cacheKey, result, 300000);
+      return result;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   private async executeEnrichedOrdersQuery(
     query: EnrichedOrdersQueryDto,
   ): Promise<{
@@ -388,6 +485,7 @@ export class EnrichedOrdersService {
         "o.name",
         "o.special_notes",
         "o.horse_name",
+        "o.fitter_reference",
         "c.name",
         "fc.full_name",
         "fac.full_name",
@@ -825,13 +923,13 @@ export class EnrichedOrdersService {
         .filter(Boolean);
       const orClauses: string[] = [];
       for (const type of types) {
-        if (type === "demo") orClauses.push("o.demo = 1");
-        else if (type === "sponsored") orClauses.push("o.sponsored = 1");
-        else if (type === "urgent") orClauses.push("o.rushed = 1");
-        else if (type === "repair") orClauses.push("o.repair = 1");
+        if (type === "demo") orClauses.push("o.demo = true");
+        else if (type === "sponsored") orClauses.push("o.sponsored = true");
+        else if (type === "urgent") orClauses.push("o.rushed = true");
+        else if (type === "repair") orClauses.push("o.repair = true");
         else if (type === "normal")
           orClauses.push(
-            "(o.demo = 0 AND o.sponsored = 0 AND o.rushed = 0 AND o.repair = 0)",
+            "(o.demo = false AND o.sponsored = false AND o.rushed = false AND o.repair = false)",
           );
       }
       if (orClauses.length > 0) {
@@ -895,19 +993,6 @@ export class EnrichedOrdersService {
 
     const column = columnMap[orderBy] || "o.order_time";
     const dir = direction === "ASC" ? "ASC" : "DESC";
-
-    // When filtering by multiple seat sizes, sort by seat size first so results
-    // for all selected sizes appear on the first pages instead of being buried
-    const seatSizeFilter = query.seatSizes || query.seatSize;
-    if (seatSizeFilter) {
-      const seatSizeValues = String(seatSizeFilter)
-        .split(",")
-        .map((v) => v.trim())
-        .filter(Boolean);
-      if (seatSizeValues.length > 1) {
-        return `ORDER BY o.seat_sizes ASC NULLS LAST, o.id DESC`;
-      }
-    }
 
     return `ORDER BY ${column} ${dir}`;
   }

@@ -13,7 +13,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Star, Trash2 } from 'lucide-react';
 // Simple date formatting function
 const formatDate = (date: Date): string => {
   return date.toLocaleDateString('en-US', {
@@ -22,18 +22,22 @@ const formatDate = (date: Date): string => {
     day: 'numeric'
   });
 };
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { OrderDetails } from './OrderDetails';
 import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
 import { getFitterName, getCustomerName, getSupplierName, getStatus, getUrgent, getDate } from '../utils/orderHydration';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { seatSizes, statuses, orderStatuses } from '../utils/orderConstants';
 import { logger } from '@/utils/logger';
-import { getEnrichedOrders } from '../services/enrichedOrders';
+import { getEnrichedOrders, getFilterOptions } from '../services/enrichedOrders';
+import type { FilterOptions } from '../services/enrichedOrders';
 import { extractDynamicFactories, extractDynamicSeatSizes, extractSeatSizes } from '../utils/orderProcessing';
 import { fetchEntities } from '../services/api';
 import { exportToXlsx } from '../utils/exportXlsx';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
+import { getSavedFilters, getDefaultFilter, createSavedFilter, updateSavedFilter, deleteSavedFilter } from '../services/reportSavedFilters';
+import type { SavedFilter } from '../services/reportSavedFilters';
 
 const saleTypeOptions = [
   { label: 'Normal orders', value: 'normal' },
@@ -56,6 +60,24 @@ export default function Reports() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+
+  // Saved filters state
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [activeSavedFilterId, setActiveSavedFilterId] = useState<number | null>(null);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
+  const [saveFilterName, setSaveFilterName] = useState('');
+  const [saveFilterDefault, setSaveFilterDefault] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  // Static filter options loaded once from dedicated endpoint
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  useEffect(() => {
+    getFilterOptions()
+      .then(setFilterOptions)
+      .catch(() => { /* fallback to order-derived lists */ });
+  }, []);
 
   // Fetch all factories from API for complete filter dropdown
   const [allFactoryNames, setAllFactoryNames] = useState<Array<{label: string, value: string}>>([]);
@@ -72,18 +94,24 @@ export default function Reports() {
       .catch(() => { /* fallback to order-derived list */ });
   }, []);
 
-  // Merge API factories with order-derived factories for complete dropdown
+  // Use static filter options for factories (only factories with orders), falling back to API list
   const suppliers = React.useMemo(() => {
+    if (filterOptions?.factories?.length) {
+      return filterOptions.factories.map(name => ({ label: name, value: name }));
+    }
     const orderFactories = extractDynamicFactories(orders);
     if (allFactoryNames.length === 0) return orderFactories;
     const merged = new Map<string, {label: string, value: string}>();
     for (const f of allFactoryNames) merged.set(f.value, f);
     for (const f of orderFactories) merged.set(f.value, f);
     return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [orders, allFactoryNames]);
+  }, [filterOptions, orders, allFactoryNames]);
   
-  // Extract unique fitter names from orders for filter dropdown
+  // Use static filter options from backend when available, falling back to current page data
   const fittersList = React.useMemo(() => {
+    if (filterOptions?.fitters?.length) {
+      return filterOptions.fitters.map(name => ({ label: name, value: name }));
+    }
     const fitters = new Set<string>();
     orders.forEach(order => {
       const name = order.fitter_name || order.fitterName || getFitterName(order);
@@ -92,10 +120,12 @@ export default function Reports() {
       }
     });
     return Array.from(fitters).sort().map(name => ({ label: name, value: name }));
-  }, [orders]);
+  }, [filterOptions, orders]);
   
-  // Extract unique saddle names (brand + model) from orders
   const modelsList = React.useMemo(() => {
+    if (filterOptions?.saddles?.length) {
+      return filterOptions.saddles.map(name => ({ label: name, value: name }));
+    }
     const saddles = new Set<string>();
     orders.forEach(order => {
       const brand = order.brand_name || order.brandName || '';
@@ -106,10 +136,12 @@ export default function Reports() {
       }
     });
     return Array.from(saddles).sort().map(name => ({ label: name, value: name }));
-  }, [orders]);
+  }, [filterOptions, orders]);
 
-  // Extract unique customer names from orders for filter dropdown
   const customersList = React.useMemo(() => {
+    if (filterOptions?.customers?.length) {
+      return filterOptions.customers.map(name => ({ label: name, value: name }));
+    }
     const customers = new Set<string>();
     orders.forEach(order => {
       const name = getCustomerName(order);
@@ -118,10 +150,12 @@ export default function Reports() {
       }
     });
     return Array.from(customers).sort().map(name => ({ label: name, value: name }));
-  }, [orders]);
+  }, [filterOptions, orders]);
 
-  // Extract unique customer countries from orders
   const dynamicCustomerCountries = React.useMemo(() => {
+    if (filterOptions?.customerCountries?.length) {
+      return filterOptions.customerCountries;
+    }
     const countriesSet = new Set<string>();
     orders.forEach(order => {
       const country = order.customer_country || order.customerCountry;
@@ -130,10 +164,12 @@ export default function Reports() {
       }
     });
     return Array.from(countriesSet).sort();
-  }, [orders]);
+  }, [filterOptions, orders]);
 
-  // Extract unique fitter countries from orders
   const dynamicFitterCountries = React.useMemo(() => {
+    if (filterOptions?.fitterCountries?.length) {
+      return filterOptions.fitterCountries;
+    }
     const countriesSet = new Set<string>();
     orders.forEach(order => {
       const country = order.fitter_country || order.fitterCountry;
@@ -142,7 +178,7 @@ export default function Reports() {
       }
     });
     return Array.from(countriesSet).sort();
-  }, [orders]);
+  }, [filterOptions, orders]);
 
   useEffect(() => {
     setLoading(true);
@@ -193,6 +229,8 @@ export default function Reports() {
       page,
       partial: true,
       filters,
+      orderBy: 'orderId',
+      order: 'desc',
       bustCache: refreshKey > 0,
     })
       .then(data => {
@@ -200,15 +238,15 @@ export default function Reports() {
         let memberArr: any[] = [];
         if (data['hydra:member']) {
           memberArr = data['hydra:member'];
+        } else if (Array.isArray(data.data)) {
+          memberArr = data.data;
         } else if (Array.isArray(data)) {
           memberArr = data;
         }
         setOrders(memberArr);
-        setTotalPages(
-          data['hydra:view']?.['hydra:last']
-            ? parseInt(new URL(data['hydra:view']['hydra:last'], 'http://dummy').searchParams.get('page') || '1')
-            : data.pages || Math.ceil((data['hydra:totalItems'] || memberArr.length) / 50) || 1
-        );
+        const serverTotal = data.total || data['hydra:totalItems'] || memberArr.length;
+        setTotalItems(serverTotal);
+        setTotalPages(data.pages || Math.ceil(serverTotal / 50) || 1);
         setLoading(false);
       })
       .catch(() => {
@@ -254,8 +292,10 @@ export default function Reports() {
     return extractDynamicSeatSizes(orders);
   }, [orders]);
 
-  // Extract unique knee roll values from orders
   const kneeRollOptions = React.useMemo(() => {
+    if (filterOptions?.kneeRolls?.length) {
+      return filterOptions.kneeRolls;
+    }
     const values = new Set<string>();
     orders.forEach(order => {
       const kr = order.knee_roll || order.kneeRoll;
@@ -264,10 +304,12 @@ export default function Reports() {
       }
     });
     return Array.from(values).sort();
-  }, [orders]);
+  }, [filterOptions, orders]);
 
-  // Extract unique leather type values from orders
   const leatherTypeOptions = React.useMemo(() => {
+    if (filterOptions?.leatherTypes?.length) {
+      return filterOptions.leatherTypes;
+    }
     const values = new Set<string>();
     orders.forEach(order => {
       const lt = order.leather_name || order.leatherName || order.leatherType;
@@ -276,7 +318,7 @@ export default function Reports() {
       }
     });
     return Array.from(values).sort();
-  }, [orders]);
+  }, [filterOptions, orders]);
 
   // Sync multi-select state arrays to headerFilters (comma-separated)
   const updateMultiFilter = useCallback((key: string, values: string[]) => {
@@ -456,9 +498,174 @@ export default function Reports() {
     logger.log('Payment date filter:', paymentDate);
   }, [orders, processedOrders, filteredOrders, headerFilters, date, orderedDate, paymentDate]);
 
+  // ========== SAVED FILTERS: serialize / apply / effects ==========
+
+  const serializeFilters = useCallback((): Record<string, unknown> => {
+    return {
+      fitters: selectedFitters,
+      statuses: selectedStatuses,
+      saleTypes: selectedSaleTypes,
+      customers: selectedCustomers,
+      factories: selectedFactories,
+      saddles: selectedSaddles,
+      customerCountries: selectedCustomerCountries,
+      fitterCountries: selectedFitterCountries,
+      seatSizes: selectedSeatSizes,
+      kneeRolls: selectedKneeRolls,
+      leatherTypes: selectedLeatherTypes,
+      urgent: selectedUrgent,
+      orderedDate: {
+        from: orderedDate.from?.toISOString() ?? null,
+        to: orderedDate.to?.toISOString() ?? null,
+      },
+      date: {
+        from: date.from?.toISOString() ?? null,
+        to: date.to?.toISOString() ?? null,
+      },
+      paymentDate: {
+        from: paymentDate.from?.toISOString() ?? null,
+        to: paymentDate.to?.toISOString() ?? null,
+      },
+      groupBySaddle,
+    };
+  }, [
+    selectedFitters, selectedStatuses, selectedSaleTypes, selectedCustomers,
+    selectedFactories, selectedSaddles, selectedCustomerCountries, selectedFitterCountries,
+    selectedSeatSizes, selectedKneeRolls, selectedLeatherTypes, selectedUrgent,
+    orderedDate, date, paymentDate, groupBySaddle,
+  ]);
+
+  const applyFilterState = useCallback((f: Record<string, unknown>) => {
+    const arr = (v: unknown): string[] => (Array.isArray(v) ? v : []);
+    const parseDate = (v: unknown): Date | undefined => (typeof v === 'string' ? new Date(v) : undefined);
+
+    setSelectedFitters(arr(f.fitters));
+    setSelectedStatuses(arr(f.statuses));
+    setSelectedSaleTypes(arr(f.saleTypes));
+    setSelectedCustomers(arr(f.customers));
+    setSelectedFactories(arr(f.factories));
+    setSelectedSaddles(arr(f.saddles));
+    setSelectedCustomerCountries(arr(f.customerCountries));
+    setSelectedFitterCountries(arr(f.fitterCountries));
+    setSelectedSeatSizes(arr(f.seatSizes));
+    setSelectedKneeRolls(arr(f.kneeRolls));
+    setSelectedLeatherTypes(arr(f.leatherTypes));
+    setSelectedUrgent(typeof f.urgent === 'string' ? f.urgent : 'all');
+    setGroupBySaddle(f.groupBySaddle === true);
+
+    const dateObj = f.orderedDate as { from?: string | null; to?: string | null } | undefined;
+    setOrderedDate({ from: parseDate(dateObj?.from), to: parseDate(dateObj?.to) });
+    const dObj = f.date as { from?: string | null; to?: string | null } | undefined;
+    setDate({ from: parseDate(dObj?.from), to: parseDate(dObj?.to) });
+    const pObj = f.paymentDate as { from?: string | null; to?: string | null } | undefined;
+    setPaymentDate({ from: parseDate(pObj?.from), to: parseDate(pObj?.to) });
+
+    // Rebuild headerFilters from multi-select arrays
+    const newHeaderFilters: Record<string, string> = {};
+    if (arr(f.fitters).length) newHeaderFilters.fitter = arr(f.fitters).join(',');
+    if (arr(f.statuses).length) newHeaderFilters.status = arr(f.statuses).join(',');
+    if (arr(f.saleTypes).length) newHeaderFilters.saleType = arr(f.saleTypes).join(',');
+    if (arr(f.customers).length) newHeaderFilters.customer = arr(f.customers).join(',');
+    if (arr(f.factories).length) newHeaderFilters.supplier = arr(f.factories).join(',');
+    if (arr(f.saddles).length) newHeaderFilters.saddle = arr(f.saddles).join(',');
+    if (arr(f.customerCountries).length) newHeaderFilters.customerCountry = arr(f.customerCountries).join(',');
+    if (arr(f.fitterCountries).length) newHeaderFilters.fitterCountry = arr(f.fitterCountries).join(',');
+    if (arr(f.seatSizes).length) newHeaderFilters.seatSize = arr(f.seatSizes).join(',');
+    if (arr(f.kneeRolls).length) newHeaderFilters.kneeRoll = arr(f.kneeRolls).join(',');
+    if (arr(f.leatherTypes).length) newHeaderFilters.leatherType = arr(f.leatherTypes).join(',');
+    const urgent = typeof f.urgent === 'string' ? f.urgent : 'all';
+    if (urgent !== 'all') newHeaderFilters.urgent = urgent === 'urgent' ? 'true' : 'false';
+    setHeaderFilters(newHeaderFilters);
+    setPage(1);
+  }, []);
+
+  // Load saved filters list
+  const refreshSavedFilters = useCallback(() => {
+    getSavedFilters().then(setSavedFilters).catch(() => {});
+  }, []);
+
+  useEffect(() => { refreshSavedFilters(); }, [refreshSavedFilters]);
+
+  // Auto-load default filter on mount
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
+  useEffect(() => {
+    if (defaultLoaded) return;
+    getDefaultFilter().then(df => {
+      if (df) {
+        applyFilterState(df.filters);
+        setActiveSavedFilterId(df.id);
+      }
+      setDefaultLoaded(true);
+    }).catch(() => setDefaultLoaded(true));
+  }, [defaultLoaded, applyFilterState]);
+
+  const handleSaveFilter = async () => {
+    if (!saveFilterName.trim()) {
+      setSaveError('Name is required');
+      return;
+    }
+    setSaveError('');
+    try {
+      const created = await createSavedFilter({
+        name: saveFilterName.trim(),
+        filters: serializeFilters(),
+        isDefault: saveFilterDefault,
+      });
+      setIsSaveDialogOpen(false);
+      setSaveFilterName('');
+      setSaveFilterDefault(false);
+      setActiveSavedFilterId(created.id);
+      refreshSavedFilters();
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save');
+    }
+  };
+
   return (
     <div className="p-6">
       <h2 className="text-2xl font-bold mb-6">Order Reports</h2>
+
+      {/* Saved filters bar */}
+      <div className="flex items-center gap-3 mb-4">
+        <Select
+          value={activeSavedFilterId ? String(activeSavedFilterId) : "none"}
+          onValueChange={(val) => {
+            if (val === "none") return;
+            const sf = savedFilters.find(f => f.id === Number(val));
+            if (sf) {
+              applyFilterState(sf.filters);
+              setActiveSavedFilterId(sf.id);
+            }
+          }}
+        >
+          <SelectTrigger className="w-[250px]">
+            <SelectValue placeholder="Load saved filter..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Load saved filter...</SelectItem>
+            {savedFilters.map(sf => (
+              <SelectItem key={sf.id} value={String(sf.id)}>
+                {sf.isDefault ? '\u2605 ' : ''}{sf.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button variant="outline" onClick={() => {
+          setSaveFilterName('');
+          setSaveFilterDefault(false);
+          setSaveError('');
+          setIsSaveDialogOpen(true);
+        }}>
+          Save current filters
+        </Button>
+
+        {savedFilters.length > 0 && (
+          <Button variant="outline" onClick={() => setIsManageDialogOpen(true)}>
+            Manage saved filters
+          </Button>
+        )}
+      </div>
 
       <div className="bg-gray-100 p-6 rounded-lg mb-6">
         <div className="grid grid-cols-2 gap-6">
@@ -805,8 +1012,8 @@ export default function Reports() {
                 currentPage: page,
                 totalPages: totalPages,
                 onPageChange: setPage,
-                totalItems: filteredOrders.length,
-                itemsPerPage: 10,
+                totalItems: totalItems,
+                itemsPerPage: 50,
               }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any}
@@ -842,6 +1049,95 @@ export default function Reports() {
             }}
           />
         )}
+      </Dialog>
+
+      {/* Save filter dialog */}
+      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save current filters</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={saveFilterName}
+                onChange={(e) => setSaveFilterName(e.target.value)}
+                placeholder="e.g. Q1 European Orders"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveFilter(); }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="saveFilterDefault"
+                checked={saveFilterDefault}
+                onCheckedChange={(checked) => setSaveFilterDefault(checked as boolean)}
+              />
+              <label htmlFor="saveFilterDefault" className="text-sm">Set as default (auto-load on page open)</label>
+            </div>
+            {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSaveDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveFilter}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage saved filters dialog */}
+      <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage saved filters</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2 max-h-[400px] overflow-y-auto">
+            {savedFilters.map(sf => (
+              <div key={sf.id} className="flex items-center gap-2 p-2 rounded border">
+                <button
+                  type="button"
+                  title={sf.isDefault ? 'Default filter' : 'Set as default'}
+                  className="shrink-0"
+                  onClick={async () => {
+                    await updateSavedFilter(sf.id, { isDefault: !sf.isDefault });
+                    refreshSavedFilters();
+                  }}
+                >
+                  <Star className={`h-4 w-4 ${sf.isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+                </button>
+                <span className="flex-1 text-sm truncate">{sf.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    applyFilterState(sf.filters);
+                    setActiveSavedFilterId(sf.id);
+                    setIsManageDialogOpen(false);
+                  }}
+                >
+                  Load
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={async () => {
+                    await deleteSavedFilter(sf.id);
+                    if (activeSavedFilterId === sf.id) setActiveSavedFilterId(null);
+                    refreshSavedFilters();
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            {savedFilters.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No saved filters yet.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsManageDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

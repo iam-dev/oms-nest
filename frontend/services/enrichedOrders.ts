@@ -143,11 +143,10 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   Object.keys(formattedFilters).forEach(key => delete formattedFilters[key]);
   Object.assign(formattedFilters, cleanedFilters);
 
-  // Add sorting parameters if provided
+  // Add sorting parameters for the enriched_orders NestJS endpoint
   if (params.orderBy) {
-    const order = params.order === 'asc' ? 'asc' : 'desc'; // Default to desc if not specified
-    // Use the correct format for API Platform sorting
-    formattedFilters[`order[${params.orderBy}]`] = order;
+    formattedFilters['orderBy'] = params.orderBy;
+    formattedFilters['orderDirection'] = params.order === 'asc' ? 'ASC' : 'DESC';
   }
 
   // Use searchTerm from either the filters or the top-level param
@@ -177,6 +176,32 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   logger.log('enrichedOrders.ts: Server-side filtering should handle the request properly');
   
   return response;
+}
+
+// ========== FILTER OPTIONS ==========
+
+export interface FilterOptions {
+  fitters: string[];
+  customers: string[];
+  saddles: string[];
+  customerCountries: string[];
+  fitterCountries: string[];
+  kneeRolls: string[];
+  leatherTypes: string[];
+  factories: string[];
+}
+
+export async function getFilterOptions(): Promise<FilterOptions> {
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/filter-options`, {
+    headers: { 'Accept': 'application/json' },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch filter options: ${response.status}`);
+  }
+
+  return response.json();
 }
 
 // ========== BULK STATUS UPDATE ==========

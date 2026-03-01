@@ -103,6 +103,27 @@ export default function RepairsPage() {
   );
   const allSelected = visibleIds.length > 0 && visibleIds.every((id: number) => selectedOrderIds.has(id));
 
+  const origOrderColumn: Column<Record<string, unknown>> = useMemo(() => ({
+    key: 'repairSourceOrderId' as string,
+    title: 'ORIG. ORDER',
+    render: (_: unknown, row?: Record<string, unknown>) => {
+      const sourceId = row?.repairSourceOrderId ?? row?.repair_source_order_id;
+      if (!sourceId) return '-';
+      return (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedOrder({ id: Number(sourceId), orderId: Number(sourceId) } as unknown as Order);
+            setIsDetailsOpen(true);
+          }}
+          className="text-blue-600 hover:underline font-medium"
+        >
+          #{String(sourceId)}
+        </button>
+      );
+    },
+  }), []);
+
   const checkboxColumn: Column<Record<string, unknown>> = useMemo(() => ({
     key: '_select' as string,
     title: (
@@ -165,7 +186,11 @@ export default function RepairsPage() {
       <div className="space-y-4">
         <EntityTable
           entities={processedOrders}
-          columns={[checkboxColumn, ...getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes)]}
+          columns={(() => {
+            const orderCols = getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes);
+            // Insert "ORIG. ORDER" column after the ID column (index 0)
+            return [checkboxColumn, orderCols[0], origOrderColumn, ...orderCols.slice(1)];
+          })()}
           onView={(order) => handleViewDetails(order as unknown as Order)}
           onEdit={(order) => handleEditOrder(order as unknown as Order)}
           entityType="order"
