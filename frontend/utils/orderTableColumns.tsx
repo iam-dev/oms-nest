@@ -44,7 +44,9 @@ export function getOrderTableColumns(
         }
         if (row.repair || row.legacyRepair) {
           badges.push(
-            <span key="r" style={{ display: 'inline-block', background: '#2563eb', color: '#fff', fontWeight: 700, fontSize: '10px', lineHeight: '16px', width: '16px', textAlign: 'center', borderRadius: '3px', marginRight: '2px' }} title="Repair">R</span>
+            <span key="r" style={{ display: 'inline-flex', alignItems: 'center', marginRight: '2px' }} title="Repair">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B0000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
           );
         }
         if (row.fitterStock || row.fitter_stock) {
@@ -105,9 +107,9 @@ export function getOrderTableColumns(
           value={headerFilters.seatSize || ''}
           onFilter={value => setHeaderFilters('seatSize', value)}
           type="enum"
-          data={dynamicSeatSizes.length > 0 
-            ? dynamicSeatSizes.map(size => ({ label: size, value: size }))
-            : ['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'].map(size => ({ label: size, value: size }))
+          data={Array.from(new Set([...['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'], ...dynamicSeatSizes]))
+            .sort((a, b) => parseFloat(a) - parseFloat(b))
+            .map(size => ({ label: size, value: size }))
           }
           entityType="order"
         />
@@ -288,6 +290,24 @@ export function getOrderTableColumns(
         }
         if (row.name) return row.name;
         return '-';
+      },
+    },
+    {
+      key: 'fitterReference',
+      title: (
+        <TableHeaderFilter
+          title="REFERENCE"
+          value={headerFilters.reference || ''}
+          onFilter={value => setHeaderFilters('reference', value)}
+          type="text"
+          entityType="order"
+        />
+      ),
+      render: (_: unknown, row: unknown) => {
+        if (!row || typeof row !== 'object') return '-';
+        const r = row as Record<string, unknown>;
+        const val = r.fitterReference || r.fitter_reference;
+        return typeof val === 'string' && val ? val : '-';
       },
     },
     {

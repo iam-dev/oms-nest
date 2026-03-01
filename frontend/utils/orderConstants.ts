@@ -3,7 +3,7 @@
 // Minimum valid order ID — filters out noise numbers (row indices, small integers) from Excel imports
 export const MIN_ORDER_ID = 100;
 
-export const seatSizes = ['17', '17.5', '18'];
+export const seatSizes = ['15', '15.5', '16', '16.5', '17', '17.5', '18', '18.5', '19'];
 
 // Order status values - must match database statuses table names exactly
 export const orderStatuses = [

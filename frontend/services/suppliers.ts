@@ -273,6 +273,25 @@ export async function updateSupplier(id: number | string, supplierData: Partial<
   }
 }
 
+export async function blockFactory(id: number | string): Promise<{ enabled: boolean }> {
+  const response = await fetch(`${API_URL}/api/v1/factories/${id}/toggle-block`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Factory block toggle failed:', response.status, errorText);
+    throw new Error(`Failed to toggle factory block: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 export async function deleteSupplier(id: number | string): Promise<void> {
   const response = await fetch(`${API_URL}/api/v1/factories/${id}`, {
     method: 'DELETE',

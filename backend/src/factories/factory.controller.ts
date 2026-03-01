@@ -102,6 +102,31 @@ export class FactoryController {
     return this.factoryService.findAll(page, limit, city, country);
   }
 
+  @Patch(":id/toggle-block")
+  @AuditLog({ entity: "Factory" })
+  @ApiOperation({
+    summary: "Toggle factory block status",
+    description: "Toggles the blocked/enabled state of a factory user account",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Factory ID (integer)",
+    example: 12345,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Block status toggled",
+    schema: {
+      type: "object",
+      properties: { enabled: { type: "boolean" } },
+    },
+  })
+  async toggleBlock(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<{ enabled: boolean }> {
+    return this.factoryService.toggleBlock(id);
+  }
+
   @Get("active")
   @ApiOperation({
     summary: "Get active factories",

@@ -31,9 +31,21 @@ cd ../frontend && npm install
 
 ### 2. Environment Setup
 
+The backend supports multiple environment files via [`env-cmd`](https://www.npmjs.com/package/env-cmd):
+
+| File | Purpose |
+|------|---------|
+| `backend/.env` | Default environment (used by `start:dev`) |
+| `backend/.env.local` | Local overrides (your machine-specific settings) |
+| `backend/.env.staging` | Staging/production-data database connection |
+
 ```bash
-# Backend environment
+# Copy the example to create your default .env
 cp backend/env-example-relational backend/.env
+
+# Optionally create local or staging overrides
+cp backend/.env backend/.env.local
+cp backend/.env backend/.env.staging
 
 # Frontend environment
 cp frontend/.env.example frontend/.env.local
@@ -48,12 +60,26 @@ docker-compose up -d postgres redis
 # Run migrations
 cd backend && npm run migration:run
 
-# Start backend (development)
-npm run start:dev
-
 # Start frontend (in another terminal)
 cd frontend && npm run dev
 ```
+
+#### Start Backend with Different Environments
+
+```bash
+cd backend
+
+# Default — uses .env
+npm run start:dev
+
+# Local — uses .env.local
+npm run start:dev:local
+
+# Staging — uses .env.staging (connects to staging/production-data DB)
+npm run start:dev:staging
+```
+
+Each command uses `env-cmd` to load the specified env file. Variables from the env file are injected into `process.env` before NestJS starts, overriding any values in the default `.env`.
 
 ### 4. Access Applications
 
@@ -182,10 +208,12 @@ The staging database contains ~3 million records across 21 tables:
 ```bash
 cd backend
 
-# Development
-npm run start:dev          # Start with hot reload
-npm run build              # Build for production
-npm run start:prod         # Run production build
+# Development (choose one based on your environment)
+npm run start:dev              # Default .env
+npm run start:dev:local        # .env.local (local overrides)
+npm run start:dev:staging      # .env.staging (staging database)
+npm run build                  # Build for production
+npm run start:prod             # Run production build
 
 # Testing
 npm run test               # Unit tests
@@ -194,10 +222,12 @@ npm run test:cov           # Coverage report
 npm run test:e2e           # E2E tests
 
 # Database
-npm run migration:generate -- backend/database/migrations/MigrationName
-npm run migration:run      # Apply migrations
-npm run migration:revert   # Rollback last migration
-npm run seed:run:relational # Run seeds
+npm run migration:generate -- src/database/migrations/MigrationName
+npm run migration:run                # Apply migrations (uses .env)
+npm run migration:staging:run        # Apply migrations (uses .env.staging)
+npm run migration:revert             # Rollback last migration
+npm run migration:staging:revert     # Rollback on staging
+npm run seed:run:relational          # Run seeds
 
 # Code Quality
 npm run lint               # ESLint

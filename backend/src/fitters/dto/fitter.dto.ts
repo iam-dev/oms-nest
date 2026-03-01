@@ -90,4 +90,28 @@ export class FitterDto {
     example: true,
   })
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: "User name from credentials table",
+    example: "John Smith",
+  })
+  name?: string;
+
+  @ApiPropertyOptional({
+    description: "Username from credentials table",
+    example: "johnsmith",
+  })
+  username?: string;
+
+  @ApiPropertyOptional({
+    description: "Whether the fitter user account is enabled (not blocked)",
+    example: true,
+  })
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Last login timestamp of the fitter user",
+    example: "2024-01-15T10:30:00Z",
+  })
+  lastLogin?: Date | string;
 }

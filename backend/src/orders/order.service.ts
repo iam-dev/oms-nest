@@ -483,7 +483,7 @@ export class OrderService {
     dto.fitterStock = order.fitterStock;
     dto.customOrder = order.customOrder;
     dto.changed = order.changed;
-    // NOTE: seatSizes removed - legacy system stores seat size in special_notes field
+    dto.seatSizes = order.seatSizes;
     dto.customerName = order.customerName;
     dto.saddleId = order.saddleId;
     dto.isOverdue = order.estimatedDeliveryDate

@@ -15,6 +15,16 @@ jest.mock('@/services/enrichedOrders', () => ({
     'hydra:member': [],
     'hydra:totalItems': 0,
   }),
+  getFilterOptions: jest.fn().mockResolvedValue({
+    fitters: ['Jane Fitter', 'Bob Fitter'],
+    customers: ['John Customer', 'Alice Customer'],
+    saddles: ['Brand A - Model X', 'Brand B - Model Y'],
+    customerCountries: ['USA', 'UK', 'Germany'],
+    fitterCountries: ['France', 'Netherlands'],
+    kneeRolls: ['Standard', 'Extended', 'Short'],
+    leatherTypes: ['Calfskin', 'Pigskin', 'Buffalo'],
+    factories: ['Factory Alpha', 'Factory Beta'],
+  }),
 }));
 
 jest.mock('@/services/api', () => ({
@@ -40,10 +50,10 @@ jest.mock('@/utils/exportXlsx', () => ({
 
 // Mock OrdersTable component
 jest.mock('@/components/shared/OrdersTable', () => ({
-  OrdersTable: ({ 
-    searchTerm, 
-    onSearch, 
-    headerFilters, 
+  OrdersTable: ({
+    searchTerm,
+    onSearch,
+    headerFilters,
     onFilterChange,
     dateFrom,
     dateTo,
@@ -86,11 +96,51 @@ jest.mock('@/components/shared/OrdersTable', () => ({
       <div data-testid="loading-state">
         Loading: {loading ? 'true' : 'false'}
       </div>
+      <div data-testid="total-items">
+        Total: {pagination?.totalItems ?? 0}
+      </div>
+      <div data-testid="items-per-page">
+        PerPage: {pagination?.itemsPerPage ?? 0}
+      </div>
+      <div data-testid="total-pages">
+        Pages: {pagination?.totalPages ?? 0}
+      </div>
       {error && (
         <div data-testid="error-state">
           Error: {error}
         </div>
       )}
+    </div>
+  ),
+}));
+
+// Mock MultiSelectFilter component
+jest.mock('@/components/shared/MultiSelectFilter', () => ({
+  MultiSelectFilter: ({ label, options, selected, onChangeSelected }: any) => (
+    <div data-testid={`multi-select-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+      <label>{label}</label>
+      <div data-testid={`multi-select-options-count-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+        {options?.length || 0} options
+      </div>
+      <div data-testid={`multi-select-selected-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+        {selected?.join(',') || 'none'}
+      </div>
+      <button
+        data-testid={`multi-select-add-${label.toLowerCase().replace(/\s+/g, '-')}`}
+        onClick={() => {
+          if (options?.length > 0) {
+            onChangeSelected([...selected, options[0].value]);
+          }
+        }}
+      >
+        Add first
+      </button>
+      <button
+        data-testid={`multi-select-clear-${label.toLowerCase().replace(/\s+/g, '-')}`}
+        onClick={() => onChangeSelected([])}
+      >
+        Clear
+      </button>
     </div>
   ),
 }));
@@ -138,29 +188,56 @@ jest.mock('@/components/ui/popover', () => ({
 const mockOrders = [
   {
     id: 1,
+    orderId: 101,
     orderNumber: 'ORD-001',
     customer: { id: 1, name: 'John Customer' },
     fitter: { id: 1, name: 'Jane Fitter' },
     supplier: { id: 1, name: 'Acme Supplier' },
+    fitter_name: 'Jane Fitter',
+    customer_name: 'John Customer',
+    brand_name: 'Brand A',
+    model_name: 'Model X',
+    customer_country: 'USA',
+    fitter_country: 'France',
+    knee_roll: 'Standard',
+    leather_name: 'Calfskin',
     status: 'pending',
+    orderStatus: 'pending',
     urgent: false,
+    demo: false,
+    sponsored: false,
+    repair: false,
     createdAt: '2024-01-15T10:00:00Z',
     completedAt: null,
   },
   {
     id: 2,
+    orderId: 102,
     orderNumber: 'ORD-002',
     customer: { id: 2, name: 'Alice Customer' },
     fitter: { id: 2, name: 'Bob Fitter' },
     supplier: { id: 2, name: 'Beta Supplier' },
+    fitter_name: 'Bob Fitter',
+    customer_name: 'Alice Customer',
+    brand_name: 'Brand B',
+    model_name: 'Model Y',
+    customer_country: 'UK',
+    fitter_country: 'Netherlands',
+    knee_roll: 'Extended',
+    leather_name: 'Pigskin',
     status: 'completed',
+    orderStatus: 'completed',
     urgent: true,
+    demo: false,
+    sponsored: false,
+    repair: false,
     createdAt: '2024-01-16T11:00:00Z',
     completedAt: '2024-01-20T15:00:00Z',
   },
 ];
 
 const mockGetEnrichedOrders = require('@/services/enrichedOrders').getEnrichedOrders;
+const mockGetFilterOptions = require('@/services/enrichedOrders').getFilterOptions;
 
 const renderWithAuth = (ui: React.ReactElement, userRole = 'admin') => {
   return render(
@@ -174,8 +251,9 @@ describe('Reports Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetEnrichedOrders.mockResolvedValue({
-      'hydra:member': mockOrders,
-      'hydra:totalItems': 2,
+      data: mockOrders,
+      total: 150,
+      pages: 3,
     });
   });
 
@@ -196,6 +274,27 @@ describe('Reports Component', () => {
       });
     });
 
+    it('renders all multi-select filter labels', async () => {
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      // All multi-select filter labels should be visible
+      expect(screen.getByText('Fitters')).toBeInTheDocument();
+      expect(screen.getByText('Order statuses')).toBeInTheDocument();
+      expect(screen.getByText('Saletypes')).toBeInTheDocument();
+      expect(screen.getByText('Customers')).toBeInTheDocument();
+      expect(screen.getByText('Factories')).toBeInTheDocument();
+      expect(screen.getByText('Saddles')).toBeInTheDocument();
+      expect(screen.getByText('Customer Countries')).toBeInTheDocument();
+      expect(screen.getByText('Fitter Countries')).toBeInTheDocument();
+      expect(screen.getByText('Seatsizes')).toBeInTheDocument();
+      expect(screen.getByText('Knee Roll')).toBeInTheDocument();
+      expect(screen.getByText('Leather Type')).toBeInTheDocument();
+    });
+
     it('loads orders on mount', async () => {
       renderWithAuth(<Reports />);
 
@@ -212,65 +311,88 @@ describe('Reports Component', () => {
     });
   });
 
-  describe('Status Filter', () => {
-    it('renders status filter dropdown', async () => {
-      renderWithAuth(<Reports />);
-
-      const statusDropdowns = screen.getAllByTestId('select-component');
-      expect(statusDropdowns.length).toBeGreaterThan(0);
-    });
-
-    it('renders status filter options', async () => {
+  describe('Filter Options Loading', () => {
+    it('calls getFilterOptions on mount', async () => {
       renderWithAuth(<Reports />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+        expect(mockGetFilterOptions).toHaveBeenCalledTimes(1);
       });
-
-      // Check that status filter exists
-      expect(screen.getByText('Order statuses')).toBeInTheDocument();
     });
 
-    it('has proper status filter structure', async () => {
+    it('populates fitters from filter options', async () => {
       renderWithAuth(<Reports />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+        const fitterSelect = screen.getByTestId('multi-select-fitters');
+        expect(fitterSelect).toBeInTheDocument();
+        expect(screen.getByTestId('multi-select-options-count-fitters')).toHaveTextContent('2 options');
       });
+    });
 
-      // Check that status filter label exists
-      expect(screen.getByText('Order statuses')).toBeInTheDocument();
+    it('populates factories from filter options', async () => {
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('multi-select-options-count-factories')).toHaveTextContent('2 options');
+      });
+    });
+
+    it('populates customer countries from filter options', async () => {
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('multi-select-options-count-customer-countries')).toHaveTextContent('3 options');
+      });
+    });
+
+    it('populates knee roll options from filter options', async () => {
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('multi-select-options-count-knee-roll')).toHaveTextContent('3 options');
+      });
+    });
+
+    it('populates leather type options from filter options', async () => {
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('multi-select-options-count-leather-type')).toHaveTextContent('3 options');
+      });
+    });
+
+    it('gracefully falls back when getFilterOptions fails', async () => {
+      mockGetFilterOptions.mockRejectedValueOnce(new Error('Network error'));
+
+      renderWithAuth(<Reports />);
+
+      // Should still render and load orders
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+        expect(mockGetEnrichedOrders).toHaveBeenCalled();
+      });
     });
   });
 
-  describe('Fitter Filter', () => {
-    it('renders fitter filter', async () => {
+  describe('API Call Parameters', () => {
+    it('sends orderBy and orderDirection on initial load', async () => {
       renderWithAuth(<Reports />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+        expect(mockGetEnrichedOrders).toHaveBeenCalledWith(
+          expect.objectContaining({
+            page: 1,
+            partial: true,
+            filters: {},
+            orderBy: 'orderId',
+            order: 'desc',
+          })
+        );
       });
-
-      // Check that fitter filter exists
-      expect(screen.getByText('Fitters')).toBeInTheDocument();
     });
-  });
 
-  describe('Customer Filter', () => {
-    it('renders customer filter dropdown', async () => {
-      renderWithAuth(<Reports />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
-      });
-
-      // Customer filter exists but only has "All Customers" option in the component
-      expect(screen.getByText('Customers')).toBeInTheDocument();
-    });
-  });
-
-  describe('Supplier Filter', () => {
-    it('applies supplier filter when selection changes', async () => {
+    it('always sends orderBy orderId with filters', async () => {
       const user = userEvent.setup();
       renderWithAuth(<Reports />);
 
@@ -278,22 +400,192 @@ describe('Reports Component', () => {
         expect(screen.getByTestId('orders-table')).toBeInTheDocument();
       });
 
-      // Test that factories filter exists
-      expect(screen.getByText('Factories')).toBeInTheDocument();
+      // Add a fitter filter via the multi-select mock
+      const addFitterBtn = screen.getByTestId('multi-select-add-fitters');
+      await user.click(addFitterBtn);
 
-      // Since suppliers data is empty in test, just verify the filter works with 'all-factories'
-      const selectInputs = screen.getAllByTestId('select-input');
-      const supplierSelect = selectInputs.find((select: any) =>
-        select.innerHTML.includes('all-factories')
-      );
+      // The API call should include orderBy: 'orderId' along with the filter
+      await waitFor(() => {
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.orderBy).toBe('orderId');
+        expect(lastCall.order).toBe('desc');
+        expect(lastCall.filters.fitterName).toBeDefined();
+      });
+    });
+  });
 
-      if (supplierSelect) {
-        await user.selectOptions(supplierSelect, 'all-factories');
-        // Should not add supplier filter when 'all-factories' is selected
-        await waitFor(() => {
-          expect(mockGetEnrichedOrders).toHaveBeenCalled();
-        });
-      }
+  describe('Response Format Handling', () => {
+    it('handles data.data response format', async () => {
+      mockGetEnrichedOrders.mockResolvedValue({
+        data: mockOrders,
+        total: 150,
+        pages: 3,
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-count')).toHaveTextContent('Orders: 2');
+        expect(screen.getByTestId('total-items')).toHaveTextContent('Total: 150');
+        expect(screen.getByTestId('total-pages')).toHaveTextContent('Pages: 3');
+      });
+    });
+
+    it('handles hydra:member response format', async () => {
+      mockGetEnrichedOrders.mockResolvedValue({
+        'hydra:member': mockOrders,
+        'hydra:totalItems': 200,
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-count')).toHaveTextContent('Orders: 2');
+        expect(screen.getByTestId('total-items')).toHaveTextContent('Total: 200');
+      });
+    });
+
+    it('handles array response format', async () => {
+      mockGetEnrichedOrders.mockResolvedValue(mockOrders);
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-count')).toHaveTextContent('Orders: 2');
+      });
+    });
+
+    it('uses server total for pagination, not client count', async () => {
+      mockGetEnrichedOrders.mockResolvedValue({
+        data: mockOrders, // only 2 orders on this page
+        total: 500, // but 500 total on server
+        pages: 10,
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('total-items')).toHaveTextContent('Total: 500');
+        expect(screen.getByTestId('total-pages')).toHaveTextContent('Pages: 10');
+        expect(screen.getByTestId('items-per-page')).toHaveTextContent('PerPage: 50');
+      });
+    });
+
+    it('calculates totalPages from serverTotal when pages not provided', async () => {
+      mockGetEnrichedOrders.mockResolvedValue({
+        data: mockOrders,
+        total: 200,
+        // no pages field
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        // Math.ceil(200 / 50) = 4
+        expect(screen.getByTestId('total-pages')).toHaveTextContent('Pages: 4');
+      });
+    });
+  });
+
+  describe('Multi-Select Filter Interactions', () => {
+    it('applies fitter filter to API call', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      const addBtn = screen.getByTestId('multi-select-add-fitters');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.filters.fitterName).toBeDefined();
+      });
+    });
+
+    it('applies customer filter to API call', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      const addBtn = screen.getByTestId('multi-select-add-customers');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.filters.customerName).toBeDefined();
+      });
+    });
+
+    it('applies factory filter to API call', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      const addBtn = screen.getByTestId('multi-select-add-factories');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.filters.supplierName).toBeDefined();
+      });
+    });
+
+    it('applies sale type filter to API call', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      const addBtn = screen.getByTestId('multi-select-add-saletypes');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.filters.saleType).toBeDefined();
+      });
+    });
+
+    it('resets page to 1 when filter is applied', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      const addBtn = screen.getByTestId('multi-select-add-fitters');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.page).toBe(1);
+      });
+    });
+  });
+
+  describe('Status Filter', () => {
+    it('renders status filter dropdown', async () => {
+      renderWithAuth(<Reports />);
+
+      const statusFilter = screen.getByTestId('multi-select-order-statuses');
+      expect(statusFilter).toBeInTheDocument();
+    });
+
+    it('renders status filter label', async () => {
+      renderWithAuth(<Reports />);
+
+      expect(screen.getByText('Order statuses')).toBeInTheDocument();
     });
   });
 
@@ -305,7 +597,6 @@ describe('Reports Component', () => {
         expect(screen.getByTestId('orders-table')).toBeInTheDocument();
       });
 
-      // Test that Urgent filter exists (check for label specifically)
       const urgentLabels = screen.getAllByText('Urgent');
       expect(urgentLabels.length).toBeGreaterThan(0);
     });
@@ -317,7 +608,6 @@ describe('Reports Component', () => {
         expect(screen.getByTestId('orders-table')).toBeInTheDocument();
       });
 
-      // Check that urgent filter exists (multiple instances expected)
       const urgentElements = screen.getAllByText('Urgent');
       expect(urgentElements.length).toBeGreaterThanOrEqual(1);
     });
@@ -327,7 +617,6 @@ describe('Reports Component', () => {
     it('renders date range selection', async () => {
       renderWithAuth(<Reports />);
 
-      // The component has different date labels
       expect(screen.getByText('Ordered from')).toBeInTheDocument();
       expect(screen.getByText('Date from')).toBeInTheDocument();
       expect(screen.getByText('Payment from')).toBeInTheDocument();
@@ -336,7 +625,6 @@ describe('Reports Component', () => {
     it('renders calendar date pickers', async () => {
       renderWithAuth(<Reports />);
 
-      // Check for calendar buttons (there should be 6 - 2 each for ordered, date, and payment)
       const calendarButtons = screen.getAllByText('Select date');
       expect(calendarButtons.length).toBe(6); // 3 date ranges × 2 (from/to)
     });
@@ -350,40 +638,9 @@ describe('Reports Component', () => {
         expect(screen.getByTestId('search-input')).toBeInTheDocument();
       });
 
-      // Search is handled by the OrdersTable component, not directly by Reports
       const searchInput = screen.getByTestId('search-input');
       expect(searchInput).toBeInTheDocument();
       expect(searchInput).toHaveAttribute('placeholder', 'Search orders...');
-    });
-  });
-
-  describe('Combined Filters', () => {
-    it('renders multiple filter sections', async () => {
-      renderWithAuth(<Reports />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
-      });
-
-      // Check that multiple filter sections exist
-      expect(screen.getByText('Fitters')).toBeInTheDocument();
-      expect(screen.getByText('Order statuses')).toBeInTheDocument();
-      // Check for Urgent using getAllByText since it appears multiple times
-      const urgentElements = screen.getAllByText('Urgent');
-      expect(urgentElements.length).toBeGreaterThan(0);
-    });
-
-    it('renders search input and filters together', async () => {
-      renderWithAuth(<Reports />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
-      });
-
-      // Check that search and filters coexist
-      expect(screen.getByTestId('search-input')).toBeInTheDocument();
-      expect(screen.getByText('Order statuses')).toBeInTheDocument();
-      expect(screen.getByText('Date from')).toBeInTheDocument();
     });
   });
 
@@ -391,46 +648,40 @@ describe('Reports Component', () => {
     it('renders export button', async () => {
       renderWithAuth(<Reports />);
 
-      expect(screen.getByText('Export report')).toBeInTheDocument(); // Matches actual button text
+      expect(screen.getByText('Export report')).toBeInTheDocument();
     });
 
     it('triggers export when button is clicked', async () => {
       const user = userEvent.setup();
+      const { exportToXlsx } = require('@/utils/exportXlsx');
       renderWithAuth(<Reports />);
 
-      const exportButton = screen.getByText('Export report'); // Matches actual button text
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      const exportButton = screen.getByText('Export report');
       await user.click(exportButton);
 
-      // This would test the actual export functionality
-      // Implementation depends on the export method used
+      expect(exportToXlsx).toHaveBeenCalled();
     });
   });
 
   describe('Pagination', () => {
-    it('handles pagination state', async () => {
+    it('passes pagination with server total to OrdersTable', async () => {
+      mockGetEnrichedOrders.mockResolvedValue({
+        data: mockOrders,
+        total: 150,
+        pages: 3,
+      });
+
       renderWithAuth(<Reports />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+        expect(screen.getByTestId('total-items')).toHaveTextContent('Total: 150');
+        expect(screen.getByTestId('total-pages')).toHaveTextContent('Pages: 3');
+        expect(screen.getByTestId('items-per-page')).toHaveTextContent('PerPage: 50');
       });
-
-      // Pagination controls would be in the OrdersTable component
-      // Reports component should handle page changes and pass to API
-    });
-
-    it('maintains pagination state', async () => {
-      renderWithAuth(<Reports />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
-      });
-
-      // Check that pagination is passed to OrdersTable
-      expect(mockGetEnrichedOrders).toHaveBeenCalledWith(
-        expect.objectContaining({
-          page: 1,
-        })
-      );
     });
   });
 
@@ -445,11 +696,24 @@ describe('Reports Component', () => {
       });
     });
 
-    it('handles empty data gracefully', async () => {
+    it('handles empty data.data gracefully', async () => {
       mockGetEnrichedOrders.mockResolvedValue({
         data: [],
-        totalItems: 0,
-        totalPages: 0,
+        total: 0,
+        pages: 0,
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-count')).toHaveTextContent('Orders: 0');
+      });
+    });
+
+    it('handles empty hydra:member gracefully', async () => {
+      mockGetEnrichedOrders.mockResolvedValue({
+        'hydra:member': [],
+        'hydra:totalItems': 0,
       });
 
       renderWithAuth(<Reports />);
@@ -461,15 +725,58 @@ describe('Reports Component', () => {
   });
 
   describe('Filter Reset', () => {
-    it('shows reset button when filters are applied', async () => {
+    it('does not show reset button when no filters applied', async () => {
       renderWithAuth(<Reports />);
 
       await waitFor(() => {
         expect(screen.getByTestId('orders-table')).toBeInTheDocument();
       });
 
-      // Reset button should not be visible initially (no filters applied)
       expect(screen.queryByText('Reset All Filters')).not.toBeInTheDocument();
+    });
+
+    it('shows reset button when filters are applied', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      // Apply a filter
+      const addBtn = screen.getByTestId('multi-select-add-fitters');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Reset All Filters')).toBeInTheDocument();
+      });
+    });
+
+    it('clears all filters when reset button is clicked', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+
+      // Apply a filter
+      const addBtn = screen.getByTestId('multi-select-add-fitters');
+      await user.click(addBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Reset All Filters')).toBeInTheDocument();
+      });
+
+      // Click reset
+      const resetBtn = screen.getByText('Reset All Filters');
+      await user.click(resetBtn);
+
+      await waitFor(() => {
+        // After reset, the API should be called with empty filters
+        const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+        expect(lastCall.filters).toEqual({});
+      });
     });
   });
 
@@ -490,35 +797,12 @@ describe('Reports Component', () => {
       });
     });
 
-    it('limits functionality for fitter users', async () => {
+    it('renders reports for fitter users', async () => {
       renderWithAuth(<Reports />, 'fitter');
 
       await waitFor(() => {
         expect(screen.getByTestId('orders-table')).toBeInTheDocument();
       });
-
-      // Fitters might have limited export functionality
-      const exportButton = screen.queryByText('Export Report');
-      // This would depend on the role-based permissions implementation
-    });
-  });
-
-  describe('Performance Optimizations', () => {
-    it('makes initial API call on mount', async () => {
-      renderWithAuth(<Reports />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
-      });
-
-      // Verify initial API call
-      expect(mockGetEnrichedOrders).toHaveBeenCalledWith(
-        expect.objectContaining({
-          page: 1,
-          partial: true,
-          filters: {}
-        })
-      );
     });
   });
 });

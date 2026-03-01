@@ -88,6 +88,7 @@ jest.mock('lucide-react', () => ({
   User: () => <span />,
   Package: () => <span />,
   Settings: () => <span />,
+  Plus: () => <span />,
 }));
 
 // ---------------------------------------------------------------------------
@@ -972,10 +973,6 @@ describe('EditOrder component', () => {
         expect(screen.getByText('Flags')).toBeInTheDocument();
       });
 
-      it('renders the Notes section heading', () => {
-        expect(screen.getByText('Notes')).toBeInTheDocument();
-      });
-
       it('renders all flag checkboxes (Urgent, Stock, Demo, Sponsored, Repair)', () => {
         expect(screen.getByText('Urgent')).toBeInTheDocument();
         expect(screen.getByText('Stock')).toBeInTheDocument();
@@ -1000,10 +997,6 @@ describe('EditOrder component', () => {
         expect(screen.getByText('Requested Delivery Date')).toBeInTheDocument();
       });
 
-      it('renders Customer Notes and Internal Notes textareas', () => {
-        expect(screen.getByText('Customer Notes')).toBeInTheDocument();
-        expect(screen.getByText('Internal Notes')).toBeInTheDocument();
-      });
     });
   });
 

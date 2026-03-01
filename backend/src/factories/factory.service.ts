@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 import { FactoryEntity } from "./infrastructure/persistence/relational/entities/factory.entity";
 import { CreateFactoryDto } from "./dto/create-factory.dto";
 import { UpdateFactoryDto } from "./dto/update-factory.dto";
@@ -17,6 +17,7 @@ export class FactoryService {
   constructor(
     @InjectRepository(FactoryEntity)
     private readonly factoryRepository: Repository<FactoryEntity>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -57,7 +58,8 @@ export class FactoryService {
   }
 
   /**
-   * Find all factories with filtering and pagination
+   * Find all factories with filtering and pagination.
+   * JOINs with user view to get proper name, username, enabled, lastLogin.
    */
   async findAll(
     page: number = 1,
@@ -67,6 +69,12 @@ export class FactoryService {
   ): Promise<{ data: FactoryDto[]; total: number; pages: number }> {
     const queryBuilder = this.factoryRepository
       .createQueryBuilder("factory")
+      .leftJoinAndMapOne(
+        "factory._user",
+        "user",
+        "u",
+        "factory.user_id = u.legacy_id",
+      )
       .where("factory.deleted = 0");
 
     if (city) {
@@ -85,10 +93,27 @@ export class FactoryService {
     const factories = await queryBuilder
       .skip((page - 1) * limit)
       .take(limit)
-      .getMany();
+      .getRawAndEntities();
+
+    // Build DTOs with user data from raw results
+    const rawRows = factories.raw;
+    const entities = factories.entities;
+    const data = entities.map((factory, idx) => {
+      const raw = rawRows[idx];
+      const dto = this.toDto(factory);
+      dto.name = raw?.u_name || undefined;
+      dto.username = raw?.u_username || undefined;
+      dto.enabled = raw?.u_enabled ?? undefined;
+      dto.lastLogin = raw?.u_last_login || undefined;
+      // Use the actual user/credentials name instead of "Factory in {city}"
+      if (raw?.u_name) {
+        dto.displayName = raw.u_name;
+      }
+      return dto;
+    });
 
     return {
-      data: factories.map((factory) => this.toDto(factory)),
+      data,
       total,
       pages: Math.ceil(total / limit),
     };
@@ -215,6 +240,38 @@ export class FactoryService {
     return this.factoryRepository.count({
       where: { deleted: 0 },
     });
+  }
+
+  /**
+   * Toggle block status for a factory user.
+   * Flips the `blocked` column in the credentials table.
+   */
+  async toggleBlock(id: number): Promise<{ enabled: boolean }> {
+    const factory = await this.factoryRepository.findOne({
+      where: { id, deleted: 0 },
+    });
+
+    if (!factory) {
+      throw new NotFoundException("Factory not found");
+    }
+
+    if (!factory.userId) {
+      throw new NotFoundException("Factory has no linked user account");
+    }
+
+    // Toggle blocked in credentials table (blocked=0 means enabled, blocked=1 means blocked)
+    await this.dataSource.query(
+      `UPDATE credentials SET blocked = CASE WHEN blocked = 0 THEN 1 ELSE 0 END WHERE user_id = $1`,
+      [factory.userId],
+    );
+
+    // Read back new state
+    const result = await this.dataSource.query(
+      `SELECT blocked FROM credentials WHERE user_id = $1`,
+      [factory.userId],
+    );
+
+    return { enabled: result[0]?.blocked === 0 };
   }
 
   /**

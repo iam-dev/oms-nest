@@ -43,6 +43,7 @@ describe("OrderController", () => {
     fitterStock: false,
     customOrder: false,
     changed: null,
+    seatSizes: null,
     actualDeliveryDate: null,
     isOverdue: false,
     daysUntilDelivery: 105,

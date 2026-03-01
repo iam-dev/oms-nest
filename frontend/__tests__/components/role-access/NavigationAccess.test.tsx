@@ -154,12 +154,14 @@ describe('Navigation Access Control', () => {
         render(<Sidebar />);
 
         // Define expected navigation items for each role based on actual Sidebar nav items
+        // Note: "Saddle Modelling" comes from SaddlesSidebarSection (visible to USER, ADMIN, SUPERVISOR)
+        // "Account Management" comes from AccountManagementSidebarSection (visible to SUPERVISOR only)
         const expectedNavItems: Record<string, string[]> = {
-          [UserRole.USER]: ['Dashboard', 'Orders', 'Repairs', 'Find Saddle'],
-          [UserRole.FITTER]: ['Dashboard', 'Orders', 'My Saddle Stock', 'Available Saddle Stock', 'Customers', 'Repairs', 'Find Saddle'],
+          [UserRole.USER]: ['Dashboard', 'Orders', 'Saddle Modelling', 'Repairs', 'Find Saddle'],
+          [UserRole.FITTER]: ['Dashboard', 'Orders', 'Customers', 'Repairs', 'Find Saddle'],
           [UserRole.SUPPLIER]: ['Dashboard', 'Find Saddle'],
-          [UserRole.ADMIN]: ['Dashboard', 'Orders', 'All Saddle Stock', 'Customers', 'Fitters', 'Reports', 'Repairs', 'Find Saddle'],
-          [UserRole.SUPERVISOR]: ['Dashboard', 'Orders', 'All Saddle Stock', 'Factories', 'Customers', 'Fitters', 'Reports', 'Repairs', 'Find Saddle']
+          [UserRole.ADMIN]: ['Dashboard', 'Orders', 'Saddle Modelling', 'Customers', 'Fitters', 'Reports', 'Repairs', 'Find Saddle'],
+          [UserRole.SUPERVISOR]: ['Dashboard', 'Orders', 'Saddle Modelling', 'Factories', 'Customers', 'Fitters', 'Reports', 'Repairs', 'Find Saddle', 'Account Management']
         };
 
         const expectedItems = expectedNavItems[role] || [];

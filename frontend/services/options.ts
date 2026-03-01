@@ -5,6 +5,7 @@ import { logger } from '@/utils/logger';
 export interface Option {
   id: string;
   name: string;
+  type?: number;
   sequence?: number;
   active?: boolean;
   price?: number;

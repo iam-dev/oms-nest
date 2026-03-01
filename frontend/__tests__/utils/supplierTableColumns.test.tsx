@@ -29,9 +29,10 @@ describe('Supplier Table Columns', () => {
     it('generates all expected columns', () => {
       const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
 
-      expect(columns).toHaveLength(6);
+      expect(columns).toHaveLength(7);
 
       const columnKeys = columns.map(col => col.key);
+      expect(columnKeys).toContain('id');
       expect(columnKeys).toContain('name');
       expect(columnKeys).toContain('username');
       expect(columnKeys).toContain('city');
@@ -286,6 +287,7 @@ describe('Supplier Table Columns', () => {
       const columnKeys = columns.map(col => col.key);
 
       expect(columnKeys).toEqual([
+        'id',
         'name',
         'username',
         'city',

@@ -44,6 +44,7 @@ import { PresetModule } from "./presets/preset.module";
 // import { ProductModule } from "./products/product.module";
 import { CommentsModule } from "./comments/comments.module";
 import { AccessFilterGroupModule } from "./access-filter-groups/access-filter-group.module";
+import { ReportSavedFilterModule } from "./report-saved-filters/report-saved-filter.module";
 import { OrderProductSaddleModule } from "./order-product-saddles/order-product-saddle.module";
 import { CountryManagerModule } from "./country-managers/country-manager.module";
 import { WarehouseModule } from "./warehouses/warehouse.module";
@@ -111,28 +112,26 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     FactoryEmployeeModule,
     OrderModule,
     OrderLineModule,
-    OrderProductSaddleModule, // Order-Product relationships ✅ - enabled
+    OrderProductSaddleModule,
     EnrichedOrdersModule,
     AuditLoggingModule,
-    CommentsModule, // Comments module ✅ - enabled
-    AccessFilterGroupModule, // Access filter groups ✅ - enabled
-    CountryManagerModule, // Country managers ✅ - enabled
-    WarehouseModule, // Warehouses ✅ - enabled
-    // Product modules - temporarily disabled pending migration
-    BrandModule, // Simplified ✅ - enabled
-    // ModelModule, // Simplified ✅ - ready for enable after migration
-    LeathertypeModule, // Legacy entity ✅ - enabled
-    OptionModule, // Enhanced with 7-tier pricing ✅ - enabled
-    OptionItemModule, // Option items with 7-tier pricing ✅ - enabled
-    SaddleModule, // Master saddle/product entity ✅ - enabled
-    SaddleLeatherModule, // Saddle-leather associations ✅ - enabled
-    SaddleOptionsItemModule, // Saddle-option-item configurations ✅ - enabled
-    ExtraModule, // Extras with 7-tier pricing ✅ - enabled
-    PresetModule, // Legacy entity ✅ - enabled
-    // ProductModule, // Needs implementation
-    SaddleStockModule, // Saddle stock (fitter inventory) ✅ - enabled
-    SaddleExtraModule, // Saddle-extra associations ✅ - enabled
-    RlsModule, // Row Level Security ✅ - enabled
+    CommentsModule,
+    AccessFilterGroupModule,
+    ReportSavedFilterModule,
+    CountryManagerModule,
+    WarehouseModule,
+    BrandModule,
+    LeathertypeModule,
+    OptionModule,
+    OptionItemModule,
+    SaddleModule,
+    SaddleLeatherModule,
+    SaddleOptionsItemModule,
+    ExtraModule,
+    PresetModule,
+    SaddleStockModule,
+    SaddleExtraModule,
+    RlsModule,
   ],
   providers: [
     {

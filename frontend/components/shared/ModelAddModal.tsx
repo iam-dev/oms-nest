@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { logger } from '@/utils/logger';
-import { fetchBrands, Brand } from '@/services/brands';
 import { fetchFactories, Factory } from '@/services/factories';
+import { API_URL } from '@/services/api-config';
 import { SADDLE_TYPE_OPTIONS, FACTORY_REGIONS, FACTORY_REGION_KEYS, FactoryRegionKey } from '@/utils/saddleConstants';
 
 interface ModelAddModalProps {
@@ -33,7 +33,7 @@ export function ModelAddModal({ isOpen, onClose, onSave }: ModelAddModalProps) {
     factoryNl: 0,
     type: 0,
   });
-  const [brands, setBrands] = useState<Brand[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
   const [factories, setFactories] = useState<Factory[]>([]);
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingFactories, setLoadingFactories] = useState(false);
@@ -69,14 +69,16 @@ export function ModelAddModal({ isOpen, onClose, onSave }: ModelAddModalProps) {
   const loadBrands = async () => {
     setLoadingBrands(true);
     try {
-      logger.log('ModelAddModal: Loading brands...');
-      const data = await fetchBrands({
-        page: 1,
-        orderBy: 'name',
-        order: 'asc',
+      logger.log('ModelAddModal: Loading brands from saddles...');
+      const response = await fetch(`${API_URL}/api/v1/saddles/brands`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        credentials: 'include',
       });
-      logger.log('ModelAddModal: Loaded brands:', data);
-      setBrands(data['hydra:member'] || []);
+      if (!response.ok) throw new Error(`Failed to fetch brands: ${response.status}`);
+      const brandNames: string[] = await response.json();
+      logger.log('ModelAddModal: Loaded brands:', brandNames);
+      setBrands(brandNames);
     } catch (error) {
       logger.error('Error loading brands:', error);
       setError('Failed to load brands. Please try again.');
@@ -214,9 +216,9 @@ export function ModelAddModal({ isOpen, onClose, onSave }: ModelAddModalProps) {
                     No brands available
                   </div>
                 ) : (
-                  brands.map((brand) => (
-                    <SelectItem key={brand.id} value={brand.name}>
-                      {brand.name}
+                  brands.map((brandName) => (
+                    <SelectItem key={brandName} value={brandName}>
+                      {brandName}
                     </SelectItem>
                   ))
                 )}

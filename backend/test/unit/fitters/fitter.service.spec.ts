@@ -57,7 +57,7 @@ describe("FitterService", () => {
         {
           provide: DataSource,
           useValue: {
-            query: jest.fn(),
+            query: jest.fn().mockResolvedValue([]),
           },
         },
       ],

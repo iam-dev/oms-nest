@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
 import { CreateRepairDialog } from './CreateRepairDialog';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
-import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
+import { fetchOrderDetail, createDraftOrder, type OrderDetailData } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
 
@@ -86,6 +86,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   const [sendTo, setSendTo] = useState('fitter-factory');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
+  const [draftOrderId, setDraftOrderId] = useState<number | null>(null);
   const [isRepairOpen, setIsRepairOpen] = useState(false);
 
   useEffect(() => {
@@ -223,6 +224,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
       }
 
       alert(`Order status changed to "${orderStatus}"`);
+      onOrderChanged?.();
     } catch (err) {
       logger.error('Failed to change order status:', err);
       alert('Failed to change order status. The backend endpoint may not be implemented yet.');
@@ -275,8 +277,14 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
     }
   };
 
-  const handleDuplicateOrder = () => {
-    setIsDuplicateOpen(true);
+  const handleDuplicateOrder = async () => {
+    try {
+      const result = await createDraftOrder(orderId);
+      setDraftOrderId(result.orderId);
+      setIsDuplicateOpen(true);
+    } catch (err) {
+      logger.error('Failed to create draft order:', err);
+    }
   };
 
   // Loading state
@@ -341,9 +349,26 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
             </div>
             <span className="text-base">Order {displayOrderId}</span>
             {detailData?.repairSourceOrderId && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-2">
-                Repair of #{detailData.repairSourceOrderId}
-              </span>
+              <button
+                onClick={() => {
+                  onClose?.();
+                  window.location.href = `/orders?viewOrder=${detailData.repairSourceOrderId}`;
+                }}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-2 hover:bg-amber-200 cursor-pointer transition-colors"
+              >
+                Repair of #{detailData.repairSourceOrderId} &rarr;
+              </button>
+            )}
+            {detailData?.repairOrderIds && detailData.repairOrderIds.length > 0 && (
+              <button
+                onClick={() => {
+                  onClose?.();
+                  window.location.href = `/repairs?viewOrder=${detailData.repairOrderIds![0]}`;
+                }}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2 hover:bg-blue-200 cursor-pointer transition-colors"
+              >
+                Repair: #{detailData.repairOrderIds[0]} &rarr;
+              </button>
             )}
             <span className="text-xs font-normal ml-4">
               Order date: {orderDate}
@@ -359,6 +384,17 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
             <div className="grid grid-cols-3 gap-6">
               {/* Left Column - Saddle Information */}
               <div className="space-y-6">
+                {/* Your order reference - shown when reference exists */}
+                {detailData?.fitterReference && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold text-sm mb-4">Your order reference</h3>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-bold text-gray-700">Your reference</span>
+                      <span className="text-gray-900 italic">{detailData.fitterReference}</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Saddle information - Model & Leathertype */}
                 <div className="border rounded-lg p-4">
                   <h3 className="font-semibold text-sm mb-4">Saddle information</h3>
@@ -666,15 +702,22 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
         />
       </Dialog>
 
-      <Dialog open={isDuplicateOpen} onOpenChange={setIsDuplicateOpen}>
-        <ComprehensiveEditOrder
-          order={{ id: String(orderId), orderId: Number(displayOrderId) }}
-          isDuplicate={true}
-          onClose={() => {
-            setIsDuplicateOpen(false);
-            onOrderChanged?.();
-          }}
-        />
+      <Dialog open={isDuplicateOpen} onOpenChange={(open) => {
+        setIsDuplicateOpen(open);
+        if (!open) setDraftOrderId(null);
+      }}>
+        {draftOrderId && (
+          <ComprehensiveEditOrder
+            order={{ id: String(orderId), orderId: Number(displayOrderId) }}
+            isDuplicate={true}
+            draftOrderId={draftOrderId}
+            onClose={() => {
+              setIsDuplicateOpen(false);
+              setDraftOrderId(null);
+              onOrderChanged?.();
+            }}
+          />
+        )}
       </Dialog>
 
       <Dialog open={isRepairOpen} onOpenChange={setIsRepairOpen}>

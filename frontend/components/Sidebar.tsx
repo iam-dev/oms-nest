@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, ShoppingCart, BarChart3, Search, ChevronRight, ChevronLeft, Wrench, PackageCheck, Factory, Archive, Warehouse } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingCart, BarChart3, Search, ChevronRight, ChevronLeft, Wrench, Factory } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
@@ -33,27 +33,6 @@ const navItems: NavItem[] = [
     icon: ShoppingCart,
     href: '/orders',
     permission: 'ORDERS'
-  },
-  {
-    id: 'mySaddleStock',
-    label: 'My Saddle Stock',
-    icon: Archive,
-    href: '/my-saddle-stock',
-    permission: 'MY_SADDLE_STOCK'
-  },
-  {
-    id: 'availableSaddleStock',
-    label: 'Available Saddle Stock',
-    icon: PackageCheck,
-    href: '/available-saddle-stock',
-    permission: 'AVAILABLE_SADDLE_STOCK'
-  },
-  {
-    id: 'allSaddleStock',
-    label: 'All Saddle Stock',
-    icon: Warehouse,
-    href: '/saddle-stock',
-    permission: 'ALL_SADDLE_STOCK'
   },
   {
     id: 'factories',

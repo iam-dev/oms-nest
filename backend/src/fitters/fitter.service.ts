@@ -143,8 +143,35 @@ export class FitterService {
       country,
     });
 
+    const dtos = fitters.map((fitter) => this.toDto(fitter));
+
+    // Supplement DTOs with user data (name, username, enabled, lastLogin)
+    const userIds = dtos
+      .map((d) => d.userId)
+      .filter((uid): uid is number => uid !== undefined && uid !== null);
+
+    if (userIds.length > 0) {
+      const users = await this.dataSource.query(
+        `SELECT legacy_id, name, username, enabled, last_login FROM "user" WHERE legacy_id = ANY($1::int[])`,
+        [userIds],
+      );
+      const userMap = new Map<number, Record<string, unknown>>();
+      for (const u of users) {
+        userMap.set(u.legacy_id, u);
+      }
+      for (const dto of dtos) {
+        const user = dto.userId ? userMap.get(dto.userId) : undefined;
+        if (user) {
+          dto.name = user.name as string;
+          dto.username = user.username as string;
+          dto.enabled = user.enabled as boolean;
+          dto.lastLogin = user.last_login as Date;
+        }
+      }
+    }
+
     return {
-      data: fitters.map((fitter) => this.toDto(fitter)),
+      data: dtos,
       total,
       pages: Math.ceil(total / limit),
     };
@@ -222,6 +249,34 @@ export class FitterService {
 
   async getActiveCount(): Promise<number> {
     return this.fitterRepository.countActive();
+  }
+
+  /**
+   * Toggle block status for a fitter user.
+   * Flips the `blocked` column in the credentials table.
+   */
+  async toggleBlock(id: number): Promise<{ enabled: boolean }> {
+    const fitter = await this.fitterRepository.findById(id);
+    if (!fitter) {
+      throw new NotFoundException("Fitter not found");
+    }
+
+    if (!fitter.userId) {
+      throw new NotFoundException("Fitter has no linked user account");
+    }
+
+    // Toggle blocked in credentials table
+    await this.dataSource.query(
+      `UPDATE credentials SET blocked = CASE WHEN blocked = 0 THEN 1 ELSE 0 END WHERE user_id = $1`,
+      [fitter.userId],
+    );
+
+    const result = await this.dataSource.query(
+      `SELECT blocked FROM credentials WHERE user_id = $1`,
+      [fitter.userId],
+    );
+
+    return { enabled: result[0]?.blocked === 0 };
   }
 
   private toDto(fitter: Fitter): FitterDto {

@@ -8,6 +8,11 @@ export type SetSupplierHeaderFilters = (key: string, value: string) => void;
 export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, setHeaderFilters: SetSupplierHeaderFilters) {
   return [
     {
+      key: 'id',
+      title: 'ID',
+      render: (v: unknown) => String(v ?? ''),
+    },
+    {
       key: 'name',
       title: (
         <TableHeaderFilter

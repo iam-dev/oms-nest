@@ -79,6 +79,24 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Get("filter-options")
+  async getFilterOptions() {
+    try {
+      this.logger.log("Fetching filter options");
+      return await this.enrichedOrdersService.getFilterOptions();
+    } catch (error) {
+      this.logger.error("Failed to fetch filter options", error);
+      throw new HttpException(
+        {
+          message: "Failed to fetch filter options",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get("edit-options")
   async getEditFormOptions(@Query("saddleId") saddleIdStr?: string) {
     try {
@@ -222,6 +240,32 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Post("draft-from/:id")
+  async createDraftFromOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req: { user?: { legacyId?: number } },
+  ) {
+    try {
+      this.logger.log(`Creating draft from order ${id}`);
+      const userId = req.user?.legacyId;
+      const result = await this.enrichedOrdersService.createDraftFromOrder(
+        id,
+        userId,
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to create draft from order ${id}`, error);
+      throw new HttpException(
+        {
+          message: "Failed to create draft order",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Patch("update/:id")
   async updateOrder(
     @Param("id", ParseIntPipe) id: number,
@@ -326,6 +370,26 @@ export class EnrichedOrdersController {
       // Repair filter
       repair:
         query.repair !== undefined ? String(query.repair).trim() : undefined,
+      // Knee roll filter
+      kneeRoll: query.kneeRoll ? String(query.kneeRoll).trim() : undefined,
+      // Supplier name filter
+      supplierName: query.supplierName
+        ? String(query.supplierName).trim()
+        : undefined,
+      // Fitter country filter
+      fitterCountry: query.fitterCountry
+        ? String(query.fitterCountry).trim()
+        : undefined,
+      // Sale type filter
+      saleType: query.saleType ? String(query.saleType).trim() : undefined,
+      // Leather type filter
+      leatherType: query.leatherType
+        ? String(query.leatherType).trim()
+        : undefined,
+      // Fitter reference filter
+      fitterReference: query.fitterReference
+        ? String(query.fitterReference).trim()
+        : undefined,
     };
   }
 
@@ -342,6 +406,9 @@ export class EnrichedOrdersController {
     if (!orderBy) return undefined;
 
     const allowedColumns = [
+      "id",
+      "orderId",
+      "order_time",
       "created_at",
       "urgency",
       "customer_name",
@@ -350,6 +417,7 @@ export class EnrichedOrdersController {
       "model_name",
       "special_notes",
       "status",
+      "order_status",
     ];
 
     return allowedColumns.includes(orderBy) ? orderBy : undefined;

@@ -10,6 +10,7 @@ jest.mock('@/services/enrichedOrders', () => ({
   fetchOrderDetail: jest.fn(),
   updateOrder: jest.fn(),
   createOrderFromPayload: jest.fn(),
+  createDraftOrder: jest.fn(),
 }));
 
 jest.mock('@/services/api-config', () => ({
@@ -93,7 +94,7 @@ jest.mock('@/utils/logger', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const { fetchOrderDetail } = require('@/services/enrichedOrders');
+const { fetchOrderDetail, createDraftOrder } = require('@/services/enrichedOrders');
 
 const mockOrderDetail = {
   id: 42,
@@ -317,6 +318,7 @@ describe('OrderDetails component', () => {
   // -------------------------------------------------------------------------
   it('opens ComprehensiveEditOrder in duplicate mode when Duplicate order button is clicked', async () => {
     fetchOrderDetail.mockResolvedValue(mockOrderDetail);
+    createDraftOrder.mockResolvedValue({ success: true, orderId: 42 });
 
     render(<OrderDetails order={defaultOrder} onClose={jest.fn()} />);
 
@@ -348,6 +350,7 @@ describe('OrderDetails component', () => {
   // -------------------------------------------------------------------------
   it('only shows one ComprehensiveEditOrder at a time', async () => {
     fetchOrderDetail.mockResolvedValue(mockOrderDetail);
+    createDraftOrder.mockResolvedValue({ success: true, orderId: 42 });
 
     render(<OrderDetails order={defaultOrder} onClose={jest.fn()} />);
 

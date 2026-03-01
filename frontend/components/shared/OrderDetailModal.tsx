@@ -111,7 +111,7 @@ export function OrderDetailModal({ order, isOpen, onClose }: OrderDetailModalPro
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-700">Fitter Name:</span>
-                  <span className="text-gray-900 italic">{order.fitterName || getFitterName(order) || '-'}</span>
+                  <span className="text-gray-900 italic">{getFitterName(order) || '-'}</span>
                 </div>
               </div>
             </div>

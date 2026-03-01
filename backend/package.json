@@ -28,6 +28,7 @@
     "start": "npx nest start",
     "start:dev": "npx nest start --watch",
     "start:dev:local": "env-cmd -f .env.local npx nest start --watch",
+    "start:dev:staging": "env-cmd -f .env.staging npx nest start --watch",
     "start:swc": "npx nest start -b swc -w",
     "start:debug": "npx nest start --debug --watch",
     "start:prod": "node dist/main",

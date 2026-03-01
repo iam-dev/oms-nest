@@ -327,12 +327,13 @@ export async function fetchEntities({
     // Special handling for factories entity to map backend fields to Supplier interface
     if (entity === 'factories' && result.data && Array.isArray(result.data)) {
       // Transform NestJS response format to Hydra format with mapped fields
-      result['hydra:member'] = result.data.map((factory: any) => ({
+      // Backend now JOINs with user table to provide name, username, enabled, lastLogin
+      result['hydra:member'] = result.data.map((factory: Record<string, unknown>) => ({
         ...factory,
-        name: factory.displayName || factory.name || `Factory ${factory.id}`,
+        name: factory.name || factory.displayName || `Factory ${factory.id}`,
         email: factory.emailaddress || factory.email,
-        enabled: factory.isActive ?? true,
-        username: factory.emailaddress?.split('@')[0] || `factory${factory.id}`,
+        enabled: factory.enabled ?? factory.isActive ?? true,
+        username: factory.username || `factory${factory.id}`,
       }));
       result['hydra:totalItems'] = result.total || result.data.length;
       // Remove the original data property to avoid confusion
@@ -340,13 +341,14 @@ export async function fetchEntities({
     }
 
     // Special handling for fitters entity to transform NestJS response to Hydra format
+    // Backend now JOINs with user table to provide name, username, enabled, lastLogin
     if (entity === 'fitters' && result.data && Array.isArray(result.data)) {
-      result['hydra:member'] = result.data.map((fitter: any) => ({
+      result['hydra:member'] = result.data.map((fitter: Record<string, unknown>) => ({
         ...fitter,
-        name: fitter.displayName || `Fitter ${fitter.id}`,
+        name: fitter.name || fitter.displayName || `Fitter ${fitter.id}`,
         email: fitter.emailaddress || fitter.email,
-        enabled: fitter.isActive ?? true,
-        username: fitter.emailaddress?.split('@')[0] || `fitter${fitter.id}`,
+        enabled: fitter.enabled ?? fitter.isActive ?? true,
+        username: fitter.username || `fitter${fitter.id}`,
       }));
       result['hydra:totalItems'] = result.total || result.data.length;
       delete result.data;
