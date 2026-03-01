@@ -464,9 +464,16 @@ export class AuthService {
     }
 
     // Password reset functionality
-    await this.sessionService.deleteByUserId({
-      userId: user.id,
-    });
+    // Session deletion may fail if session table doesn't exist (staging DB)
+    try {
+      await this.sessionService.deleteByUserId({
+        userId: user.id,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete sessions for user ${user.id}: ${error.message}`,
+      );
+    }
 
     await this.usersService.update(user.id, { password });
   }

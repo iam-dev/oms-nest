@@ -48,8 +48,8 @@ export default function Customers() {
         page: currentPage,
         searchTerm,
         filters,
-        orderBy: 'name',
-        order: 'asc'
+        orderBy: 'id',
+        order: 'desc'
       });
 
       const customers = data['hydra:member'] || [];
@@ -123,10 +123,6 @@ export default function Customers() {
     );
   };
 
-  const addCustomerOptimistically = (newCustomer: Customer) => {
-    setCustomers(currentCustomers => [...currentCustomers, newCustomer]);
-  };
-
   const removeCustomerOptimistically = (customerId: string) => {
     setCustomers(currentCustomers =>
       currentCustomers.filter(customer => customer.id !== customerId)
@@ -189,22 +185,16 @@ export default function Customers() {
   // Handle create customer (for create modal)
   const handleCreateCustomerSave = async (newCustomer: Partial<Customer>) => {
     try {
-      const result = await createCustomer(newCustomer);
+      await createCustomer(newCustomer);
 
-      // Add to list optimistically if we have a result
-      if (result && result.id) {
-        addCustomerOptimistically(result);
-      }
+      // Refetch to show the new customer in correct sort order
+      await fetchCustomersData();
 
       setShowCreateModal(false);
       setSelectedCustomer(null);
       logger.log(`Customer "${newCustomer.name}" created successfully`);
     } catch (error) {
       logger.error('Error creating customer:', error);
-
-      // Revert any optimistic changes by refetching
-      fetchCustomersData();
-
       throw error; // Re-throw to show error in modal
     }
   };

@@ -140,6 +140,51 @@ export class MailService {
     });
   }
 
+  async welcomeFitter(
+    mailData: MailData<{ hash: string; tokenExpires: number }>,
+  ): Promise<void> {
+    const title = "Welcome to Order My Saddle";
+    const text1 =
+      "An account has been created for you. To get started, please set your password by clicking the link below.";
+    const text2 = "This will allow you to log in and manage your orders.";
+    const text3 = "If you did not expect this email, please ignore it.";
+    const text4 = "This link will expire in 30 minutes.";
+
+    const url = new URL(
+      this.configService.getOrThrow("app.frontendDomain", {
+        infer: true,
+      }) + "/password-change",
+    );
+    url.searchParams.set("hash", mailData.data.hash);
+    url.searchParams.set("expires", mailData.data.tokenExpires.toString());
+
+    await this.mailerService.sendMail({
+      to: mailData.to,
+      subject: title,
+      text: `${url.toString()} ${title}`,
+      templatePath: path.join(
+        this.configService.getOrThrow("app.workingDirectory", {
+          infer: true,
+        }),
+        "src",
+        "mail",
+        "mail-templates",
+        "account",
+        "welcome-fitter.hbs",
+      ),
+      context: {
+        title,
+        url: url.toString(),
+        actionTitle: "Set Your Password",
+        app_name: this.configService.get("app.name", { infer: true }),
+        text1,
+        text2,
+        text3,
+        text4,
+      },
+    });
+  }
+
   // OMS Business Logic Email Methods
 
   async orderApproved(
