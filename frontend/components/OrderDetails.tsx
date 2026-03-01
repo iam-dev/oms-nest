@@ -20,6 +20,7 @@ import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
 import { CreateRepairDialog } from './CreateRepairDialog';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
 import { fetchOrderDetail, createDraftOrder, type OrderDetailData } from '@/services/enrichedOrders';
+import { exportOrderToXlsx } from '@/utils/exportXlsx';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
 
@@ -88,6 +89,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
   const [draftOrderId, setDraftOrderId] = useState<number | null>(null);
   const [isRepairOpen, setIsRepairOpen] = useState(false);
+  const [copiedSaddle, setCopiedSaddle] = useState(false);
 
   useEffect(() => {
     if (!orderId) {
@@ -287,6 +289,40 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
     }
   };
 
+  const handleCopySaddleInfo = async () => {
+    const lines: string[] = [];
+    if (saddleModel) lines.push(`Model\t${saddleModel}`);
+    if (saddleLeatherType) lines.push(`Leathertype\t${saddleLeatherType}`);
+    if (serialNumber) lines.push(`SerialNumber\t${serialNumber}`);
+    for (const spec of saddleSpecs) {
+      lines.push(`${spec.optionName}\t${spec.displayValue || ''}`);
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopiedSaddle(true);
+      setTimeout(() => setCopiedSaddle(false), 2000);
+    } catch {
+      logger.error('Failed to copy saddle info to clipboard');
+    }
+  };
+
+  const handleExportToXlsx = async () => {
+    await exportOrderToXlsx({
+      orderId: displayOrderId,
+      orderDate,
+      orderStatus,
+      currency: detailData?.currency || 'USD',
+      saddleModel,
+      saddleLeatherType,
+      serialNumber,
+      saddleSpecs,
+      fitter: fitterData,
+      customer: customerData,
+      price: priceData,
+      notes: specialNotes,
+    });
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -397,7 +433,17 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
 
                 {/* Saddle information - Model & Leathertype */}
                 <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold text-sm mb-4">Saddle information</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-sm">Saddle information</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] px-2"
+                      onClick={handleCopySaddleInfo}
+                    >
+                      {copiedSaddle ? 'Copied!' : 'Copy saddle info'}
+                    </Button>
+                  </div>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="font-bold text-gray-700">Model:</span>
@@ -679,6 +725,14 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
               onClick={handleDuplicateOrder}
             >
               Duplicate order
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={handleExportToXlsx}
+            >
+              Export to Excel
             </Button>
             <Button
               variant="outline"

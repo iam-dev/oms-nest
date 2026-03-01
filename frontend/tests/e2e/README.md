@@ -66,11 +66,7 @@ npm run test:e2e:run         # Uses our custom test runner with prerequisites ch
 ## Test Configuration
 
 ### Authentication
-Tests use these predefined users:
-- **Admin**: `laurengilbert` / `welcomeLauren!@`
-- **User**: `testuser` / `testpass123`
-
-Update credentials in `shared/auth-helpers.ts` if needed.
+Tests use credentials from environment variables. Update credentials in `shared/auth-helpers.ts` or via `.env` if needed.
 
 ### API Endpoints Tested
 

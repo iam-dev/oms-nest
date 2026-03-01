@@ -7,11 +7,13 @@ import {
   Param,
   Delete,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
   ParseIntPipe,
 } from "@nestjs/common";
+import { DataSource } from "typeorm";
 import {
   ApiTags,
   ApiOperation,
@@ -45,7 +47,10 @@ import { AuditLog } from "../audit-logging/decorators";
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(
+    private readonly customerService: CustomerService,
+    private readonly dataSource: DataSource,
+  ) {}
 
   @Post()
   @AuditLog({ entity: "Customer" })
@@ -122,7 +127,21 @@ export class CustomerController {
     @Query("city") city?: string,
     @Query("country") country?: string,
     @Query("fitterId") fitterId?: number,
+    @Req()
+    req?: { user?: { legacyId?: number; role?: { id: number; name: string } } },
   ): Promise<{ data: CustomerDto[]; total: number; pages: number }> {
+    // Auto-filter for fitter users: show customers who have orders with this fitter
+    let orderFitterId: number | undefined;
+    if (req?.user?.role?.id === RoleEnum.fitter && req.user.legacyId) {
+      const fitterRow = await this.dataSource.query(
+        "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
+        [req.user.legacyId],
+      );
+      if (fitterRow[0]?.id) {
+        orderFitterId = fitterRow[0].id;
+      }
+    }
+
     return this.customerService.findAll(
       page ? +page : undefined,
       limit ? +limit : undefined,
@@ -133,6 +152,7 @@ export class CustomerController {
       fitterId ? +fitterId : undefined,
       search,
       id ? +id : undefined,
+      orderFitterId,
     );
   }
 

@@ -43,6 +43,7 @@ describe("EnrichedOrdersController", () => {
       getEnrichedOrders: jest.fn(),
       getOrderDetail: jest.fn(),
       updateOrder: jest.fn(),
+      getFitterIdByUserId: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -74,7 +75,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      const result = await controller.getEnrichedOrders(query as any);
+      const result = await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(result).toMatchObject({
@@ -100,7 +103,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -123,7 +128,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -140,7 +147,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -161,7 +170,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -180,7 +191,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -205,7 +218,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -237,7 +252,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(response);
 
       // Act
-      const result = await controller.getEnrichedOrders(query as any);
+      const result = await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(result.hasPrev).toBe(true);
@@ -261,7 +278,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(response);
 
       // Act
-      const result = await controller.getEnrichedOrders(query as any);
+      const result = await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(result.hasNext).toBe(false);
@@ -273,9 +292,11 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockRejectedValue(new Error("Database error"));
 
       // Act & Assert
-      await expect(controller.getEnrichedOrders(query as any)).rejects.toThrow(
-        HttpException,
-      );
+      await expect(
+        controller.getEnrichedOrders(query as any, {
+          user: { legacyId: 1, role: { id: 2, name: "admin" } },
+        }),
+      ).rejects.toThrow(HttpException);
     });
   });
 
@@ -411,7 +432,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -433,7 +456,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -455,7 +480,9 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act
-      await controller.getEnrichedOrders(query as any);
+      await controller.getEnrichedOrders(query as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
 
       // Assert
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
@@ -476,17 +503,23 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act & Assert
-      await controller.getEnrichedOrders(query1 as any);
+      await controller.getEnrichedOrders(query1 as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
         expect.objectContaining({ partial: true }),
       );
 
-      await controller.getEnrichedOrders(query2 as any);
+      await controller.getEnrichedOrders(query2 as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
         expect.objectContaining({ partial: true }),
       );
 
-      await controller.getEnrichedOrders(query3 as any);
+      await controller.getEnrichedOrders(query3 as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
         expect.objectContaining({ partial: false }),
       );
@@ -501,20 +534,133 @@ describe("EnrichedOrdersController", () => {
       service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
 
       // Act & Assert
-      await controller.getEnrichedOrders(query1 as any);
+      await controller.getEnrichedOrders(query1 as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
         expect.objectContaining({ orderDirection: "ASC" }),
       );
 
-      await controller.getEnrichedOrders(query2 as any);
+      await controller.getEnrichedOrders(query2 as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
         expect.objectContaining({ orderDirection: "DESC" }),
       );
 
-      await controller.getEnrichedOrders(query3 as any);
+      await controller.getEnrichedOrders(query3 as any, {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      });
       expect(service.getEnrichedOrders).toHaveBeenCalledWith(
         expect.objectContaining({ orderDirection: "DESC" }),
       );
+    });
+  });
+
+  describe("fitter auto-filtering", () => {
+    const fitterReq = {
+      user: { legacyId: 42, role: { id: 1, name: "fitter" } },
+    };
+    const adminReq = {
+      user: { legacyId: 1, role: { id: 2, name: "admin" } },
+    };
+    const supervisorReq = {
+      user: { legacyId: 5, role: { id: 5, name: "supervisor" } },
+    };
+
+    it("should auto-inject fitterId when user is a fitter", async () => {
+      service.getFitterIdByUserId.mockResolvedValue(99);
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders({} as any, fitterReq);
+
+      expect(service.getFitterIdByUserId).toHaveBeenCalledWith(42);
+      expect(service.getEnrichedOrders).toHaveBeenCalledWith(
+        expect.objectContaining({ fitterId: 99 }),
+      );
+    });
+
+    it("should NOT inject fitterId for admin users", async () => {
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders({} as any, adminReq);
+
+      expect(service.getFitterIdByUserId).not.toHaveBeenCalled();
+      expect(service.getEnrichedOrders).toHaveBeenCalledWith(
+        expect.not.objectContaining({ fitterId: expect.anything() }),
+      );
+    });
+
+    it("should NOT inject fitterId for supervisor users", async () => {
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders({} as any, supervisorReq);
+
+      expect(service.getFitterIdByUserId).not.toHaveBeenCalled();
+    });
+
+    it("should handle fitter with no matching fitter record gracefully", async () => {
+      service.getFitterIdByUserId.mockResolvedValue(null);
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders({} as any, fitterReq);
+
+      expect(service.getFitterIdByUserId).toHaveBeenCalledWith(42);
+      // fitterId should NOT be set since lookup returned null
+      expect(service.getEnrichedOrders).toHaveBeenCalledWith(
+        expect.not.objectContaining({ fitterId: expect.anything() }),
+      );
+    });
+
+    it("should handle fitter user without legacyId", async () => {
+      const noLegacyReq = {
+        user: { role: { id: 1, name: "fitter" } },
+      };
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders({} as any, noLegacyReq);
+
+      expect(service.getFitterIdByUserId).not.toHaveBeenCalled();
+    });
+
+    it("should override user-supplied fitterId for fitter users", async () => {
+      service.getFitterIdByUserId.mockResolvedValue(99);
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      // Fitter tries to pass a different fitterId to see other fitter's orders
+      await controller.getEnrichedOrders({ fitterId: 999 } as any, fitterReq);
+
+      // Should be overridden with their actual fitter ID
+      expect(service.getEnrichedOrders).toHaveBeenCalledWith(
+        expect.objectContaining({ fitterId: 99 }),
+      );
+    });
+
+    it("should preserve other query params when injecting fitterId", async () => {
+      service.getFitterIdByUserId.mockResolvedValue(99);
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders(
+        { page: 2, limit: 25, orderStatus: "Approved" } as any,
+        fitterReq,
+      );
+
+      expect(service.getEnrichedOrders).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fitterId: 99,
+          page: 2,
+          limit: 25,
+          orderStatus: "Approved",
+        }),
+      );
+    });
+
+    it("should handle missing user in request", async () => {
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders({} as any, {});
+
+      expect(service.getFitterIdByUserId).not.toHaveBeenCalled();
     });
   });
 });

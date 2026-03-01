@@ -45,7 +45,7 @@ const roleMap: Record<string, string[]> = {
   '/saddle-stock': ['admin', 'supervisor'],
   '/repairs': ['admin', 'user', 'supervisor', 'fitter'],
   '/models': ['admin', 'user', 'supervisor'],
-  '/customers': ['admin', 'user', 'supervisor'],
+  '/customers': ['admin', 'user', 'supervisor', 'fitter'],
   '/fitters': ['admin', 'user', 'supervisor'],
   '/brands': ['admin', 'user', 'supervisor'],
   '/leathertypes': ['admin', 'user', 'supervisor'],

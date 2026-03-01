@@ -365,10 +365,20 @@ export class OrderService {
   }
 
   /**
-   * Get order statistics
-   * Uses raw SQL to query the legacy table structure
+   * Expose the TypeORM EntityManager for raw queries in the controller layer.
+   * Used to resolve fitter IDs from the fitters table without adding a full
+   * FitterRepository dependency to this service.
    */
-  async getOrderStats(): Promise<{
+  getEntityManager() {
+    return this.orderRepository.manager;
+  }
+
+  /**
+   * Get order statistics
+   * Uses raw SQL to query the legacy table structure.
+   * When fitterId is provided, all counts are scoped to that fitter's orders.
+   */
+  async getOrderStats(fitterId?: number): Promise<{
     totalOrders: number;
     urgentOrders: number;
     overdueOrders: number;
@@ -377,15 +387,21 @@ export class OrderService {
   }> {
     const manager = this.orderRepository.manager;
 
+    // Build the optional fitter filter clause and query params
+    const fitterClause = fitterId ? ` AND fitter_id = $1` : "";
+    const fitterParams = fitterId ? [fitterId] : [];
+
     // Total orders (excluding soft-deleted)
     const totalResult = await manager.query(
-      `SELECT COUNT(*) as count FROM orders WHERE deleted_at IS NULL`,
+      `SELECT COUNT(*) as count FROM orders WHERE deleted_at IS NULL${fitterClause}`,
+      fitterParams,
     );
     const totalOrders = parseInt(totalResult[0]?.count || "0", 10);
 
     // Urgent orders (rushed is boolean in oms_nest database)
     const urgentResult = await manager.query(
-      `SELECT COUNT(*) as count FROM orders WHERE deleted_at IS NULL AND rushed = true`,
+      `SELECT COUNT(*) as count FROM orders WHERE deleted_at IS NULL AND rushed = true${fitterClause}`,
+      fitterParams,
     );
     const urgentOrders = parseInt(urgentResult[0]?.count || "0", 10);
 
@@ -396,7 +412,8 @@ export class OrderService {
       `SELECT COUNT(*) as count FROM orders
        WHERE deleted_at IS NULL
        AND order_status < 8
-       AND order_time < EXTRACT(EPOCH FROM NOW() - INTERVAL '30 days')`,
+       AND order_time < EXTRACT(EPOCH FROM NOW() - INTERVAL '30 days')${fitterClause}`,
+      fitterParams,
     );
     const overdueOrders = parseInt(overdueResult[0]?.count || "0", 10);
 
@@ -407,15 +424,17 @@ export class OrderService {
         COALESCE(price_shipping, 0) + COALESCE(price_tax, 0) +
         COALESCE(price_additional, 0) - COALESCE(price_tradein, 0) -
         COALESCE(price_discount, 0) - COALESCE(price_deposit, 0)
-       ) as avg FROM orders WHERE deleted_at IS NULL`,
+       ) as avg FROM orders WHERE deleted_at IS NULL${fitterClause}`,
+      fitterParams,
     );
     const averageValue = parseFloat(avgResult[0]?.avg || "0");
 
     // Status counts (order_status is integer column)
     const statusResults = await manager.query(
       `SELECT order_status as status, COUNT(*) as count
-       FROM orders WHERE deleted_at IS NULL
+       FROM orders WHERE deleted_at IS NULL${fitterClause}
        GROUP BY order_status`,
+      fitterParams,
     );
 
     // Map legacy status codes to frontend-expected status names

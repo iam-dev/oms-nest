@@ -12,11 +12,14 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { OrderSearchMessage } from '@/components/OrderSearchMessage';
 import { getOrderTableColumns } from '@/utils/orderTableColumns';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
+import { useUserRole } from '@/hooks/useUserRole';
 import { logger } from '@/utils/logger';
 import type { Order } from '@/components/Orders';
 import type { Column } from '@/components/shared/DataTable';
 
 export default function RepairsPage() {
+  const { isFitter } = useUserRole();
+
   // Dialog state
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -187,7 +190,7 @@ export default function RepairsPage() {
         <EntityTable
           entities={processedOrders}
           columns={(() => {
-            const orderCols = getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes);
+            const orderCols = getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes, { hideFitter: isFitter });
             // Insert "ORIG. ORDER" column after the ID column (index 0)
             return [checkboxColumn, orderCols[0], origOrderColumn, ...orderCols.slice(1)];
           })()}

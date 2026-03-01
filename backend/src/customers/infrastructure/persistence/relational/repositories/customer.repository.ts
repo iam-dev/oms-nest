@@ -177,6 +177,7 @@ export class CustomerRepository implements ICustomerRepository {
     page: number;
     limit: number;
     fitterId?: number;
+    orderFitterId?: number;
     name?: string;
     email?: string;
     country?: string;
@@ -184,8 +185,18 @@ export class CustomerRepository implements ICustomerRepository {
     search?: string;
     id?: number;
   }): Promise<{ customers: Customer[]; total: number }> {
-    const { page, limit, fitterId, name, email, country, city, search, id } =
-      options;
+    const {
+      page,
+      limit,
+      fitterId,
+      orderFitterId,
+      name,
+      email,
+      country,
+      city,
+      search,
+      id,
+    } = options;
 
     const queryBuilder = this.repository
       .createQueryBuilder("customer")
@@ -214,6 +225,13 @@ export class CustomerRepository implements ICustomerRepository {
 
     if (fitterId !== undefined) {
       queryBuilder.andWhere("customer.fitter_id = :fitterId", { fitterId });
+    }
+
+    if (orderFitterId !== undefined) {
+      queryBuilder.andWhere(
+        "customer.id IN (SELECT DISTINCT customer_id FROM orders WHERE fitter_id = :orderFitterId AND deleted_at IS NULL)",
+        { orderFitterId },
+      );
     }
 
     if (name) {

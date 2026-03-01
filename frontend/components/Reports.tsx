@@ -651,7 +651,7 @@ export default function Reports() {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" onClick={() => {
+        <Button variant="destructive" className="bg-[#8B0000]" onClick={() => {
           setSaveFilterName('');
           setSaveFilterDefault(false);
           setSaveError('');

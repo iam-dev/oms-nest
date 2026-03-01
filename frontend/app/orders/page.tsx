@@ -11,4 +11,4 @@ const Orders = dynamic(() => import('@/components/Orders'), {
   ),
 });
 
-export default withPageRequiredAuth(Orders, { roles: [UserRole.ADMIN, UserRole.USER, UserRole.SUPERVISOR] });
+export default withPageRequiredAuth(Orders, { roles: [UserRole.ADMIN, UserRole.USER, UserRole.SUPERVISOR, UserRole.FITTER] });

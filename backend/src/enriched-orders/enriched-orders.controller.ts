@@ -40,7 +40,11 @@ export class EnrichedOrdersController {
   constructor(private readonly enrichedOrdersService: EnrichedOrdersService) {}
 
   @Get()
-  async getEnrichedOrders(@Query() query: EnrichedOrdersQueryDto) {
+  async getEnrichedOrders(
+    @Query() query: EnrichedOrdersQueryDto,
+    @Req()
+    req: { user?: { legacyId?: number; role?: { id: number; name: string } } },
+  ) {
     try {
       this.logger.log(
         `Fetching enriched orders with query: ${JSON.stringify(query)}`,
@@ -48,6 +52,19 @@ export class EnrichedOrdersController {
 
       // Validate and sanitize query parameters
       const sanitizedQuery = this.sanitizeQuery(query);
+
+      // Auto-filter for fitter users: only show their own orders
+      if (req.user?.role?.id === RoleEnum.fitter && req.user?.legacyId) {
+        const fitterId = await this.enrichedOrdersService.getFitterIdByUserId(
+          req.user.legacyId,
+        );
+        if (fitterId) {
+          sanitizedQuery.fitterId = fitterId;
+          this.logger.log(
+            `Fitter user ${req.user.legacyId} auto-filtered to fitterId=${fitterId}`,
+          );
+        }
+      }
 
       const result =
         await this.enrichedOrdersService.getEnrichedOrders(sanitizedQuery);
@@ -71,7 +88,6 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to fetch enriched orders",
-          details: error.message,
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -89,7 +105,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to fetch filter options",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -113,7 +129,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to fetch edit form options",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -140,7 +156,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to fetch order detail",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -181,7 +197,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to bulk update order statuses",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -209,7 +225,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to update order status",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -232,7 +248,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to create order",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -258,7 +274,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to create draft order",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -294,7 +310,7 @@ export class EnrichedOrdersController {
       throw new HttpException(
         {
           message: "Failed to update order",
-          details: error.message,
+
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,

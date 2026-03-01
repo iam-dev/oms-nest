@@ -200,15 +200,14 @@ export class FitterService {
     );
 
     // Update the linked user's password if provided
+    // "user" is a VIEW on the credentials table, so update credentials directly
     if (updateFitterDto.password && fitter.userId) {
-      const user = await this.userRepository.findOne({
-        where: { legacyId: fitter.userId },
-      });
-      if (user) {
-        const salt = await bcrypt.genSalt();
-        user.password = await bcrypt.hash(updateFitterDto.password, salt);
-        await this.userRepository.save(user);
-      }
+      const salt = await bcrypt.genSalt();
+      const hashedPassword = await bcrypt.hash(updateFitterDto.password, salt);
+      await this.dataSource.query(
+        `UPDATE credentials SET password_hash = $1 WHERE user_id = $2`,
+        [hashedPassword, fitter.userId],
+      );
     }
 
     const savedFitter = await this.fitterRepository.save(fitter);

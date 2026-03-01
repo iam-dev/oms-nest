@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { logger } from '@/utils/logger';
+import { useUserRole } from '@/hooks/useUserRole';
 import { getFitterName, getCustomerName, getSupplierName, getUrgent } from '../utils/orderHydration';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { seatSizes, statuses } from '../utils/orderConstants';
@@ -22,7 +23,7 @@ import {
 import { getOrderStatusStats } from '../services/dashboard';
 import { getEnrichedOrders, getAllStatusValues, universalSearch } from '@/services/enrichedOrders';
 import { useDebounce } from '@/hooks/useDebounce';
-import { updateOrder } from '@/services/api';
+import { API_URL } from '@/services/api-config';
 import DashboardOrderStatusFlow from './DashboardOrderStatusFlow';
 import Reports from '@/components/Reports';
 import { OrderDetails } from '@/components/OrderDetails';
@@ -48,6 +49,7 @@ const orderStatusData = {
 };
 
 export default function Dashboard() {
+  const { isFitter } = useUserRole();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [orderStatusStats, setOrderStatusStats] = useState<any>(null);
   const [totalOrders, setTotalOrders] = useState<number>(0);
@@ -285,14 +287,15 @@ export default function Dashboard() {
   }, [orders]);
 
   const columns = getOrderTableColumns(
-    headerFilters, 
+    headerFilters,
     (key, value) => {
       setHeaderFilters(prev => ({ ...prev, [key]: value }));
       // Reset to page 1 when filters change
       setCurrentPage(1);
     },
     dynamicFactories,
-    dynamicSeatSizes
+    dynamicSeatSizes,
+    { hideFitter: isFitter }
   );
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -325,28 +328,33 @@ export default function Dashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleApproveOrder = async (order: any, approvalNotes?: string) => {
     try {
-      logger.log('Approving order:', order.orderId || order.id, 'with notes:', approvalNotes);
-      
-      // Update the order status to APPROVED in the database
-      const updateData = {
-        orderStatus: 'APPROVED',
-        approvalNotes,
-        approvedAt: new Date().toISOString(),
-        approvedBy: 'current_user' // In a real app, this would be the current user
-      };
-      
-      // Make API call to update the order in the database
-      const updatedOrder = await updateOrder(order.id, updateData);
-      
-      // Update local state with the response from API
-      setOrders(prevOrders => 
-        prevOrders.map(o => 
-          o.id === order.id || o.orderId === order.orderId 
-            ? { ...o, ...updatedOrder }
+      const oid = order.orderId || order.id;
+      logger.log('Approving order:', oid, 'with notes:', approvalNotes);
+
+      const response = await fetch(`${API_URL}/api/v1/enriched_orders/update-status/${oid}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'Approved' }),
+      });
+      if (!response.ok) {
+        const fallbackResponse = await fetch(`${API_URL}/api/v1/orders/${oid}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: 'Approved' }),
+        });
+        if (!fallbackResponse.ok) throw new Error('Failed to update status');
+      }
+
+      setOrders(prevOrders =>
+        prevOrders.map(o =>
+          o.id === order.id || o.orderId === order.orderId
+            ? { ...o, orderStatus: 'Approved', status: 'Approved' }
             : o
         )
       );
-      
+
       logger.log('Order approved successfully in database');
     } catch (error) {
       logger.error('Error approving order:', error);
