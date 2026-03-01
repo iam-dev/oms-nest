@@ -115,7 +115,7 @@ export async function updateFitter(id: number, fitterData: Partial<Fitter>): Pro
   logger.log('Updating fitter with ID:', id, 'Data:', fitterData);
 
   const response = await fetch(`${API_URL}/api/v1/fitters/${id}`, {
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(fitterData),

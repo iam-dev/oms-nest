@@ -338,7 +338,8 @@ export class OrderController {
   @ApiOperation({
     summary: "Get order statistics",
     description:
-      "Retrieve overall order statistics including counts and averages",
+      "Retrieve overall order statistics including counts and averages. " +
+      "When called by a fitter, results are scoped to that fitter's orders only.",
   })
   @ApiResponse({
     status: 200,
@@ -358,14 +359,30 @@ export class OrderController {
       },
     },
   })
-  async getStats(): Promise<{
+  async getStats(
+    @Req()
+    req: {
+      user?: { legacyId?: number; role?: { id: number; name: string } };
+    },
+  ): Promise<{
     totalOrders: number;
     urgentOrders: number;
     overdueOrders: number;
     averageValue: number;
     statusCounts: Record<string, number>;
   }> {
-    return this.orderService.getOrderStats();
+    let fitterId: number | undefined;
+
+    if (req.user?.role?.id === RoleEnum.fitter && req.user.legacyId) {
+      const manager = this.orderService.getEntityManager();
+      const fitterRow = await manager.query<{ id: number }[]>(
+        `SELECT id FROM fitters WHERE user_id = $1 LIMIT 1`,
+        [req.user.legacyId],
+      );
+      fitterId = fitterRow[0]?.id;
+    }
+
+    return this.orderService.getOrderStats(fitterId);
   }
 
   @Get("customer/:customerId")

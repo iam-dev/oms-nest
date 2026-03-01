@@ -155,6 +155,18 @@ export class EnrichedOrdersService {
     private readonly productionCacheService: ProductionCacheService,
   ) {}
 
+  /**
+   * Look up the fitter record ID for a given legacy user ID (credentials.user_id).
+   * Returns null if no fitter is associated with this user.
+   */
+  async getFitterIdByUserId(legacyUserId: number): Promise<number | null> {
+    const result = await this.dataSource.query(
+      "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
+      [legacyUserId],
+    );
+    return result[0]?.id ?? null;
+  }
+
   async getEnrichedOrders(
     query: EnrichedOrdersQueryDto,
   ): Promise<EnrichedOrdersResponse> {

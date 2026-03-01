@@ -14,6 +14,7 @@ import { OrderSearchMessage } from './OrderSearchMessage';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { fetchCompleteOrderData } from '../utils/orderProcessing';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
+import { useUserRole } from '@/hooks/useUserRole';
 import { logger } from '@/utils/logger';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -70,6 +71,8 @@ export default function Orders() {
   const [orderDataError, setOrderDataError] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [useComprehensiveEdit, setUseComprehensiveEdit] = useState(true);
+
+  const { isFitter } = useUserRole();
 
   // All filter, search, pagination, and data fetching logic
   const {
@@ -231,7 +234,7 @@ export default function Orders() {
       <div className="space-y-4">
         <EntityTable
           entities={processedOrders}
-          columns={[checkboxColumn, ...getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes)]}
+          columns={[checkboxColumn, ...getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes, { hideFitter: isFitter })]}
           onView={(order) => handleViewDetails(order as unknown as Order)}
           onEdit={(order) => handleEditOrder(order as unknown as Order)}
           onDelete={(order) => handleDeleteOrder(order as unknown as Order)}

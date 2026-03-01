@@ -134,18 +134,7 @@ npm test __tests__/integration/UserJourney.test.tsx
 
 ### Test User Credentials
 
-The test suite includes mock users for each role:
-
-```typescript
-// Test credentials (for reference only)
-const testUsers = {
-  admin: { username: 'laurengilbert', password: 'welcomeLauren!@' },
-  supervisor: { username: 'supervisor', password: 'supervisor123' },
-  fitter: { username: 'fitter', password: 'fitter123' },
-  supplier: { username: 'supplier', password: 'supplier123' },
-  user: { username: 'user', password: 'user123' }
-};
-```
+Test credentials are stored in environment variables. See `.env.example` for the required format.
 
 ### Role Permission Matrix
 

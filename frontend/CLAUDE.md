@@ -225,7 +225,7 @@ kubectl apply -f ../kube/production/ -n oms-production
 
 ### API PHP backend Login
 **Authentication**
-Note: When using zsh, we need to escape the ! in the password:
 ```bash
-curl -X POST "http://localhost:8888/login" -H "Content-Type: application/x-www-form-urlencoded" -d "username=laurengilbert&password=welcomeLauren\!@" -v
+curl -X POST "http://localhost:8888/login" -H "Content-Type: application/x-www-form-urlencoded" -d "username=$TEST_ADMIN_USER&password=$TEST_ADMIN_PASS" -v
 ```
+Set `TEST_ADMIN_USER` and `TEST_ADMIN_PASS` from your `.env` file.

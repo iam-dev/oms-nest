@@ -87,6 +87,7 @@ describe("OrderController", () => {
       findOrdersForProduction: jest.fn(),
       findOrdersRequiringDeposit: jest.fn(),
       getOrderStats: jest.fn(),
+      getEntityManager: jest.fn(),
       getCustomerOrderSummary: jest.fn(),
       update: jest.fn(),
       cancel: jest.fn(),
@@ -421,16 +422,18 @@ describe("OrderController", () => {
   });
 
   describe("getStats", () => {
+    const adminReq = { user: { legacyId: 1, role: { id: 2, name: "admin" } } };
+
     it("should return order statistics", async () => {
       // Arrange
       orderService.getOrderStats.mockResolvedValue(mockOrderStats);
 
       // Act
-      const result = await controller.getStats();
+      const result = await controller.getStats(adminReq);
 
       // Assert
       expect(result).toEqual(mockOrderStats);
-      expect(orderService.getOrderStats).toHaveBeenCalledWith();
+      expect(orderService.getOrderStats).toHaveBeenCalledWith(undefined);
       expect(orderService.getOrderStats).toHaveBeenCalledTimes(1);
     });
   });
@@ -609,14 +612,17 @@ describe("OrderController", () => {
         averageValue: 0,
         statusCounts: {},
       };
+      const nonFitterReq = {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      };
       orderService.getOrderStats.mockResolvedValue(zeroStats);
 
       // Act
-      const result = await controller.getStats();
+      const result = await controller.getStats(nonFitterReq);
 
       // Assert
       expect(result).toEqual(zeroStats);
-      expect(orderService.getOrderStats).toHaveBeenCalledWith();
+      expect(orderService.getOrderStats).toHaveBeenCalledWith(undefined);
     });
   });
 });

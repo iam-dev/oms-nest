@@ -100,7 +100,6 @@ export class SaddleStockController {
       throw new HttpException(
         {
           message: "Failed to fetch saddle stock",
-          details: error.message,
           timestamp: new Date().toISOString(),
         },
         HttpStatus.INTERNAL_SERVER_ERROR,

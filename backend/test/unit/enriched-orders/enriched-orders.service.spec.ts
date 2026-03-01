@@ -292,4 +292,37 @@ describe("EnrichedOrdersService", () => {
       expect(result).toEqual({ success: true, orderId: 100 });
     });
   });
+
+  describe("getFitterIdByUserId", () => {
+    it("should return fitter ID when fitter record exists", async () => {
+      const mockDataSource = (service as any).dataSource;
+      mockDataSource.query.mockResolvedValue([{ id: 99 }]);
+
+      const result = await service.getFitterIdByUserId(42);
+
+      expect(result).toBe(99);
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
+        [42],
+      );
+    });
+
+    it("should return null when no fitter record exists", async () => {
+      const mockDataSource = (service as any).dataSource;
+      mockDataSource.query.mockResolvedValue([]);
+
+      const result = await service.getFitterIdByUserId(999);
+
+      expect(result).toBeNull();
+    });
+
+    it("should return null when query returns undefined id", async () => {
+      const mockDataSource = (service as any).dataSource;
+      mockDataSource.query.mockResolvedValue([{ id: undefined }]);
+
+      const result = await service.getFitterIdByUserId(42);
+
+      expect(result).toBeNull();
+    });
+  });
 });

@@ -123,6 +123,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Form state - order overview
   const [orderReference, setOrderReference] = useState('');
   const [orderStatus, setOrderStatus] = useState('');
+  const [statusChanging, setStatusChanging] = useState(false);
   const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
 
   const orderId = order?.orderId || Number(order?.id) || 0;
@@ -412,6 +413,35 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     }
   };
 
+  // Handle order status change
+  const handleChangeOrderStatus = async () => {
+    if (!orderStatus || !orderId) return;
+    setStatusChanging(true);
+    try {
+      const response = await fetch(`${API_URL}/api/v1/enriched_orders/update-status/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: orderStatus }),
+      });
+      if (!response.ok) {
+        const fallbackResponse = await fetch(`${API_URL}/api/v1/orders/${orderId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: orderStatus }),
+        });
+        if (!fallbackResponse.ok) throw new Error('Failed to update status');
+      }
+      toast.success(`Order status changed to "${orderStatus}"`);
+    } catch (err) {
+      logger.error('Failed to change order status:', err);
+      toast.error('Failed to change order status.');
+    } finally {
+      setStatusChanging(false);
+    }
+  };
+
   // Get display value for a saddle option
   const getOptionDisplayValue = (optionId: number): string => {
     const spec = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
@@ -489,26 +519,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         </div>
       </DialogHeader>
 
-      {/* Persistent Status Bar - visible across all steps */}
-      {order && (
-        <div className="bg-white border-b px-6 py-2 flex items-center gap-4 flex-shrink-0">
-          <span className="text-sm font-medium text-gray-700">Status:</span>
-          <Select value={orderStatus} onValueChange={setOrderStatus}>
-            <SelectTrigger className="w-[200px] h-8 text-xs">
-              <SelectValue placeholder="Select status..." />
-            </SelectTrigger>
-            <SelectContent>
-              {editOptions?.statuses?.map(s => (
-                <SelectItem key={s.id} value={s.name}>
-                  {s.name}
-                </SelectItem>
-              )) || (
-                <SelectItem value={orderStatus}>{orderStatus}</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
 
       {/* Step Indicator */}
       <div className="bg-white border-b px-6 py-4">
@@ -574,7 +584,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                 <h3 className="font-semibold mb-4 text-lg">Saddle Specifications</h3>
                 <div className="space-y-3">
                   {/* Fitter */}
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">
                       Fitter: <span className="text-red-500">*</span>
                     </Label>
@@ -588,7 +598,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                             {f.fullName || f.username}
                           </SelectItem>
                         )) || (
-                          <SelectItem value={fitterId}>
+                          fitterId && <SelectItem value={fitterId}>
                             {orderDetail.fitterName || 'Unknown'}
                           </SelectItem>
                         )}
@@ -597,7 +607,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   </div>
 
                   {/* Flags */}
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Stock:</Label>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="stock" checked={isStock} onCheckedChange={(c) => setIsStock(!!c)} />
@@ -605,7 +615,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Demo:</Label>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="demo" checked={isDemo} onCheckedChange={(c) => setIsDemo(!!c)} />
@@ -613,7 +623,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Repair:</Label>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="repair" checked={isRepair} onCheckedChange={(c) => setIsRepair(!!c)} />
@@ -621,7 +631,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Urgent:</Label>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="urgent" checked={isUrgent} onCheckedChange={(c) => setIsUrgent(!!c)} />
@@ -629,7 +639,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Sponsored:</Label>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="sponsored" checked={isSponsored} onCheckedChange={(c) => setIsSponsored(!!c)} />
@@ -638,7 +648,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   </div>
 
                   {/* Brand & Model */}
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">
                       Brand & Model: <span className="text-red-500">*</span>
                     </Label>
@@ -658,7 +668,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                             {s.displayName}
                           </SelectItem>
                         )) || (
-                          <SelectItem value={saddleId}>
+                          saddleId && <SelectItem value={saddleId}>
                             {saddleDisplay}
                           </SelectItem>
                         )}
@@ -667,7 +677,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   </div>
 
                   {/* Preset */}
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Preset:</Label>
                     <Select
                       defaultValue="none"
@@ -699,7 +709,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   </div>
 
                   {/* Leathertype */}
-                  <div className="grid grid-cols-[160px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[160px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">
                       Leathertype: <span className="text-red-500">*</span>
                     </Label>
@@ -714,7 +724,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                               {lt.name}
                             </SelectItem>
                           )) || (
-                            <SelectItem value={leatherId}>
+                            leatherId && <SelectItem value={leatherId}>
                               {orderDetail.leatherName || 'Unknown'}
                             </SelectItem>
                           )}
@@ -738,7 +748,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
                     return (
                       <div key={opt.optionId}>
-                        <div className="grid grid-cols-[160px,1fr] gap-2 items-start">
+                        <div className="grid grid-cols-[160px_1fr] gap-2 items-start">
                           <Label className="text-sm font-medium pt-2">
                             {opt.optionName}: <span className="text-red-500">*</span>
                           </Label>
@@ -799,8 +809,54 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                 </div>
               </div>
 
-              {/* Right Column - Pricing */}
-              <div className="bg-white rounded-lg border p-4 min-w-0 overflow-hidden self-start">
+              {/* Right Column - Order Status & Pricing */}
+              <div className="space-y-6 self-start">
+                {/* Order Status */}
+                {order && (
+                  <div className="bg-white rounded-lg border p-4">
+                    <h3 className="font-semibold text-sm mb-4">Order Status</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-gray-700 text-sm">Order Status:</span>
+                        <Select value={orderStatus} onValueChange={setOrderStatus}>
+                          <SelectTrigger className="w-[180px] h-8 text-xs">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Unordered">Unordered</SelectItem>
+                            <SelectItem value="Ordered">Ordered</SelectItem>
+                            <SelectItem value="Approved">Approved</SelectItem>
+                            <SelectItem value="In Production P1">In Production P1</SelectItem>
+                            <SelectItem value="On hold">On hold</SelectItem>
+                            <SelectItem value="Shipped to Fitter">Shipped to Fitter</SelectItem>
+                            <SelectItem value="On trial">On trial</SelectItem>
+                            <SelectItem value="Completed sale">Completed sale</SelectItem>
+                            <SelectItem value="Changed">Changed</SelectItem>
+                            <SelectItem value="In Production P2">In Production P2</SelectItem>
+                            <SelectItem value="In Production P3">In Production P3</SelectItem>
+                            <SelectItem value="Shipped to Customer">Shipped to Customer</SelectItem>
+                            <SelectItem value="Inventory Aiken">Inventory Aiken</SelectItem>
+                            <SelectItem value="Inventory UK">Inventory UK</SelectItem>
+                            <SelectItem value="Inventory HOLLAND">Inventory HOLLAND</SelectItem>
+                            <SelectItem value="Awaiting Client Confirmation">Awaiting Client Confirmation</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="bg-[#8B0000] h-8 text-xs"
+                        onClick={handleChangeOrderStatus}
+                        disabled={statusChanging}
+                      >
+                        {statusChanging ? 'Changing...' : 'Change orderstatus'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pricing */}
+                <div className="bg-white rounded-lg border p-4 min-w-0 overflow-hidden">
                 <h3 className="font-semibold mb-3 text-base">Pricing</h3>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -879,6 +935,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   </div>
                 </div>
               </div>
+              </div>
             </div>
           )}
 
@@ -928,49 +985,49 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     <div className="border-t pt-4 mt-4">
                       <h4 className="text-sm font-semibold text-[#8B0000] mb-3">Customer information</h4>
                       <div className="space-y-3">
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Name:</Label>
                           <Input
                             value={selectedCustomer.name || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, name: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Address:</Label>
                           <Input
                             value={selectedCustomer.address || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, address: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">City:</Label>
                           <Input
                             value={selectedCustomer.city || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, city: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">State:</Label>
                           <Input
                             value={selectedCustomer.state || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, state: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Zipcode:</Label>
                           <Input
                             value={selectedCustomer.zipcode || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, zipcode: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Country:</Label>
                           <Input
                             value={selectedCustomer.country || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, country: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Email:</Label>
                           <Input
                             type="email"
@@ -978,14 +1035,14 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, email: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Phone:</Label>
                           <Input
                             value={selectedCustomer.phone || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, phone: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                           <Label className="text-sm font-medium">Cell:</Label>
                           <Input
                             value={selectedCustomer.cell || ''}
@@ -1003,7 +1060,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                 {/* Your order reference */}
                 <div className="bg-white rounded-lg border p-6">
                   <h3 className="font-semibold mb-4 text-lg">Your order reference</h3>
-                  <div className="grid grid-cols-[100px,1fr] gap-2 items-center">
+                  <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                     <Label className="text-sm font-medium">Your reference:</Label>
                     <Input
                       value={orderReference}
@@ -1017,23 +1074,23 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   <h3 className="font-semibold mb-2 text-lg">Shipping address</h3>
                   <p className="text-sm text-gray-500 mb-4">(if different than under &quot;customer information or Inventory&quot;)</p>
                   <div className="space-y-3">
-                    <div className="grid grid-cols-[80px,1fr] gap-2 items-center">
+                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">Name:</Label>
                       <Input value={shipName} onChange={(e) => setShipName(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[80px,1fr] gap-2 items-center">
+                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">Address:</Label>
                       <Input value={shipAddress} onChange={(e) => setShipAddress(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[80px,1fr] gap-2 items-center">
+                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">City:</Label>
                       <Input value={shipCity} onChange={(e) => setShipCity(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[80px,1fr] gap-2 items-center">
+                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">Country:</Label>
                       <Input value={shipCountry} onChange={(e) => setShipCountry(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[80px,1fr] gap-2 items-center">
+                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">Zipcode:</Label>
                       <Input value={shipZipcode} onChange={(e) => setShipZipcode(e.target.value)} />
                     </div>

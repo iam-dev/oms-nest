@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException, ConflictException } from "@nestjs/common";
+import { DataSource } from "typeorm";
 import { CustomerController } from "../../../src/customers/customer.controller";
 import { CustomerService } from "../../../src/customers/customer.service";
 import { CreateCustomerDto } from "../../../src/customers/dto/create-customer.dto";
@@ -10,6 +11,7 @@ import { CustomerStatus } from "../../../src/customers/domain/value-objects/cust
 describe("CustomerController", () => {
   let controller: CustomerController;
   let customerService: jest.Mocked<CustomerService>;
+  let mockDataSource: { query: jest.Mock };
 
   const mockCustomerDto: CustomerDto = {
     id: 1001,
@@ -40,9 +42,16 @@ describe("CustomerController", () => {
       getCustomerCountByFitter: jest.fn(),
     };
 
+    mockDataSource = {
+      query: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CustomerController],
-      providers: [{ provide: CustomerService, useValue: mockCustomerService }],
+      providers: [
+        { provide: CustomerService, useValue: mockCustomerService },
+        { provide: DataSource, useValue: mockDataSource },
+      ],
     }).compile();
 
     controller = module.get<CustomerController>(CustomerController);
@@ -158,6 +167,7 @@ describe("CustomerController", () => {
         2001,
         undefined,
         undefined,
+        undefined,
       );
       expect(customerService.findAll).toHaveBeenCalledTimes(1);
     });
@@ -177,6 +187,7 @@ describe("CustomerController", () => {
       // Assert
       expect(result).toEqual(paginatedResponse);
       expect(customerService.findAll).toHaveBeenCalledWith(
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -560,6 +571,169 @@ describe("CustomerController", () => {
       // Assert
       expect(result.data).toHaveLength(1000);
       expect(result.total).toBe(1000);
+    });
+  });
+
+  describe("fitter auto-filtering via orders", () => {
+    it("should pass orderFitterId for fitter users", async () => {
+      // Arrange
+      const paginatedResponse = { data: [mockCustomerDto], total: 1, pages: 1 };
+      customerService.findAll.mockResolvedValue(paginatedResponse);
+      mockDataSource.query.mockResolvedValue([{ id: 312 }]);
+
+      const fitterReq = {
+        user: { legacyId: 448, role: { id: 1, name: "fitter" } },
+      };
+
+      // Act
+      const result = await controller.findAll(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        fitterReq,
+      );
+
+      // Assert
+      expect(result).toEqual(paginatedResponse);
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
+        [448],
+      );
+      expect(customerService.findAll).toHaveBeenCalledWith(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        312,
+      );
+    });
+
+    it("should not pass orderFitterId for admin users", async () => {
+      // Arrange
+      const paginatedResponse = { data: [mockCustomerDto], total: 1, pages: 1 };
+      customerService.findAll.mockResolvedValue(paginatedResponse);
+
+      const adminReq = {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      };
+
+      // Act
+      await controller.findAll(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        adminReq,
+      );
+
+      // Assert
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+      expect(customerService.findAll).toHaveBeenCalledWith(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it("should not override explicit fitterId query param for fitter users", async () => {
+      // Arrange: fitter user passes explicit fitterId query param
+      const paginatedResponse = { data: [mockCustomerDto], total: 1, pages: 1 };
+      customerService.findAll.mockResolvedValue(paginatedResponse);
+      mockDataSource.query.mockResolvedValue([{ id: 312 }]);
+
+      const fitterReq = {
+        user: { legacyId: 448, role: { id: 1, name: "fitter" } },
+      };
+
+      // Act: pass fitterId=999 as query param
+      await controller.findAll(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        999,
+        fitterReq,
+      );
+
+      // Assert: fitterId query param preserved, orderFitterId also set
+      expect(customerService.findAll).toHaveBeenCalledWith(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        999,
+        undefined,
+        undefined,
+        312,
+      );
+    });
+
+    it("should handle fitter with no fitter record gracefully", async () => {
+      // Arrange
+      const paginatedResponse = { data: [], total: 0, pages: 0 };
+      customerService.findAll.mockResolvedValue(paginatedResponse);
+      mockDataSource.query.mockResolvedValue([]); // No fitter record
+
+      const fitterReq = {
+        user: { legacyId: 999, role: { id: 1, name: "fitter" } },
+      };
+
+      // Act
+      await controller.findAll(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        fitterReq,
+      );
+
+      // Assert: orderFitterId should be undefined since no fitter record found
+      expect(customerService.findAll).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
     });
   });
 });

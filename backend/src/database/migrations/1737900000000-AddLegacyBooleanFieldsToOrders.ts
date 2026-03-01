@@ -68,6 +68,9 @@ export class AddLegacyBooleanFieldsToOrders1737900000000
           [col],
         );
         for (const idx of indexes) {
+          if (!/^[a-zA-Z0-9_]+$/.test(idx.indexname)) {
+            throw new Error(`Invalid index name: ${idx.indexname}`);
+          }
           await queryRunner.query(`DROP INDEX IF EXISTS "${idx.indexname}"`);
         }
       }

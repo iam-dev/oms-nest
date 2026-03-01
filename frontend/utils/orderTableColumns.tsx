@@ -6,13 +6,20 @@ import { StatusBadge } from '../components/shared/StatusBadge';
 export type HeaderFilters = Record<string, string>;
 export type SetHeaderFilters = (key: string, value: string) => void;
 
+export interface OrderTableColumnOptions {
+  hideFitter?: boolean;
+}
+
 export function getOrderTableColumns(
   headerFilters: HeaderFilters,
   setHeaderFilters: SetHeaderFilters,
   factories: Array<{label: string, value: string}> = [],
-  dynamicSeatSizes: string[] = []
+  dynamicSeatSizes: string[] = [],
+  options: OrderTableColumnOptions = {}
 ) {
-  return [
+  const { hideFitter = false } = options;
+
+  const allColumns = [
     {
       key: 'id',
       title: (
@@ -352,4 +359,6 @@ export function getOrderTableColumns(
       },
     },
   ];
+
+  return hideFitter ? allColumns.filter(col => col.key !== 'fitter') : allColumns;
 }

@@ -765,7 +765,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
               {/* Left Column - Saddle Specifications */}
               <div className="bg-white rounded-lg border p-4">
                 <h3 className="font-semibold mb-4 text-lg">Saddle Specifications</h3>
-                <div className="grid grid-cols-[120px,1fr] gap-4 items-start">
+                <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
                   <Label className="text-sm font-medium pt-2">
                     Fitter: <span className="text-red-500">*</span>
                   </Label>

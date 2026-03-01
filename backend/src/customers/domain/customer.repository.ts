@@ -35,6 +35,7 @@ export abstract class ICustomerRepository {
     page: number;
     limit: number;
     fitterId?: number;
+    orderFitterId?: number;
     name?: string;
     email?: string;
     country?: string;
