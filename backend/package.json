@@ -190,6 +190,9 @@
         "ajv": ">=8.18.0",
         "ajv-keywords": "^5.1.0"
       }
+    },
+    "rimraf": {
+      "minimatch": ">=10.2.3"
     }
   },
   "engines": {
