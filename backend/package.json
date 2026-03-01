@@ -179,7 +179,6 @@
     "tar": ">=7.5.7",
     "fast-xml-parser": ">=5.3.4",
     "lodash": ">=4.17.23",
-    "minimatch": ">=10.2.3",
     "basic-ftp": ">=5.2.0",
     "serialize-javascript": ">=7.0.3",
     "@angular-devkit/core": {
