@@ -12,6 +12,7 @@ export const SCREEN_PERMISSIONS = {
   CUSTOMERS: [UserRole.FITTER, UserRole.ADMIN, UserRole.SUPERVISOR],
   FITTERS: [UserRole.ADMIN, UserRole.SUPERVISOR],
   REPORTS: [UserRole.ADMIN, UserRole.SUPERVISOR],
+  MY_VIEWS: [UserRole.ADMIN, UserRole.SUPERVISOR],
   
   // Saddle Modeling
   SADDLE_MODELING: [UserRole.USER, UserRole.ADMIN, UserRole.SUPERVISOR],

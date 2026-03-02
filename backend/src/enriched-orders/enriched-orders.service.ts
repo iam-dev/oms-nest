@@ -142,6 +142,19 @@ export interface UpdateOrderDto {
   repairSourceOrderId?: number;
 }
 
+export interface SaddleSpecRow {
+  orderId: number;
+  optionId: number;
+  optionName: string;
+  displayValue: string;
+}
+
+export interface SaddleSpecResult {
+  optionId: number;
+  optionName: string;
+  displayValue: string;
+}
+
 @Injectable()
 export class EnrichedOrdersService {
   private readonly logger = new Logger(EnrichedOrdersService.name);
@@ -2191,6 +2204,56 @@ export class EnrichedOrdersService {
         `Failed to create draft from order ${sourceOrderId}`,
         error,
       );
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async getBatchSaddleSpecs(
+    orderIds: number[],
+  ): Promise<Record<number, SaddleSpecResult[]>> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const leatherOptionIds = [5, 6, 10, 11, 12, 13, 14, 21, 22];
+      const rows: SaddleSpecRow[] = await queryRunner.query(
+        `
+        SELECT
+          oi.order_id as "orderId",
+          oi.option_id as "optionId",
+          o.name as "optionName",
+          CASE
+            WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
+            WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
+            ELSE oitm.name
+          END as "displayValue"
+        FROM orders_info oi
+        LEFT JOIN options o ON oi.option_id = o.id
+        LEFT JOIN options_items oitm ON oi.option_item_id = oitm.id
+        LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
+          AND oi.option_id = ANY($2::int[])
+        WHERE oi.order_id = ANY($1::int[])
+        ORDER BY oi.order_id, o.sequence
+        `,
+        [orderIds, leatherOptionIds],
+      );
+
+      const result: Record<number, SaddleSpecResult[]> = {};
+      for (const row of rows) {
+        const oid = row.orderId;
+        if (!result[oid]) result[oid] = [];
+        result[oid].push({
+          optionId: row.optionId,
+          optionName: row.optionName,
+          displayValue: row.displayValue,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error("Failed to fetch batch saddle specs", error);
       throw error;
     } finally {
       await queryRunner.release();

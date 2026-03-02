@@ -141,6 +141,7 @@ jest.mock('lucide-react', () => ({
   Wrench: () => <div data-testid="wrench-icon">Wrench Icon</div>,
   PackageCheck: () => <div data-testid="package-check-icon">PackageCheck Icon</div>,
   Factory: () => <div data-testid="factory-icon">Factory Icon</div>,
+  LayoutList: () => <div data-testid="layout-list-icon">LayoutList Icon</div>,
   Archive: () => <div data-testid="archive-icon">Archive Icon</div>,
   Warehouse: () => <div data-testid="warehouse-icon">Warehouse Icon</div>,
   UserCog: () => <div data-testid="user-cog-icon">UserCog Icon</div>,

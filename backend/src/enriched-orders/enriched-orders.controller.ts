@@ -318,6 +318,55 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Get("batch-saddle-specs")
+  @Roles(RoleEnum.admin, RoleEnum.supervisor)
+  async getBatchSaddleSpecs(@Query("orderIds") orderIdsStr: string) {
+    try {
+      if (!orderIdsStr || !orderIdsStr.trim()) {
+        throw new HttpException(
+          { message: "orderIds query parameter is required" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const orderIds = orderIdsStr
+        .split(",")
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !isNaN(n) && n > 0);
+
+      if (orderIds.length === 0) {
+        throw new HttpException(
+          { message: "No valid order IDs provided" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (orderIds.length > 200) {
+        throw new HttpException(
+          { message: "Maximum 200 order IDs per request" },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      this.logger.log(
+        `Fetching batch saddle specs for ${orderIds.length} orders`,
+      );
+      return await this.enrichedOrdersService.getBatchSaddleSpecs(orderIds);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.logger.error("Failed to fetch batch saddle specs", error);
+      throw new HttpException(
+        {
+          message: "Failed to fetch batch saddle specs",
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get("health")
   async getHealth() {
     await Promise.resolve();

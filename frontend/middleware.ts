@@ -38,6 +38,7 @@ function decodeJwtPayload(token: string): JwtPayload | null {
 // Define which roles are allowed per route
 const roleMap: Record<string, string[]> = {
   '/reports': ['admin', 'supervisor'],
+  '/my-views': ['admin', 'supervisor'],
   '/dashboard': ['admin', 'user', 'supervisor', 'fitter'],
   '/orders': ['admin', 'user', 'supervisor', 'fitter'],
   '/my-saddle-stock': ['fitter'],

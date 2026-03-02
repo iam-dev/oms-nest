@@ -45,6 +45,9 @@ import { PresetModule } from "./presets/preset.module";
 import { CommentsModule } from "./comments/comments.module";
 import { AccessFilterGroupModule } from "./access-filter-groups/access-filter-group.module";
 import { ReportSavedFilterModule } from "./report-saved-filters/report-saved-filter.module";
+import { CustomOrderViewModule } from "./custom-order-views/custom-order-view.module";
+import { CustomOrderViewGroupModule } from "./custom-order-view-groups/custom-order-view-group.module";
+import { CustomOrderCellOverrideModule } from "./custom-order-cell-overrides/custom-order-cell-override.module";
 import { OrderProductSaddleModule } from "./order-product-saddles/order-product-saddle.module";
 import { CountryManagerModule } from "./country-managers/country-manager.module";
 import { WarehouseModule } from "./warehouses/warehouse.module";
@@ -118,6 +121,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CommentsModule,
     AccessFilterGroupModule,
     ReportSavedFilterModule,
+    CustomOrderViewModule,
+    CustomOrderViewGroupModule,
+    CustomOrderCellOverrideModule,
     CountryManagerModule,
     WarehouseModule,
     BrandModule,

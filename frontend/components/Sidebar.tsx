@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, ShoppingCart, BarChart3, Search, ChevronRight, ChevronLeft, Wrench, Factory } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingCart, BarChart3, Search, ChevronRight, ChevronLeft, Wrench, Factory, LayoutList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
@@ -61,6 +61,13 @@ const navItems: NavItem[] = [
     icon: BarChart3,
     href: '/reports',
     permission: 'REPORTS'
+  },
+  {
+    id: 'myViews',
+    label: 'My Views',
+    icon: LayoutList,
+    href: '/my-views',
+    permission: 'MY_VIEWS'
   },
   {
     id: 'repairs',
