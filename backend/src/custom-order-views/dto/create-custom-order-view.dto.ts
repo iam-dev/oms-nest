@@ -11,6 +11,21 @@ import {
 } from "class-validator";
 import { Type } from "class-transformer";
 
+export class ColumnGroupConfigDto {
+  @ApiProperty({ description: "Group header label", example: "SEAT" })
+  @IsString()
+  @IsNotEmpty()
+  label: string | undefined;
+
+  @ApiProperty({
+    description: "Column keys belonging to this group",
+    example: ["seatLeather", "inlaid", "skirt"],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  columnKeys: string[] | undefined;
+}
+
 export class ColumnConfigDto {
   @ApiProperty({ description: "Column key identifier", example: "orderNumber" })
   @IsString()
@@ -53,6 +68,17 @@ export class CreateCustomOrderViewDto {
   @ValidateNested({ each: true })
   @Type(() => ColumnConfigDto)
   columns: ColumnConfigDto[] | undefined;
+
+  @ApiPropertyOptional({
+    description: "Column group header configurations",
+    type: [ColumnGroupConfigDto],
+    default: [],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ColumnGroupConfigDto)
+  columnGroups?: ColumnGroupConfigDto[];
 
   @ApiPropertyOptional({ description: "Set as default view", default: false })
   @IsOptional()

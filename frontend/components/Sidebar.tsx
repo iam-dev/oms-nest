@@ -123,8 +123,8 @@ export function Sidebar() {
         "px-2 space-y-1",
         isCollapsed && "px-1"
       )}>
-        {/* Render nav items up to but not including Factories */}
-        {visibleNavItems.slice(0, visibleNavItems.findIndex(item => item.id === 'factories')).map((item) => {
+        {/* Render nav items up to and including Orders */}
+        {visibleNavItems.slice(0, visibleNavItems.findIndex(item => item.id === 'orders') + 1).map((item) => {
           const isActive = item.href && pathname && pathname.startsWith(item.href);
           return (
             <button
@@ -141,10 +141,10 @@ export function Sidebar() {
             </button>
           );
         })}
-        {/* Insert Saddle Modelling section after saddle stock items */}
+        {/* Insert Saddle Modelling section after Orders */}
         <SaddlesSidebarSection isCollapsed={isCollapsed} />
-        {/* Render Factories and remaining nav items */}
-        {visibleNavItems.slice(visibleNavItems.findIndex(item => item.id === 'factories')).map((item) => {
+        {/* Render remaining nav items (Factories onwards) */}
+        {visibleNavItems.slice(visibleNavItems.findIndex(item => item.id === 'orders') + 1).map((item) => {
           const isActive = item.href && pathname && pathname.startsWith(item.href);
           return (
             <button

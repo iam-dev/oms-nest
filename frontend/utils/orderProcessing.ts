@@ -114,6 +114,10 @@ export function buildOrderFilters(headerFilters: HeaderFilters): Record<string, 
         filters.seatSizes = value;
       } else if (key === 'orderIds') {
         filters.orderIds = value;
+      } else if (key === 'dateFrom') {
+        filters.dateFrom = value;
+      } else if (key === 'dateTo') {
+        filters.dateTo = value;
       }
     }
   });

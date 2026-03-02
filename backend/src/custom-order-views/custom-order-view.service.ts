@@ -23,6 +23,8 @@ export class CustomOrderViewService {
       userId,
       name: dto.name,
       columns: dto.columns as CustomOrderViewEntity["columns"],
+      columnGroups:
+        (dto.columnGroups as CustomOrderViewEntity["columnGroups"]) ?? [],
       isDefault: dto.isDefault ?? false,
       groupId: dto.groupId ?? null,
       tabOrder: dto.tabOrder ?? 0,
@@ -74,6 +76,9 @@ export class CustomOrderViewService {
     if (dto.columns !== undefined)
       data.columns = dto.columns as CustomOrderViewEntity["columns"];
     if (dto.isDefault !== undefined) data.isDefault = dto.isDefault;
+    if (dto.columnGroups !== undefined)
+      data.columnGroups =
+        dto.columnGroups as CustomOrderViewEntity["columnGroups"];
     if (dto.groupId !== undefined) data.groupId = dto.groupId ?? null;
     if (dto.tabOrder !== undefined) data.tabOrder = dto.tabOrder;
 

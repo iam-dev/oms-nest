@@ -29,12 +29,16 @@ function formatDate(val: unknown): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-/** Extract a saddle spec value from the _saddleSpecs array merged into order rows */
-function specVal(row: Record<string, unknown>, optionName: string): string {
+/** Extract a saddle spec value from the _saddleSpecs array merged into order rows.
+ *  Accepts multiple possible option names to handle DB naming variations. */
+function specVal(row: Record<string, unknown>, ...optionNames: string[]): string {
   const specs = row._saddleSpecs as SaddleSpec[] | undefined;
   if (!specs || !Array.isArray(specs)) return '';
-  const match = specs.find((s) => s.optionName === optionName);
-  return match?.displayValue || '';
+  for (const name of optionNames) {
+    const match = specs.find((s) => s.optionName === name);
+    if (match?.displayValue) return match.displayValue;
+  }
+  return '';
 }
 
 export const CUSTOM_VIEW_COLUMNS: CustomViewColumnDef[] = [
@@ -52,7 +56,7 @@ export const CUSTOM_VIEW_COLUMNS: CustomViewColumnDef[] = [
   // Saddle
   { key: 'brandName', label: 'Brand', category: 'Saddle', getValue: (r) => str(r.brand_name || r.brandName) },
   { key: 'modelName', label: 'Model', category: 'Saddle', getValue: (r) => str(r.model_name || r.modelName) },
-  { key: 'seatSize', label: 'Seat Size', category: 'Saddle', getValue: (r) => str(r.seat_size || r.seatSize) },
+  { key: 'seatSize', label: 'Seat Size', category: 'Saddle', getValue: (r) => str(r.seat_size || r.seatSize) || specVal(r, 'Seat Size') },
   { key: 'leatherType', label: 'Leather Type', category: 'Saddle', getValue: (r) => str(r.leather_type || r.leatherType || r.leather_type_name || r.leatherTypeName) },
   { key: 'serialNumber', label: 'Serial Number', category: 'Saddle', getValue: (r) => str(r.serial_number || r.serialNumber) },
 
@@ -76,32 +80,32 @@ export const CUSTOM_VIEW_COLUMNS: CustomViewColumnDef[] = [
 
   // Saddle Specifications (from orders_info via _saddleSpecs)
   { key: 'seatLeather', label: 'Seat Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Seat Leather') },
-  { key: 'inlaid', label: 'Inlaid', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Inlaid') },
+  { key: 'inlaid', label: 'Inlaid', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'SEAT Option', 'AVIAR - SEAT Option') },
   { key: 'skirt', label: 'Skirt', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Skirt') },
-  { key: 'gulletLeather', label: 'Gullet Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Gullet Leather') },
-  { key: 'welt', label: 'Welt', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Welt') },
-  { key: 'cantle', label: 'Cantle', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Cantle') },
-  { key: 'stitch', label: 'Stitch', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Stitch') },
+  { key: 'gulletLeather', label: 'Gullet Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Gullet Lining') },
+  { key: 'welt', label: 'Welt', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Welt Color') },
+  { key: 'cantle', label: 'Cantle', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'CANTLE Option', 'AVIAR - CANTLE Option') },
+  { key: 'stitch', label: 'Stitch', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Stitch Color') },
   { key: 'flapLeather', label: 'Flap Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Flap Leather') },
   { key: 'flapLength', label: 'Flap Length', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Flap Length') },
-  { key: 'flapRollType', label: 'Flap Roll Type', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Flap Roll Type') },
-  { key: 'rollLeather', label: 'Roll Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Roll Leather') },
+  { key: 'flapRollType', label: 'Flap Roll Type', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Knee Roll') },
+  { key: 'rollLeather', label: 'Roll Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Knee Roll/ Pad Leather', 'AVIAR Knee Roll Leather') },
   { key: 'loops', label: 'Loops', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Loops') },
-  { key: 'frontFacing', label: 'Front Facing', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Front Facing') },
-  { key: 'rearFacing', label: 'Rear Facing', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Rear Facing') },
-  { key: 'backFacing', label: 'Back Facing', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Back Facing') },
+  { key: 'frontFacing', label: 'Front Facing', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Facing - Front (on FLAPS for NON Mono)', 'AVIAR Front FACING(front/flap)') },
+  { key: 'rearFacing', label: 'Rear Facing', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Facing - Back/Rear', 'AVIAR Back FACING') },
+  { key: 'backFacing', label: 'Back Facing', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Facing - Back/Rear', 'AVIAR Back FACING') },
   { key: 'gussetLeather', label: 'Gusset Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Gusset Leather') },
   { key: 'frontGusset', label: 'Front Gusset', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Front Gusset') },
-  { key: 'backGusset', label: 'Back Gusset', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Back Gusset') },
-  { key: 'seatOptions', label: 'Seat Options', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Seat Options') },
-  { key: 'padRollType', label: 'Pad Roll Type', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Pad Roll Type') },
-  { key: 'sweatFlap', label: 'Sweat Flap', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Sweat Flap') },
+  { key: 'backGusset', label: 'Back Gusset', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Rear Gusset') },
+  { key: 'seatOptions', label: 'Seat Options', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'SEAT Option', 'AVIAR - SEAT Option') },
+  { key: 'padRollType', label: 'Pad Roll Type', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Knee Roll') },
+  { key: 'sweatFlap', label: 'Sweat Flap', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Calf / Rear Roll') },
   { key: 'panelLeather', label: 'Panel Leather', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Panel Leather') },
   { key: 'panelMaterial', label: 'Panel Material', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Panel Material') },
-  { key: 'skirtBack', label: 'Skirt Back', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Skirt Back') },
-  { key: 'padUnderPadTop', label: 'Pad/Under-Pad/Top', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Pad/Under-Pad/Top') },
-  { key: 'liningFoam', label: 'Lining/Foam', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Lining/Foam') },
-  { key: 'bars', label: 'Bars', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Bars') },
+  { key: 'skirtBack', label: 'Skirt Back', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Skirt') },
+  { key: 'padUnderPadTop', label: 'Pad/Under-Pad/Top', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Flap Position / FWD') },
+  { key: 'liningFoam', label: 'Lining/Foam', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Panel Material') },
+  { key: 'bars', label: 'Bars', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Stirrup Bars') },
   { key: 'treeSize', label: 'Tree Size', category: 'Saddle Specifications', getValue: (r) => specVal(r, 'Tree Size') },
 
   // Notes

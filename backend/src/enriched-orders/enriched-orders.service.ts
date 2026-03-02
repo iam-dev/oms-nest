@@ -65,6 +65,9 @@ export interface EnrichedOrdersQueryDto {
   leatherType?: string;
   // Filter by fitter reference
   fitterReference?: string;
+  // Date range filter (ISO date strings, e.g. "2026-01-01")
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface PaginationMetadata {
@@ -573,6 +576,27 @@ export class EnrichedOrdersService {
       } else if (isNotUrgent) {
         conditions.push(`o.rushed = $${paramIndex}`);
         params.push(0);
+        paramIndex++;
+      }
+    }
+
+    // Filter by date range (order_time is a unix timestamp integer)
+    if (query.dateFrom) {
+      const fromTs = Math.floor(new Date(query.dateFrom).getTime() / 1000);
+      if (!isNaN(fromTs)) {
+        conditions.push(`o.order_time >= $${paramIndex}`);
+        params.push(fromTs);
+        paramIndex++;
+      }
+    }
+    if (query.dateTo) {
+      // End of day: set to 23:59:59 of the dateTo date
+      const toDate = new Date(query.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      const toTs = Math.floor(toDate.getTime() / 1000);
+      if (!isNaN(toTs)) {
+        conditions.push(`o.order_time <= $${paramIndex}`);
+        params.push(toTs);
         paramIndex++;
       }
     }

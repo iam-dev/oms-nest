@@ -78,6 +78,12 @@ export const orderFilterSchema = z.object({
     .max(2000, 'Order IDs must be less than 2000 characters')
     .regex(/^[\d,\s]*$/, 'Order IDs can only contain numbers, commas, and spaces')
     .optional(),
+  dateFrom: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+    .optional(),
+  dateTo: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+    .optional(),
 });
 
 export const orderCreateSchema = z.object({

@@ -35,6 +35,19 @@ export class CustomOrderViewEntity {
       }>
     | undefined;
 
+  @Column({
+    name: "column_groups",
+    type: "jsonb",
+    nullable: false,
+    default: () => "'[]'",
+  })
+  columnGroups:
+    | Array<{
+        label: string;
+        columnKeys: string[];
+      }>
+    | undefined;
+
   @Column({ name: "group_id", type: "integer", nullable: true })
   groupId: number | null | undefined;
 

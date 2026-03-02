@@ -7,11 +7,17 @@ export interface ColumnConfig {
   order: number;
 }
 
+export interface ColumnGroupConfig {
+  label: string;
+  columnKeys: string[];
+}
+
 export interface CustomOrderView {
   id: number;
   userId: number;
   name: string;
   columns: ColumnConfig[];
+  columnGroups: ColumnGroupConfig[];
   isDefault: boolean;
   groupId: number | null;
   tabOrder: number;
@@ -35,8 +41,13 @@ export async function getDefaultCustomOrderView(): Promise<CustomOrderView | nul
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Failed to fetch default view: ${response.status}`);
-  const data = await response.json();
-  return data || null;
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) || null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCustomOrderView(id: number): Promise<CustomOrderView> {
@@ -51,6 +62,7 @@ export async function getCustomOrderView(id: number): Promise<CustomOrderView> {
 export async function createCustomOrderView(data: {
   name: string;
   columns: ColumnConfig[];
+  columnGroups?: ColumnGroupConfig[];
   isDefault?: boolean;
   groupId?: number;
   tabOrder?: number;
@@ -70,7 +82,7 @@ export async function createCustomOrderView(data: {
 
 export async function updateCustomOrderView(
   id: number,
-  data: { name?: string; columns?: ColumnConfig[]; isDefault?: boolean; groupId?: number; tabOrder?: number },
+  data: { name?: string; columns?: ColumnConfig[]; columnGroups?: ColumnGroupConfig[]; isDefault?: boolean; groupId?: number; tabOrder?: number },
 ): Promise<CustomOrderView> {
   const response = await fetchWithRefresh(`${API_URL}/api/v1/custom-order-views/${id}`, {
     method: 'PATCH',

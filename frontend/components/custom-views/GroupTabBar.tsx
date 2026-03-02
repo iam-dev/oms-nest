@@ -120,17 +120,16 @@ export function GroupTabBar({
               </DropdownMenu>
             </div>
           ))}
+          <Button
+            size="sm"
+            className="shrink-0 ml-1 bg-primary text-white hover:bg-primary/90"
+            onClick={() => { setNewName(''); setCreateOpen(true); }}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add Tab
+          </Button>
         </TabsList>
       </Tabs>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 w-8 p-0 shrink-0"
-        onClick={() => { setNewName(''); setCreateOpen(true); }}
-      >
-        <Plus className="h-4 w-4" />
-      </Button>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

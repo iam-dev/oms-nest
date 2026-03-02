@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   CustomOrderView,
   ColumnConfig,
+  ColumnGroupConfig,
   getCustomOrderViews,
   getDefaultCustomOrderView,
   createCustomOrderView,
@@ -112,9 +113,9 @@ export function useCustomOrderViews() {
       setLoading(true);
       try {
         const [allViews, defaultView, allGroups] = await Promise.all([
-          getCustomOrderViews(),
-          getDefaultCustomOrderView(),
-          getCustomOrderViewGroups(),
+          getCustomOrderViews().catch(() => [] as CustomOrderView[]),
+          getDefaultCustomOrderView().catch(() => null),
+          getCustomOrderViewGroups().catch(() => [] as CustomOrderViewGroup[]),
         ]);
         if (cancelled) return;
         setViews(allViews);
@@ -314,6 +315,34 @@ export function useCustomOrderViews() {
     }
   }, [activeView, activeGroup, activeTab, toast]);
 
+  const handleUpdateColumnGroups = useCallback(async (columnGroups: ColumnGroupConfig[], columns?: ColumnConfig[]) => {
+    if (!activeView) return;
+    try {
+      const payload: { columnGroups: ColumnGroupConfig[]; columns?: ColumnConfig[] } = { columnGroups };
+      if (columns) payload.columns = columns;
+      const updated = await updateCustomOrderView(activeView.id, payload);
+      setActiveView(updated);
+      setViews((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+      if (updated.groupId) {
+        setGroups((prev) =>
+          prev.map((g) => ({
+            ...g,
+            views: g.views.map((v) => (v.id === updated.id ? updated : v)),
+          })),
+        );
+        if (activeGroup && activeTab?.id === updated.id) {
+          setActiveTab(updated);
+          setActiveGroup((prev) =>
+            prev ? { ...prev, views: prev.views.map((v) => (v.id === updated.id ? updated : v)) } : prev,
+          );
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update column groups';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
+  }, [activeView, activeGroup, activeTab, toast]);
+
   const handleRenameView = useCallback(async (name: string) => {
     if (!activeView) return;
     try {
@@ -395,6 +424,7 @@ export function useCustomOrderViews() {
     loadOverrides,
     handleCreateView,
     handleUpdateColumns,
+    handleUpdateColumnGroups,
     handleRenameView,
     handleDeleteView,
     handleSetOverride,

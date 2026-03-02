@@ -2,17 +2,33 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Settings2, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Settings2, Search, X, Layers } from 'lucide-react';
 import { ViewSelector } from './custom-views/ViewSelector';
 import { ColumnManager } from './custom-views/ColumnManager';
 import { CustomViewsTable } from './custom-views/CustomViewsTable';
 import { ExportButton } from './custom-views/ExportButton';
 import { ViewGroupManager } from './custom-views/ViewGroupManager';
 import { GroupTabBar } from './custom-views/GroupTabBar';
+import { ColumnGroupEditor } from './custom-views/ColumnGroupEditor';
+import { BulkOrderSearch } from './BulkOrderSearch';
 import { TableHeaderFilter } from './shared/TableHeaderFilter';
 import { useCustomOrderViews } from '@/hooks/useCustomOrderViews';
 import { getEnrichedOrders, getFilterOptions, FilterOptions } from '@/services/enrichedOrders';
 import { buildOrderFilters, HeaderFilters } from '@/utils/orderProcessing';
+import { orderStatuses, seatSizes } from '@/utils/orderConstants';
+
+function getThisWeekRange(): { from: string; to: string } {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun, 1=Mon, ...
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  return { from: fmt(monday), to: fmt(sunday) };
+}
 
 export default function CustomOrderViews() {
   const {
@@ -25,6 +41,7 @@ export default function CustomOrderViews() {
     loadOverrides,
     handleCreateView,
     handleUpdateColumns,
+    handleUpdateColumnGroups,
     handleRenameView,
     handleDeleteView,
     handleSetOverride,
@@ -53,10 +70,20 @@ export default function CustomOrderViews() {
   const [totalItems, setTotalItems] = useState(0);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [isColumnManagerOpen, setIsColumnManagerOpen] = useState(false);
+  const [isGroupEditorOpen, setIsGroupEditorOpen] = useState(false);
+
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Filter state
   const [headerFilters, setHeaderFilters] = useState<HeaderFilters>({});
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+
+  // Date range state — default to this week
+  const [weekRange] = useState(getThisWeekRange);
+  const [dateFrom, setDateFrom] = useState(weekRange.from);
+  const [dateTo, setDateTo] = useState(weekRange.to);
+  const [dateApplied, setDateApplied] = useState(false);
 
   // Load filter options on mount
   useEffect(() => {
@@ -77,10 +104,45 @@ export default function CustomOrderViews() {
 
   const resetFilters = useCallback(() => {
     setHeaderFilters({});
+    setSearchTerm('');
+    setDateFrom(weekRange.from);
+    setDateTo(weekRange.to);
+    setDateApplied(false);
+    setPage(1);
+  }, [weekRange]);
+
+  const hasActiveFilters = Object.keys(headerFilters).length > 0 || searchTerm || dateApplied;
+
+  // Handle search submit
+  const handleSearchSubmit = useCallback(() => {
+    if (!searchTerm.trim()) return;
+    // Detect if input looks like order IDs (numbers only)
+    const ids = searchTerm.split(/[\s,]+/).filter((s) => /^\d+$/.test(s));
+    if (ids.length > 1) {
+      setHeaderFilters((prev) => ({ ...prev, orderIds: ids.join(',') }));
+    } else {
+      setHeaderFilters((prev) => ({ ...prev, searchTerm: searchTerm.trim() }));
+    }
+    setPage(1);
+  }, [searchTerm]);
+
+  // Handle bulk search from BulkOrderSearch component
+  const handleBulkSearch = useCallback((ids: number[]) => {
+    setHeaderFilters((prev) => ({ ...prev, orderIds: ids.join(',') }));
+    setSearchTerm(ids.join(', '));
     setPage(1);
   }, []);
 
-  const hasActiveFilters = Object.keys(headerFilters).length > 0;
+  // Handle date "Show" button
+  const handleDateShow = useCallback(() => {
+    setHeaderFilters((prev) => ({
+      ...prev,
+      dateFrom,
+      dateTo,
+    }));
+    setDateApplied(true);
+    setPage(1);
+  }, [dateFrom, dateTo]);
 
   // Fetch orders with filters
   const fetchOrders = useCallback(async () => {
@@ -218,15 +280,66 @@ export default function CustomOrderViews() {
               Columns ({visibleColumns.length})
             </Button>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsGroupEditorOpen(true)}
+            >
+              <Layers className="h-4 w-4 mr-1" />
+              Groups
+            </Button>
+
             <ExportButton
               columns={activeView.columns}
+              columnGroups={activeView.columnGroups}
               orders={enrichedOrders}
               selectedOrderIds={selectedOrderIds}
               overrides={overrides}
               viewName={activeView.name}
+              groupViews={activeGroup ? activeGroup.views : undefined}
+              groupName={activeGroup ? activeGroup.name : undefined}
             />
           </>
         )}
+      </div>
+
+      {/* Search Bar + Date Range */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-[400px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
+            className="pl-9 h-9"
+          />
+        </div>
+        <BulkOrderSearch onSearch={handleBulkSearch} />
+
+        <div className="flex items-center gap-2 ml-auto">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-9 w-[150px]"
+          />
+          <span className="text-sm text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-9 w-[150px]"
+          />
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleDateShow}
+            className="h-9"
+          >
+            Show
+          </Button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -236,7 +349,7 @@ export default function CustomOrderViews() {
           type="enum"
           value={headerFilters.status || ''}
           onFilter={(val) => handleFilterChange('status', val)}
-          data={['New', 'In Production', 'Shipped', 'Delivered', 'Cancelled', 'On Hold', 'Waiting']}
+          data={orderStatuses}
         />
         <TableHeaderFilter
           title="Fitter"
@@ -253,9 +366,10 @@ export default function CustomOrderViews() {
         />
         <TableHeaderFilter
           title="Seat Size"
-          type="text"
+          type="enum"
           value={headerFilters.seatSize || ''}
           onFilter={(val) => handleFilterChange('seatSize', val)}
+          data={seatSizes}
         />
         <TableHeaderFilter
           title="Factory"
@@ -306,6 +420,7 @@ export default function CustomOrderViews() {
       {activeView && (
         <CustomViewsTable
           columns={activeView.columns}
+          columnGroups={activeView.columnGroups}
           orders={enrichedOrders}
           selectedOrderIds={selectedOrderIds}
           onToggleSelect={toggleSelect}
@@ -351,6 +466,18 @@ export default function CustomOrderViews() {
           onOpenChange={setIsColumnManagerOpen}
           columns={activeView.columns}
           onSave={handleUpdateColumns}
+          tabName={activeView.name}
+        />
+      )}
+
+      {/* Column Group Editor Dialog */}
+      {activeView && (
+        <ColumnGroupEditor
+          open={isGroupEditorOpen}
+          onOpenChange={setIsGroupEditorOpen}
+          columns={activeView.columns}
+          columnGroups={activeView.columnGroups}
+          onSave={handleUpdateColumnGroups}
         />
       )}
     </div>
