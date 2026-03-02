@@ -72,7 +72,6 @@ function formatPrice(value: number | null | undefined): string {
   return Number(value).toFixed(2);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsProps) {
   const orderId = Number(order.id) || Number(order.orderId) || 0;
   const displayOrderId = order.orderId || orderId;

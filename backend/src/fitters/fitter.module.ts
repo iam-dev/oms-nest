@@ -1,9 +1,11 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { JwtModule } from "@nestjs/jwt";
 import { FitterService } from "./fitter.service";
 import { FitterController } from "./fitter.controller";
 import { FitterRelationalPersistenceModule } from "./infrastructure/persistence/relational/relational-persistence.module";
 import { UserEntity } from "../users/infrastructure/persistence/relational/entities/user.entity";
+import { MailModule } from "../mail/mail.module";
 
 /**
  * Fitter Module
@@ -15,6 +17,8 @@ import { UserEntity } from "../users/infrastructure/persistence/relational/entit
   imports: [
     FitterRelationalPersistenceModule,
     TypeOrmModule.forFeature([UserEntity]),
+    MailModule,
+    JwtModule.register({}),
   ],
   controllers: [FitterController],
   providers: [FitterService],

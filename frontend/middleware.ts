@@ -91,7 +91,7 @@ export async function middleware(request: NextRequest) {
   logger.log('Middleware: path:', pathname, '| token:', token ? 'present' : 'absent');
 
   // Public routes that don't require authentication
-  const publicPaths = ['/login', '/api/login', '/favicon.ico', '/public'];
+  const publicPaths = ['/login', '/api/login', '/favicon.ico', '/public', '/password-change'];
   if (publicPaths.some(path => pathname.startsWith(path))) {
     logger.log('Middleware: public path, allowing');
     const response = NextResponse.next({

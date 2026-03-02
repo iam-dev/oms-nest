@@ -2,10 +2,13 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
 import { FitterService } from "../../../src/fitters/fitter.service";
 import { IFitterRepository } from "../../../src/fitters/domain/fitter.repository";
 import { Fitter } from "../../../src/fitters/domain/fitter";
 import { UserEntity } from "../../../src/users/infrastructure/persistence/relational/entities/user.entity";
+import { MailService } from "../../../src/mail/mail.service";
 
 describe("FitterService", () => {
   let service: FitterService;
@@ -58,6 +61,25 @@ describe("FitterService", () => {
           provide: DataSource,
           useValue: {
             query: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: MailService,
+          useValue: {
+            welcomeFitter: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            signAsync: jest.fn().mockResolvedValue("mock-hash"),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue("test-value"),
+            getOrThrow: jest.fn().mockReturnValue("30m"),
           },
         },
       ],
