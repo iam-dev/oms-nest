@@ -1390,7 +1390,7 @@ export class EnrichedOrdersService {
       `);
 
       const leatherTypes = await queryRunner.query(`
-        SELECT id, name, price1 FROM leather_types
+        SELECT id, name, 0 as "price1" FROM leather_types
         WHERE deleted = 0
         ORDER BY name
       `);
