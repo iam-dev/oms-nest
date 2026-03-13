@@ -282,6 +282,44 @@ export class EnrichedOrdersController {
     }
   }
 
+  @Post("bulk-draft-from/:id")
+  async bulkCreateDraftFromOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { count: number },
+    @Req() req: { user?: { legacyId?: number } },
+  ) {
+    const count = body.count;
+    if (!count || count < 1 || count > 50 || !Number.isInteger(count)) {
+      throw new HttpException(
+        {
+          message: "Count must be an integer between 1 and 50",
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      this.logger.log(`Creating ${count} draft orders from order ${id}`);
+      const userId = req.user?.legacyId;
+      const result = await this.enrichedOrdersService.bulkCreateDraftFromOrder(
+        id,
+        count,
+        userId,
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to bulk create drafts from order ${id}`, error);
+      throw new HttpException(
+        {
+          message: "Failed to bulk create draft orders",
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Patch("update/:id")
   async updateOrder(
     @Param("id", ParseIntPipe) id: number,

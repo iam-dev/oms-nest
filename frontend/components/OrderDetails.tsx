@@ -19,7 +19,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
 import { CreateRepairDialog } from './CreateRepairDialog';
 import { generateOrderPDF, generateLabelPDF } from '@/lib/generate-pdf';
-import { fetchOrderDetail, createDraftOrder, type OrderDetailData } from '@/services/enrichedOrders';
+import { fetchOrderDetail, createDraftOrder, bulkCreateDraftOrders, type OrderDetailData } from '@/services/enrichedOrders';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { exportOrderToXlsx } from '@/utils/exportXlsx';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
@@ -88,6 +90,9 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
   const [draftOrderId, setDraftOrderId] = useState<number | null>(null);
   const [isRepairOpen, setIsRepairOpen] = useState(false);
+  const [isBulkDuplicateOpen, setIsBulkDuplicateOpen] = useState(false);
+  const [bulkDuplicateCount, setBulkDuplicateCount] = useState(5);
+  const [bulkDuplicating, setBulkDuplicating] = useState(false);
   const [copiedSaddle, setCopiedSaddle] = useState(false);
 
   useEffect(() => {
@@ -285,6 +290,22 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
       setIsDuplicateOpen(true);
     } catch (err) {
       logger.error('Failed to create draft order:', err);
+    }
+  };
+
+  const handleBulkDuplicate = async () => {
+    if (bulkDuplicateCount < 1 || bulkDuplicateCount > 50) return;
+    try {
+      setBulkDuplicating(true);
+      const result = await bulkCreateDraftOrders(orderId, bulkDuplicateCount);
+      setIsBulkDuplicateOpen(false);
+      onOrderChanged?.();
+      alert(`Successfully created ${result.orderIds.length} duplicate orders: #${result.orderIds.join(', #')}`);
+    } catch (err) {
+      logger.error('Failed to bulk duplicate order:', err);
+      alert('Failed to bulk duplicate order. Please try again.');
+    } finally {
+      setBulkDuplicating(false);
     }
   };
 
@@ -729,6 +750,14 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
               variant="outline"
               size="sm"
               className="h-8 text-xs"
+              onClick={() => setIsBulkDuplicateOpen(true)}
+            >
+              Duplicate X times
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
               onClick={handleExportToXlsx}
             >
               Export to Excel
@@ -782,6 +811,47 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
             onOrderChanged?.();
           }}
         />
+      </Dialog>
+
+      <Dialog open={isBulkDuplicateOpen} onOpenChange={setIsBulkDuplicateOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Duplicate Order #{displayOrderId} Multiple Times</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="bulk-count">Number of copies</Label>
+              <Input
+                id="bulk-count"
+                type="number"
+                min={1}
+                max={50}
+                value={bulkDuplicateCount}
+                onChange={(e) => setBulkDuplicateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Creates {bulkDuplicateCount} duplicate {bulkDuplicateCount === 1 ? 'order' : 'orders'} with status &quot;Unordered&quot;.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsBulkDuplicateOpen(false)}
+                disabled={bulkDuplicating}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleBulkDuplicate}
+                disabled={bulkDuplicating || bulkDuplicateCount < 1}
+              >
+                {bulkDuplicating ? 'Duplicating...' : `Duplicate ${bulkDuplicateCount} times`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
       </Dialog>
     </>
   );

@@ -325,6 +325,30 @@ export async function createDraftOrder(
   return response.json();
 }
 
+export async function bulkCreateDraftOrders(
+  sourceOrderId: number,
+  count: number,
+): Promise<{ success: boolean; orderIds: number[] }> {
+  logger.log('Creating bulk draft orders from source:', sourceOrderId, 'count:', count);
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/bulk-draft-from/${sourceOrderId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ count }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to bulk create draft orders: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function updateOrder(
   orderId: number,
   payload: UpdateOrderPayload,

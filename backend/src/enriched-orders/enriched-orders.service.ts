@@ -2234,6 +2234,124 @@ export class EnrichedOrdersService {
     }
   }
 
+  async bulkCreateDraftFromOrder(
+    sourceOrderId: number,
+    count: number,
+    userId?: number,
+  ): Promise<{ success: boolean; orderIds: number[] }> {
+    this.logger.log(
+      `Creating ${count} draft orders from source order ${sourceOrderId}`,
+    );
+
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      // Verify source order exists
+      const sourceCheck = await queryRunner.query(
+        `SELECT id FROM orders WHERE id = $1`,
+        [sourceOrderId],
+      );
+      if (!sourceCheck || sourceCheck.length === 0) {
+        throw new Error(`Source order ${sourceOrderId} not found`);
+      }
+
+      const orderIds: number[] = [];
+
+      for (let i = 0; i < count; i++) {
+        // Copy the source order into a new row with Unordered status (0)
+        const result = await queryRunner.query(
+          `INSERT INTO orders (
+            fitter_id, saddle_id, leather_id, factory_id,
+            fitter_stock, customer_id, fitter_reference,
+            horse_name, name, address, zipcode, city, state, country,
+            phone_no, cell_no, email,
+            order_status, ship_name, ship_address, ship_zipcode,
+            ship_city, ship_state, ship_country,
+            order_time, payment, payment_time, order_step,
+            price_saddle, price_tradein, price_deposit, price_discount,
+            price_fittingeval, price_callfee, price_girth,
+            price_shipping, price_tax, price_additional,
+            special_notes, serial_number, custom_order, changed,
+            repair, demo, sponsored, rushed,
+            oms_version, currency, order_data, seat_sizes
+          )
+          SELECT
+            fitter_id, saddle_id, leather_id, factory_id,
+            fitter_stock, customer_id, '',
+            horse_name, name, address, zipcode, city, state, country,
+            phone_no, cell_no, email,
+            0, ship_name, ship_address, ship_zipcode,
+            ship_city, ship_state, ship_country,
+            EXTRACT(EPOCH FROM NOW())::integer, '', 0, 1,
+            price_saddle, 0, 0, 0,
+            0, 0, 0,
+            0, 0, 0,
+            special_notes, '', custom_order, 0,
+            repair, demo, sponsored, rushed,
+            2, currency, '', seat_sizes
+          FROM orders WHERE id = $1
+          RETURNING id`,
+          [sourceOrderId],
+        );
+
+        const newOrderId = result[0].id;
+        orderIds.push(newOrderId);
+
+        // Copy saddle options from the source order
+        await queryRunner.query(
+          `INSERT INTO orders_info (order_id, option_id, option_item_id, clone_number, color, leathertype, custom)
+           SELECT $1, option_id, option_item_id, clone_number, color, leathertype, custom
+           FROM orders_info WHERE order_id = $2`,
+          [newOrderId, sourceOrderId],
+        );
+
+        // Insert audit log entry
+        try {
+          await queryRunner.query(
+            `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
+             VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, 0, 0)`,
+            [
+              userId || 0,
+              newOrderId,
+              `Draft created from order #${sourceOrderId} (bulk ${i + 1}/${count}).`,
+            ],
+          );
+        } catch (logErr: unknown) {
+          this.logger.warn(
+            `Failed to log draft creation for ${newOrderId}: ${logErr instanceof Error ? logErr.message : logErr}`,
+          );
+        }
+      }
+
+      await queryRunner.commitTransaction();
+      await this.invalidateCache();
+
+      this.logger.log(
+        `Successfully created ${count} draft orders [${orderIds.join(", ")}] from source ${sourceOrderId}`,
+      );
+      return { success: true, orderIds };
+    } catch (error) {
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rbErr: unknown) {
+        this.logger.warn(
+          `Rollback failed: ${rbErr instanceof Error ? rbErr.message : rbErr}`,
+        );
+      }
+      this.logger.error(
+        `Failed to bulk create drafts from order ${sourceOrderId}`,
+        error,
+      );
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async getBatchSaddleSpecs(
     orderIds: number[],
   ): Promise<Record<number, SaddleSpecResult[]>> {
