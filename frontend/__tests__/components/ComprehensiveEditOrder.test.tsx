@@ -83,6 +83,7 @@ jest.mock('lucide-react', () => ({
   User: () => <span />,
   Package: () => <span />,
   Settings: () => <span />,
+  ClipboardList: () => <span />,
 }));
 
 // ---------------------------------------------------------------------------
