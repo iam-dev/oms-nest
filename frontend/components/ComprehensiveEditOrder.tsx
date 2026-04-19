@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ChevronRight, Search, User, Package, Settings } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Search, User, Package, Settings, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
 import { fetchOrderDetail, updateOrder, createOrderFromPayload, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
@@ -49,6 +49,7 @@ const steps = [
   { id: 1, title: 'Saddle Information', icon: Package },
   { id: 2, title: 'Customer Information', icon: User },
   { id: 3, title: 'Order overview', icon: Settings },
+  { id: 4, title: 'Preview & Submit', icon: ClipboardList },
 ];
 
 // Currency map (integer to code)
@@ -304,7 +305,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   }, [fitterSearchTerm]);
 
   const handleSubmit = async () => {
-    if (currentStep < 3) {
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
       return;
     }
@@ -521,8 +522,8 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
 
       {/* Step Indicator */}
-      <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
+      <div className="bg-white border-b px-6 py-3">
+        <div className="flex items-center justify-between max-w-5xl mx-auto">
           {steps.map((step, index) => {
             const Icon = step.icon;
             return (
@@ -534,15 +535,15 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   onClick={() => setCurrentStep(step.id)}
                 >
                   <div className={`
-                    w-10 h-10 rounded-full flex items-center justify-center border-2
+                    w-8 h-8 rounded-full flex items-center justify-center border-2
                     ${currentStep >= step.id ? 'border-[#8B0000] bg-[#8B0000] text-white' : 'border-gray-300'}
                   `}>
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-4 w-4" />
                   </div>
-                  <span className="ml-3 text-sm font-medium">{step.title}</span>
+                  <span className="ml-2 text-xs font-medium hidden sm:inline">{step.title}</span>
                 </button>
                 {index < steps.length - 1 && (
-                  <ChevronRight className={`mx-6 ${
+                  <ChevronRight className={`mx-3 h-4 w-4 ${
                     currentStep > step.id ? 'text-[#8B0000]' : 'text-gray-300'
                   }`} />
                 )}
@@ -982,71 +983,70 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
                   {/* Customer information edit */}
                   {selectedCustomer && (
-                    <div className="border-t pt-4 mt-4">
-                      <h4 className="text-sm font-semibold text-[#8B0000] mb-3">Customer information</h4>
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Name:</Label>
-                          <Input
+                    <div className="border-t pt-3 mt-3">
+                      <h4 className="text-sm font-semibold text-[#8B0000] mb-2">Customer information</h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Name:</Label>
+                          <Input className="h-7 text-sm"
                             value={selectedCustomer.name || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, name: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Address:</Label>
-                          <Input
-                            value={selectedCustomer.address || ''}
-                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, address: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">City:</Label>
-                          <Input
-                            value={selectedCustomer.city || ''}
-                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, city: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">State:</Label>
-                          <Input
-                            value={selectedCustomer.state || ''}
-                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, state: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Zipcode:</Label>
-                          <Input
-                            value={selectedCustomer.zipcode || ''}
-                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, zipcode: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Country:</Label>
-                          <Input
-                            value={selectedCustomer.country || ''}
-                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, country: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Email:</Label>
-                          <Input
-                            type="email"
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Email:</Label>
+                          <Input className="h-7 text-sm" type="email"
                             value={selectedCustomer.email || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, email: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Phone:</Label>
-                          <Input
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Address:</Label>
+                          <Input className="h-7 text-sm"
+                            value={selectedCustomer.address || ''}
+                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, address: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Phone:</Label>
+                          <Input className="h-7 text-sm"
                             value={selectedCustomer.phone || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, phone: e.target.value })}
                           />
                         </div>
-                        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-                          <Label className="text-sm font-medium">Cell:</Label>
-                          <Input
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">City:</Label>
+                          <Input className="h-7 text-sm"
+                            value={selectedCustomer.city || ''}
+                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, city: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Cell:</Label>
+                          <Input className="h-7 text-sm"
                             value={selectedCustomer.cell || ''}
                             onChange={(e) => setSelectedCustomer({ ...selectedCustomer, cell: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">State:</Label>
+                          <Input className="h-7 text-sm"
+                            value={selectedCustomer.state || ''}
+                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, state: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Zipcode:</Label>
+                          <Input className="h-7 text-sm"
+                            value={selectedCustomer.zipcode || ''}
+                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, zipcode: e.target.value })}
+                          />
+                        </div>
+                        <div className="col-span-2 grid grid-cols-[70px_1fr] gap-1 items-center">
+                          <Label className="text-xs font-medium">Country:</Label>
+                          <Input className="h-7 text-sm"
+                            value={selectedCustomer.country || ''}
+                            onChange={(e) => setSelectedCustomer({ ...selectedCustomer, country: e.target.value })}
                           />
                         </div>
                       </div>
@@ -1163,6 +1163,182 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
               </div>
             </div>
           )}
+
+          {/* Step 4: Preview & Submit */}
+          {currentStep === 4 && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Saddle summary */}
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3 text-base text-[#8B0000]">Saddle Information</h3>
+                  <dl className="space-y-1.5 text-sm">
+                    <div className="grid grid-cols-[130px_1fr]">
+                      <dt className="text-gray-500">Brand & Model:</dt>
+                      <dd className="font-medium">{saddleDisplay || '—'}</dd>
+                    </div>
+                    <div className="grid grid-cols-[130px_1fr]">
+                      <dt className="text-gray-500">Fitter:</dt>
+                      <dd className="font-medium">{editOptions?.fitters?.find(f => String(f.id) === fitterId)?.fullName || orderDetail?.fitterName || '—'}</dd>
+                    </div>
+                    {sortedOptions.map(opt => {
+                      const sel = optionSelections[opt.optionId];
+                      const display = sel
+                        ? getItemsForOption(opt.optionId).find(i => String(i.id) === sel)?.name || getOptionDisplayValue(opt.optionId)
+                        : getOptionDisplayValue(opt.optionId);
+                      if (!display) return null;
+                      return (
+                        <div key={opt.optionId} className="grid grid-cols-[130px_1fr]">
+                          <dt className="text-gray-500">{opt.optionName}:</dt>
+                          <dd className="font-medium">{display}</dd>
+                        </div>
+                      );
+                    })}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {isStock && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Stock</span>}
+                      {isDemo && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Demo</span>}
+                      {isRepair && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Repair</span>}
+                      {isUrgent && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">Urgent</span>}
+                      {isSponsored && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Sponsored</span>}
+                    </div>
+                    {specialNotes && (
+                      <div className="pt-1">
+                        <dt className="text-gray-500 text-xs">Special notes:</dt>
+                        <dd className="text-sm mt-0.5 bg-gray-50 rounded p-1.5">{specialNotes}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+
+                {/* Pricing summary */}
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3 text-base text-[#8B0000]">Pricing ({currencyCode})</h3>
+                  <dl className="space-y-1.5 text-sm">
+                    <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Saddle price:</dt>
+                      <dd className="font-medium text-right">{priceSaddle}</dd>
+                    </div>
+                    {parseFloat(priceTradein) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Trade in:</dt>
+                      <dd className="font-medium text-right">-{priceTradein}</dd>
+                    </div>}
+                    {parseFloat(priceDeposit) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Deposit:</dt>
+                      <dd className="font-medium text-right">-{priceDeposit}</dd>
+                    </div>}
+                    {parseFloat(priceDiscount) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Discount:</dt>
+                      <dd className="font-medium text-right">-{priceDiscount}</dd>
+                    </div>}
+                    {parseFloat(priceFittingeval) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Fitting/Eval:</dt>
+                      <dd className="font-medium text-right">{priceFittingeval}</dd>
+                    </div>}
+                    {parseFloat(priceCallfee) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Call fee:</dt>
+                      <dd className="font-medium text-right">{priceCallfee}</dd>
+                    </div>}
+                    {parseFloat(priceGirth) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Girth:</dt>
+                      <dd className="font-medium text-right">{priceGirth}</dd>
+                    </div>}
+                    {parseFloat(priceAdditional) !== 0 && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Additional:</dt>
+                      <dd className="font-medium text-right">{priceAdditional}</dd>
+                    </div>}
+                    {priceShipping && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Shipping:</dt>
+                      <dd className="font-medium text-right">{priceShipping}</dd>
+                    </div>}
+                    {priceTax && <div className="grid grid-cols-[140px_1fr]">
+                      <dt className="text-gray-500">Tax:</dt>
+                      <dd className="font-medium text-right">{priceTax}</dd>
+                    </div>}
+                    <div className="grid grid-cols-[140px_1fr] border-t pt-1.5 font-semibold">
+                      <dt>Total:</dt>
+                      <dd className="text-right">{total}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                {/* Customer summary */}
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3 text-base text-[#8B0000]">Customer Information</h3>
+                  {selectedCustomer ? (
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                      {selectedCustomer.name && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">Name:</dt><dd className="font-medium truncate">{selectedCustomer.name}</dd>
+                      </div>}
+                      {selectedCustomer.email && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">Email:</dt><dd className="font-medium truncate">{selectedCustomer.email}</dd>
+                      </div>}
+                      {selectedCustomer.address && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">Address:</dt><dd className="font-medium truncate">{selectedCustomer.address}</dd>
+                      </div>}
+                      {selectedCustomer.phone && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">Phone:</dt><dd className="font-medium truncate">{selectedCustomer.phone}</dd>
+                      </div>}
+                      {selectedCustomer.city && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">City:</dt><dd className="font-medium truncate">{selectedCustomer.city}</dd>
+                      </div>}
+                      {selectedCustomer.state && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">State:</dt><dd className="font-medium truncate">{selectedCustomer.state}</dd>
+                      </div>}
+                      {selectedCustomer.country && <div className="grid grid-cols-[70px_1fr]">
+                        <dt className="text-gray-500">Country:</dt><dd className="font-medium truncate">{selectedCustomer.country}</dd>
+                      </div>}
+                    </dl>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">No customer selected</p>
+                  )}
+                  {orderReference && (
+                    <div className="mt-2 pt-2 border-t text-sm grid grid-cols-[130px_1fr]">
+                      <span className="text-gray-500">Your reference:</span>
+                      <span className="font-medium">{orderReference}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Shipping & Order details summary */}
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3 text-base text-[#8B0000]">Shipping & Order Details</h3>
+                  <dl className="space-y-1.5 text-sm">
+                    {(shipName || shipAddress || shipCity || shipCountry) && (
+                      <>
+                        <dt className="text-gray-500 text-xs font-semibold uppercase tracking-wide">Shipping address</dt>
+                        {shipName && <div className="grid grid-cols-[80px_1fr]">
+                          <dt className="text-gray-500">Name:</dt><dd className="font-medium">{shipName}</dd>
+                        </div>}
+                        {shipAddress && <div className="grid grid-cols-[80px_1fr]">
+                          <dt className="text-gray-500">Address:</dt><dd className="font-medium">{shipAddress}</dd>
+                        </div>}
+                        {shipCity && <div className="grid grid-cols-[80px_1fr]">
+                          <dt className="text-gray-500">City:</dt><dd className="font-medium">{shipCity}</dd>
+                        </div>}
+                        {shipCountry && <div className="grid grid-cols-[80px_1fr]">
+                          <dt className="text-gray-500">Country:</dt><dd className="font-medium">{shipCountry}</dd>
+                        </div>}
+                        {shipZipcode && <div className="grid grid-cols-[80px_1fr]">
+                          <dt className="text-gray-500">Zipcode:</dt><dd className="font-medium">{shipZipcode}</dd>
+                        </div>}
+                      </>
+                    )}
+                    {requestedDeliveryDate && (
+                      <div className="grid grid-cols-[130px_1fr] mt-2 pt-2 border-t">
+                        <dt className="text-gray-500">Delivery date:</dt>
+                        <dd className="font-medium">{requestedDeliveryDate}</dd>
+                      </div>
+                    )}
+                    {orderStatus && (
+                      <div className="grid grid-cols-[130px_1fr]">
+                        <dt className="text-gray-500">Order status:</dt>
+                        <dd className="font-medium">{orderStatus}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1186,7 +1362,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                 Saving...
               </div>
             ) : (
-              currentStep === 3
+              currentStep === 4
                 ? (isDuplicate ? 'Duplicate Order' : (order ? 'Update Order' : 'Create Order'))
                 : 'Next Step'
             )}
