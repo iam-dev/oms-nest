@@ -99,6 +99,10 @@ describe("FitterController", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       );
       expect(result).toEqual(paginatedResult);
     });
@@ -116,7 +120,16 @@ describe("FitterController", () => {
       const result = await controller.findAll(2, 5);
 
       // Assert
-      expect(service.findAll).toHaveBeenCalledWith(2, 5, undefined, undefined);
+      expect(service.findAll).toHaveBeenCalledWith(
+        2,
+        5,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(result.pages).toBe(2);
     });
 
@@ -138,6 +151,10 @@ describe("FitterController", () => {
         10,
         "Los Angeles",
         "United States",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       );
     });
   });
