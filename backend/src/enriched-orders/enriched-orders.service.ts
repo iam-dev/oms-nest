@@ -288,13 +288,13 @@ export class EnrichedOrdersService {
         queryRunner.query(`
           SELECT DISTINCT c.country as name FROM orders o
           JOIN customers c ON o.customer_id = c.id
-          WHERE o.deleted_at IS NULL AND c.country IS NOT NULL AND c.country != ''
+          WHERE o.deleted_at IS NULL AND c.country IS NOT NULL AND c.country != '' AND c.country != '-1'
           ORDER BY name
         `),
         queryRunner.query(`
           SELECT DISTINCT f.country as name FROM orders o
           JOIN fitters f ON o.fitter_id = f.id
-          WHERE o.deleted_at IS NULL AND f.country IS NOT NULL AND f.country != ''
+          WHERE o.deleted_at IS NULL AND f.country IS NOT NULL AND f.country != '' AND f.country != '-1'
           ORDER BY name
         `),
         queryRunner.query(`
@@ -480,15 +480,20 @@ export class EnrichedOrdersService {
     params: any[];
   } {
     const conditions: string[] = [];
+    // Country conditions are kept separate so they can be ORed with the main
+    // conditions (additive: 'show Fitter X results PLUS Canada results')
+    const countryConditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Filter by order ID (exact match)
+    // Filter by order ID: match exact ID or fitter_reference containing the number (e.g. "6365" matches SN6365)
     const orderId = query.id || query.orderId;
     if (orderId) {
-      conditions.push(`o.id = $${paramIndex}`);
-      params.push(orderId);
-      paramIndex++;
+      conditions.push(
+        `(o.id = $${paramIndex} OR o.fitter_reference ILIKE $${paramIndex + 1})`,
+      );
+      params.push(orderId, `%${orderId}%`);
+      paramIndex += 2;
     }
 
     // Filter by multiple order IDs (bulk search)
@@ -514,6 +519,7 @@ export class EnrichedOrdersService {
         "o.special_notes",
         "o.horse_name",
         "o.fitter_reference",
+        "o.serial_number",
         "c.name",
         "fc.full_name",
         "fac.full_name",
@@ -813,15 +819,14 @@ export class EnrichedOrdersService {
       }
     }
 
-    // Filter by customer country
-    // Supports comma-separated values for multi-select
+    // Filter by customer country (additive: ORed with other conditions)
     if (query.customerCountry) {
       const values = String(query.customerCountry)
         .split(",")
         .map((v) => v.trim())
         .filter(Boolean);
       if (values.length === 1) {
-        conditions.push(`c.country ILIKE $${paramIndex}`);
+        countryConditions.push(`c.country ILIKE $${paramIndex}`);
         params.push(`%${values[0]}%`);
         paramIndex++;
       } else if (values.length > 1) {
@@ -831,7 +836,7 @@ export class EnrichedOrdersService {
           paramIndex++;
           return clause;
         });
-        conditions.push(`(${orClauses.join(" OR ")})`);
+        countryConditions.push(`(${orClauses.join(" OR ")})`);
       }
     }
 
@@ -949,7 +954,7 @@ export class EnrichedOrdersService {
         .map((v) => v.trim())
         .filter(Boolean);
       if (values.length === 1) {
-        conditions.push(`f.country ILIKE $${paramIndex}`);
+        countryConditions.push(`f.country ILIKE $${paramIndex}`);
         params.push(`%${values[0]}%`);
         paramIndex++;
       } else if (values.length > 1) {
@@ -959,7 +964,7 @@ export class EnrichedOrdersService {
           paramIndex++;
           return clause;
         });
-        conditions.push(`(${orClauses.join(" OR ")})`);
+        countryConditions.push(`(${orClauses.join(" OR ")})`);
       }
     }
 
@@ -1015,10 +1020,23 @@ export class EnrichedOrdersService {
       paramIndex++;
     }
 
-    return {
-      where: conditions.length > 0 ? conditions.join(" AND ") : "",
-      params,
-    };
+    // Build final WHERE clause:
+    // - If both main and country conditions exist: (main) OR (country) — additive behaviour
+    // - If only one set exists: use it normally with AND
+    let where: string;
+    if (conditions.length > 0 && countryConditions.length > 0) {
+      const mainClause = conditions.join(" AND ");
+      const countryClause = countryConditions.join(" OR ");
+      where = `(${mainClause}) OR (${countryClause})`;
+    } else if (conditions.length > 0) {
+      where = conditions.join(" AND ");
+    } else if (countryConditions.length > 0) {
+      where = countryConditions.join(" OR ");
+    } else {
+      where = "";
+    }
+
+    return { where, params };
   }
 
   private buildOrderBy(query: EnrichedOrdersQueryDto): string {

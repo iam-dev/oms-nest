@@ -177,10 +177,14 @@ export class AuthService {
         );
       });
 
+    const tokenExpiresIn = this.configService.getOrThrow("auth.expires", {
+      infer: true,
+    });
+
     return {
       token,
-      refreshToken: null, // Skip refresh token for now
-      tokenExpires: Date.now() + 900000, // 15 minutes
+      refreshToken: null, // Session management disabled for staging compatibility
+      tokenExpires: Date.now() + ms(tokenExpiresIn),
       user,
     };
   }

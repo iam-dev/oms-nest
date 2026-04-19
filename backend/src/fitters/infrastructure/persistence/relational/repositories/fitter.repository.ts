@@ -39,8 +39,13 @@ export class FitterRepository implements IFitterRepository {
     limit: number;
     city?: string;
     country?: string;
+    searchTerm?: string;
+    name?: string;
+    username?: string;
+    status?: string;
   }): Promise<{ fitters: Fitter[]; total: number }> {
-    const { page, limit, city, country } = options;
+    const { page, limit, city, country, searchTerm, name, username, status } =
+      options;
 
     const queryBuilder = this.repository
       .createQueryBuilder("fitter")
@@ -58,6 +63,35 @@ export class FitterRepository implements IFitterRepository {
       });
     }
 
+    if (searchTerm) {
+      queryBuilder.andWhere(
+        `fitter.user_id IN (SELECT legacy_id FROM "user" WHERE name ILIKE :search OR username ILIKE :search)`,
+        { search: `%${searchTerm}%` },
+      );
+    }
+
+    if (name) {
+      queryBuilder.andWhere(
+        `fitter.user_id IN (SELECT legacy_id FROM "user" WHERE name ILIKE :name)`,
+        { name: `%${name}%` },
+      );
+    }
+
+    if (username) {
+      queryBuilder.andWhere(
+        `fitter.user_id IN (SELECT legacy_id FROM "user" WHERE username ILIKE :username)`,
+        { username: `%${username}%` },
+      );
+    }
+
+    if (status) {
+      const enabled = status.toUpperCase() === "ACTIVE";
+      queryBuilder.andWhere(
+        `fitter.user_id IN (SELECT legacy_id FROM "user" WHERE enabled = :enabled)`,
+        { enabled },
+      );
+    }
+
     queryBuilder.orderBy("fitter.id", "DESC");
 
     const total = await queryBuilder.getCount();
@@ -70,6 +104,18 @@ export class FitterRepository implements IFitterRepository {
       fitters: this.mapper.toDomainArray(entities),
       total,
     };
+  }
+
+  async findDistinctCountries(): Promise<string[]> {
+    const rows = await this.repository
+      .createQueryBuilder("fitter")
+      .select("DISTINCT fitter.country", "country")
+      .where("fitter.deleted = 0")
+      .andWhere("fitter.country IS NOT NULL")
+      .andWhere("fitter.country != ''")
+      .orderBy("fitter.country", "ASC")
+      .getRawMany();
+    return rows.map((r) => r.country as string);
   }
 
   async findActive(): Promise<Fitter[]> {

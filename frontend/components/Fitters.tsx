@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EntityTable } from '@/components/shared/EntityTable';
 import { useTableFilters, usePagination, useEntityData } from '@/hooks';
 import { getFitterTableColumns } from '@/utils/fitterTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { updateFitter, deleteFitter, createFitter, blockFitter, type Fitter } from '@/services/fitters';
+import { updateFitter, deleteFitter, createFitter, blockFitter, fetchFitterCountries, type Fitter } from '@/services/fitters';
 import { toast } from 'sonner';
 import { FitterDetailModal } from '@/components/shared/FitterDetailModal';
 import { FitterEditModal } from '@/components/shared/FitterEditModal';
@@ -15,6 +15,11 @@ import { logger } from '@/utils/logger';
 
 export default function Fitters() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [countries, setCountries] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchFitterCountries().then(setCountries);
+  }, []);
 
   // Modal states
   const [selectedFitter, setSelectedFitter] = useState<Fitter | null>(null);
@@ -68,14 +73,14 @@ export default function Fitters() {
 
   // Handle delete fitter
   const handleDeleteFitter = async (fitter: Fitter) => {
-    if (window.confirm(`Are you sure you want to delete fitter "${fitter.username}"?`)) {
+    if (window.confirm(`Are you sure you want to delete fitter "${fitter.name || fitter.username}"?`)) {
       try {
         await deleteFitter(fitter.id);
-        // Refresh the fitter list
+        toast.success(`Fitter "${fitter.name || fitter.username}" deleted successfully`);
         refetch();
       } catch (error) {
         logger.error('Error deleting fitter:', error);
-        setActionError(error instanceof Error ? error.message : 'Failed to delete fitter');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete fitter');
       }
     }
   };
@@ -174,7 +179,7 @@ export default function Fitters() {
 
       <EntityTable
         entities={fitters}
-        columns={getFitterTableColumns(filters, handleFilterChange)}
+        columns={getFitterTableColumns(filters, handleFilterChange, countries)}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

@@ -5,7 +5,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 export type FitterHeaderFilters = Record<string, string>;
 export type SetFitterHeaderFilters = (key: string, value: string) => void;
 
-export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHeaderFilters: SetFitterHeaderFilters) {
+export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHeaderFilters: SetFitterHeaderFilters, countries: string[] = []) {
   return [
     {
       key: 'id',
@@ -58,7 +58,8 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           title="Country"
           value={headerFilters.country || ''}
           onFilter={value => setHeaderFilters('country', value)}
-          type="text"
+          type={countries.length > 0 ? 'enum' : 'text'}
+          data={countries}
           entityType="fitter"
         />
       ),

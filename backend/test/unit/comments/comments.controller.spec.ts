@@ -65,7 +65,7 @@ describe("CommentsController", () => {
       service.create.mockResolvedValue(mockCommentDto);
 
       // Act
-      const result = await controller.create(createDto);
+      const result = await controller.create(createDto, {});
 
       // Assert
       expect(result).toEqual(mockCommentDto);
@@ -84,7 +84,7 @@ describe("CommentsController", () => {
       );
 
       // Act & Assert
-      await expect(controller.create(createDto)).rejects.toThrow(
+      await expect(controller.create(createDto, {})).rejects.toThrow(
         "Comment content is required",
       );
     });

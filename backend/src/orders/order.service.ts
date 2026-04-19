@@ -440,14 +440,14 @@ export class OrderService {
     // Map legacy status codes to frontend-expected status names
     const statusNameMap: Record<number, string> = {
       0: "unordered",
-      1: "ordered",
+      1: "ordered_changed",
       2: "approved",
       3: "in_production_p1",
       4: "on_hold",
       5: "shipped_to_fitter",
       6: "on_trial",
       7: "completed_sale",
-      8: "changed",
+      8: "ordered_changed",
       9: "in_production_p2",
       10: "in_production_p3",
       11: "shipped_to_customer",

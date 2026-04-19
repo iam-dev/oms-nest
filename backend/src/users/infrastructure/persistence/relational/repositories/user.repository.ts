@@ -282,6 +282,17 @@ export class UsersRelationalRepository implements UserRepository {
   }
 
   async remove(id: User["id"]): Promise<void> {
-    await this.usersRepository.softDelete(id);
+    const entity = await this.usersRepository.findOne({ where: { id } });
+    if (!entity) return;
+
+    const legacyId = entity.legacyId;
+    if (!legacyId) {
+      throw new Error("User has no legacy_id, cannot delete");
+    }
+
+    await this.dataSource.query(
+      `UPDATE credentials SET deleted = 1 WHERE user_id = $1`,
+      [legacyId],
+    );
   }
 }

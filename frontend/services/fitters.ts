@@ -1,5 +1,5 @@
 import { fetchEntities } from './api';
-import { API_URL } from './api-config';
+import { API_URL, fetchWithRefresh } from './api-config';
 import { logger } from '@/utils/logger';
 
 export interface Fitter {
@@ -90,10 +90,19 @@ export async function fetchFitters({
   });
 }
 
+export async function fetchFitterCountries(): Promise<string[]> {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/countries`, {
+    headers: { 'Accept': 'application/json' },
+    credentials: 'include',
+  });
+  if (!response.ok) return [];
+  return response.json();
+}
+
 export async function createFitter(fitterData: Record<string, unknown>): Promise<Fitter> {
   logger.log('Creating fitter with data:', fitterData);
 
-  const response = await fetch(`${API_URL}/api/v1/fitters`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
@@ -114,7 +123,7 @@ export async function createFitter(fitterData: Record<string, unknown>): Promise
 export async function updateFitter(id: number, fitterData: Partial<Fitter>): Promise<Fitter> {
   logger.log('Updating fitter with ID:', id, 'Data:', fitterData);
 
-  const response = await fetch(`${API_URL}/api/v1/fitters/${id}`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
@@ -133,7 +142,7 @@ export async function updateFitter(id: number, fitterData: Partial<Fitter>): Pro
 }
 
 export async function blockFitter(id: number): Promise<{ enabled: boolean }> {
-  const response = await fetch(`${API_URL}/api/v1/fitters/${id}/toggle-block`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/${id}/toggle-block`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -154,7 +163,7 @@ export async function blockFitter(id: number): Promise<{ enabled: boolean }> {
 export async function deleteFitter(id: number): Promise<void> {
   logger.log('Deleting fitter with ID:', id);
 
-  const response = await fetch(`${API_URL}/api/v1/fitters/${id}`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/${id}`, {
     method: 'DELETE',
     headers: { 'Accept': 'application/json' },
     credentials: 'include',
