@@ -14,8 +14,13 @@ export abstract class IFitterRepository {
     limit: number;
     city?: string;
     country?: string;
+    searchTerm?: string;
+    name?: string;
+    username?: string;
+    status?: string;
   }): Promise<{ fitters: Fitter[]; total: number }>;
   abstract findActive(): Promise<Fitter[]>;
+  abstract findDistinctCountries(): Promise<string[]>;
   abstract findByCountry(country: string): Promise<Fitter[]>;
   abstract findByCity(city: string): Promise<Fitter[]>;
   abstract countByCountry(country: string): Promise<number>;

@@ -83,6 +83,7 @@ jest.mock('lucide-react', () => ({
   User: () => <span />,
   Package: () => <span />,
   Settings: () => <span />,
+  ClipboardList: () => <span />,
 }));
 
 // ---------------------------------------------------------------------------
@@ -238,7 +239,7 @@ async function renderAndWaitForLoad(
 // Helper: advance the form to a specific step by clicking "Next Step"
 // ---------------------------------------------------------------------------
 
-async function navigateToStep(targetStep: 2 | 3) {
+async function navigateToStep(targetStep: 2 | 3 | 4) {
   for (let step = 1; step < targetStep; step++) {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /next step/i }));
@@ -424,19 +425,19 @@ describe('ComprehensiveEditOrder component', () => {
       expect(title).toHaveTextContent('Order overview');
     });
 
-    it('shows "Update Order" on the primary button at step 3 in edit mode', async () => {
+    it('shows "Update Order" on the primary button at step 4 in edit mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
 
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       expect(screen.getByRole('button', { name: /update order/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /next step/i })).not.toBeInTheDocument();
     });
 
-    it('shows "Duplicate Order" on the primary button at step 3 in duplicate mode', async () => {
+    it('shows "Duplicate Order" on the primary button at step 4 in duplicate mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
 
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       expect(
         screen.getByRole('button', { name: /duplicate order/i })
@@ -449,12 +450,13 @@ describe('ComprehensiveEditOrder component', () => {
   // 5. Step navigation via step indicator
   // =========================================================================
   describe('step navigation via step indicator buttons', () => {
-    it('renders all three step title labels in the step indicator', async () => {
+    it('renders all four step title labels in the step indicator', async () => {
       await renderAndWaitForLoad();
 
       expect(screen.getAllByText('Saddle Information').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('Customer Information').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('Order overview').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Preview & Submit').length).toBeGreaterThanOrEqual(1);
     });
 
     it('jumps to step 2 when the Customer Information indicator button is clicked', async () => {
@@ -552,12 +554,12 @@ describe('ComprehensiveEditOrder component', () => {
   // 7. Submit in edit mode (isDuplicate = false)
   // =========================================================================
   describe('submit in edit mode', () => {
-    it('calls updateOrder with the correct orderId at step 3', async () => {
+    it('calls updateOrder with the correct orderId at step 4', async () => {
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -571,7 +573,7 @@ describe('ComprehensiveEditOrder component', () => {
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
 
       await renderAndWaitForLoad({ isDuplicate: false });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -585,7 +587,7 @@ describe('ComprehensiveEditOrder component', () => {
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
 
       await renderAndWaitForLoad({ isDuplicate: false });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -600,7 +602,7 @@ describe('ComprehensiveEditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -613,7 +615,7 @@ describe('ComprehensiveEditOrder component', () => {
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
 
       await renderAndWaitForLoad({ isDuplicate: false });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -631,7 +633,7 @@ describe('ComprehensiveEditOrder component', () => {
   // 8. Submit in duplicate mode (isDuplicate = true)
   // =========================================================================
   describe('submit in duplicate mode', () => {
-    it('calls createOrderFromPayload at step 3 in duplicate mode', async () => {
+    it('calls createOrderFromPayload at step 4 in duplicate mode', async () => {
       (createOrderFromPayload as jest.Mock).mockResolvedValue({
         success: true,
         orderId: 201,
@@ -639,7 +641,7 @@ describe('ComprehensiveEditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: true, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /duplicate order/i }));
@@ -656,7 +658,7 @@ describe('ComprehensiveEditOrder component', () => {
       });
 
       await renderAndWaitForLoad({ isDuplicate: true });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /duplicate order/i }));
@@ -673,7 +675,7 @@ describe('ComprehensiveEditOrder component', () => {
       });
 
       await renderAndWaitForLoad({ isDuplicate: true });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /duplicate order/i }));
@@ -691,7 +693,7 @@ describe('ComprehensiveEditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: true, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /duplicate order/i }));
@@ -712,7 +714,7 @@ describe('ComprehensiveEditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -726,7 +728,7 @@ describe('ComprehensiveEditOrder component', () => {
       (updateOrder as jest.Mock).mockRejectedValue('unexpected string');
 
       await renderAndWaitForLoad({ isDuplicate: false });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -743,7 +745,7 @@ describe('ComprehensiveEditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: true, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /duplicate order/i }));
@@ -758,7 +760,7 @@ describe('ComprehensiveEditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
@@ -772,7 +774,7 @@ describe('ComprehensiveEditOrder component', () => {
       (updateOrder as jest.Mock).mockRejectedValue(new Error('Failure'));
 
       await renderAndWaitForLoad({ isDuplicate: false });
-      await navigateToStep(3);
+      await navigateToStep(4);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));

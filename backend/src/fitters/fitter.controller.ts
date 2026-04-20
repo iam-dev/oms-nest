@@ -90,13 +90,30 @@ export class FitterController {
   @ApiQuery({ name: "limit", required: false, type: Number })
   @ApiQuery({ name: "city", required: false, type: String })
   @ApiQuery({ name: "country", required: false, type: String })
+  @ApiQuery({ name: "searchTerm", required: false, type: String })
+  @ApiQuery({ name: "name", required: false, type: String })
+  @ApiQuery({ name: "username", required: false, type: String })
+  @ApiQuery({ name: "status", required: false, type: String })
   async findAll(
     @Query("page") page?: number,
     @Query("limit") limit?: number,
     @Query("city") city?: string,
     @Query("country") country?: string,
+    @Query("searchTerm") searchTerm?: string,
+    @Query("name") name?: string,
+    @Query("username") username?: string,
+    @Query("status") status?: string,
   ): Promise<{ data: FitterDto[]; total: number; pages: number }> {
-    return this.fitterService.findAll(page, limit, city, country);
+    return this.fitterService.findAll(
+      page,
+      limit,
+      city,
+      country,
+      searchTerm,
+      name,
+      username,
+      status,
+    );
   }
 
   @Patch(":id/toggle-block")
@@ -122,6 +139,21 @@ export class FitterController {
     @Param("id", ParseIntPipe) id: number,
   ): Promise<{ enabled: boolean }> {
     return this.fitterService.toggleBlock(id);
+  }
+
+  @Get("countries")
+  @ApiOperation({
+    summary: "Get distinct fitter countries",
+    description:
+      "Returns distinct country values used by fitters, sorted alphabetically",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Country list retrieved",
+    schema: { type: "array", items: { type: "string" } },
+  })
+  async findCountries(): Promise<string[]> {
+    return this.fitterService.findDistinctCountries();
   }
 
   @Get("active")

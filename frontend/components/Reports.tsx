@@ -153,13 +153,14 @@ export default function Reports() {
   }, [filterOptions, orders]);
 
   const dynamicCustomerCountries = React.useMemo(() => {
+    const isValidCountry = (c: string) => c.trim() && c.trim() !== '-1';
     if (filterOptions?.customerCountries?.length) {
-      return filterOptions.customerCountries;
+      return filterOptions.customerCountries.filter(isValidCountry);
     }
     const countriesSet = new Set<string>();
     orders.forEach(order => {
       const country = order.customer_country || order.customerCountry;
-      if (country && typeof country === 'string' && country.trim()) {
+      if (country && typeof country === 'string' && isValidCountry(country)) {
         countriesSet.add(country.trim());
       }
     });
@@ -167,13 +168,14 @@ export default function Reports() {
   }, [filterOptions, orders]);
 
   const dynamicFitterCountries = React.useMemo(() => {
+    const isValidCountry = (c: string) => c.trim() && c.trim() !== '-1';
     if (filterOptions?.fitterCountries?.length) {
-      return filterOptions.fitterCountries;
+      return filterOptions.fitterCountries.filter(isValidCountry);
     }
     const countriesSet = new Set<string>();
     orders.forEach(order => {
       const country = order.fitter_country || order.fitterCountry;
-      if (country && typeof country === 'string' && country.trim()) {
+      if (country && typeof country === 'string' && isValidCountry(country)) {
         countriesSet.add(country.trim());
       }
     });
@@ -414,19 +416,10 @@ export default function Reports() {
       return filterValues.some(fv => saddleName.toLowerCase().includes(fv.toLowerCase()));
     })();
 
-    const matchesCustomerCountry = !headerFilters.customerCountry || (() => {
-      const filterValues = headerFilters.customerCountry.split(',').map(v => v.trim()).filter(Boolean);
-      if (filterValues.length === 0) return true;
-      const country = (order.customerCountry || order.customer_country || order.customer?.country || '').toLowerCase();
-      return filterValues.some(fv => country.includes(fv.toLowerCase()));
-    })();
-
-    const matchesFitterCountry = !headerFilters.fitterCountry || (() => {
-      const filterValues = headerFilters.fitterCountry.split(',').map(v => v.trim()).filter(Boolean);
-      if (filterValues.length === 0) return true;
-      const country = (order.fitter_country || order.fitterCountry || '').toLowerCase();
-      return filterValues.some(fv => country.includes(fv.toLowerCase()));
-    })();
+    // Country filters are handled server-side with OR (additive) logic.
+    // Client-side re-filtering would incorrectly hide valid server results.
+    const matchesCustomerCountry = true;
+    const matchesFitterCountry = true;
 
     const matchesKneeRoll = !headerFilters.kneeRoll || (() => {
       const filterValues = headerFilters.kneeRoll.split(',').map(v => v.trim()).filter(Boolean);
@@ -972,6 +965,44 @@ export default function Reports() {
           </div>
         </div>
       </div>
+
+      {/* Active filter chips shown above results */}
+      {(() => {
+        const chips: { label: string; onRemove: () => void }[] = [];
+        if (selectedCustomerCountries.length > 0) {
+          selectedCustomerCountries.forEach(c => chips.push({
+            label: `Customer Country: ${c}`,
+            onRemove: () => {
+              const next = selectedCustomerCountries.filter(v => v !== c);
+              setSelectedCustomerCountries(next);
+              updateMultiFilter('customerCountry', next);
+            },
+          }));
+        }
+        if (selectedFitterCountries.length > 0) {
+          selectedFitterCountries.forEach(c => chips.push({
+            label: `Fitter Country: ${c}`,
+            onRemove: () => {
+              const next = selectedFitterCountries.filter(v => v !== c);
+              setSelectedFitterCountries(next);
+              updateMultiFilter('fitterCountry', next);
+            },
+          }));
+        }
+        if (chips.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {chips.map((chip, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full border border-blue-200">
+                {chip.label}
+                <button type="button" onClick={chip.onRemove} className="ml-1 hover:bg-blue-200 rounded-full p-0.5">
+                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
 
       {error ? (
         <div>Error: {error}</div>

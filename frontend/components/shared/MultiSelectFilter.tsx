@@ -54,6 +54,7 @@ export function MultiSelectFilter({
 
   const handleSelect = (value: string) => {
     onChangeSelected([...selected, value]);
+    setOpen(false);
   };
 
   const handleRemove = (value: string) => {

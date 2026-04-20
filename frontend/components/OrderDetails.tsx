@@ -94,6 +94,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   const [bulkDuplicateCount, setBulkDuplicateCount] = useState(5);
   const [bulkDuplicating, setBulkDuplicating] = useState(false);
   const [copiedSaddle, setCopiedSaddle] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   useEffect(() => {
     if (!orderId) {
@@ -198,6 +199,46 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
   // Combine both sources and sort by timestamp descending (newest first)
   const comments = [...logTimelineEntries, ...commentTimelineEntries]
     .sort((a, b) => b.timestamp - a.timestamp);
+
+  // Handle adding a comment
+  const handleAddComment = async () => {
+    if (!comment.trim() || !orderId) return;
+
+    const typeMap: Record<string, string> = {
+      'fitter-factory': 'general',
+      'fitter': 'customer',
+      'factory': 'production',
+    };
+
+    setSubmittingComment(true);
+    try {
+      const response = await fetch(`${API_URL}/api/v1/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          orderId,
+          content: comment.trim(),
+          type: typeMap[sendTo] || 'general',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to add comment: ${errorText}`);
+      }
+
+      setComment('');
+      // Reload order detail to show the new comment
+      const data = await fetchOrderDetail(orderId);
+      setDetailData(data);
+    } catch (err) {
+      logger.error('Failed to add comment:', err);
+      alert('Failed to add comment. Please try again.');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
 
   // Handle order status change
   const handleChangeOrderStatus = async () => {
@@ -685,8 +726,14 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
                       <SelectItem value="factory">Only Factory</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button variant="destructive" size="sm" className="w-full bg-[#8B0000] h-8 text-xs">
-                    Add comment
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full bg-[#8B0000] h-8 text-xs"
+                    onClick={handleAddComment}
+                    disabled={submittingComment || !comment.trim()}
+                  >
+                    {submittingComment ? 'Adding...' : 'Add comment'}
                   </Button>
                 </div>
               </div>

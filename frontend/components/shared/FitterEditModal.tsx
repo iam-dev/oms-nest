@@ -299,24 +299,30 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="US">United States</SelectItem>
-                  <SelectItem value="GB">United Kingdom</SelectItem>
-                  <SelectItem value="CA">Canada</SelectItem>
-                  <SelectItem value="AU">Australia</SelectItem>
-                  <SelectItem value="DE">Germany</SelectItem>
-                  <SelectItem value="FR">France</SelectItem>
-                  <SelectItem value="NL">Netherlands</SelectItem>
-                  <SelectItem value="ES">Spain</SelectItem>
-                  <SelectItem value="IT">Italy</SelectItem>
-                  <SelectItem value="AT">Austria</SelectItem>
-                  <SelectItem value="BE">Belgium</SelectItem>
-                  <SelectItem value="CH">Switzerland</SelectItem>
-                  <SelectItem value="DK">Denmark</SelectItem>
-                  <SelectItem value="FI">Finland</SelectItem>
-                  <SelectItem value="IE">Ireland</SelectItem>
-                  <SelectItem value="NO">Norway</SelectItem>
-                  <SelectItem value="PT">Portugal</SelectItem>
-                  <SelectItem value="SE">Sweden</SelectItem>
+                  <SelectItem value="United States">United States</SelectItem>
+                  <SelectItem value="United Kingdom">United Kingdom</SelectItem>
+                  <SelectItem value="Canada">Canada</SelectItem>
+                  <SelectItem value="Australia">Australia</SelectItem>
+                  <SelectItem value="Germany">Germany</SelectItem>
+                  <SelectItem value="France">France</SelectItem>
+                  <SelectItem value="Netherlands">Netherlands</SelectItem>
+                  <SelectItem value="Spain">Spain</SelectItem>
+                  <SelectItem value="Italy">Italy</SelectItem>
+                  <SelectItem value="Austria">Austria</SelectItem>
+                  <SelectItem value="Belgium">Belgium</SelectItem>
+                  <SelectItem value="Switzerland">Switzerland</SelectItem>
+                  <SelectItem value="Denmark">Denmark</SelectItem>
+                  <SelectItem value="Finland">Finland</SelectItem>
+                  <SelectItem value="Ireland">Ireland</SelectItem>
+                  <SelectItem value="Norway">Norway</SelectItem>
+                  <SelectItem value="Portugal">Portugal</SelectItem>
+                  <SelectItem value="Sweden">Sweden</SelectItem>
+                  <SelectItem value="New Zealand">New Zealand</SelectItem>
+                  <SelectItem value="Japan">Japan</SelectItem>
+                  <SelectItem value="Israel">Israel</SelectItem>
+                  <SelectItem value="Czech Republic">Czech Republic</SelectItem>
+                  <SelectItem value="Russia">Russia</SelectItem>
+                  <SelectItem value="Mexico">Mexico</SelectItem>
                 </SelectContent>
               </Select>
             </div>

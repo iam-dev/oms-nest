@@ -73,7 +73,8 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
         logger.log('DashboardOrderStatusFlow: Received status stats:', data);
 
         // The backend now returns: { totalOrders, urgentOrders, overdueOrders, averageValue, statusCounts }
-        const total = data.totalOrders || 0;
+        const statusCountSum = Object.values(data.statusCounts || {}).reduce((sum: number, c) => sum + (Number(c) || 0), 0);
+        const total = data.totalOrders || statusCountSum || 0;
         const statusCounts = data.statusCounts || {};
         const statusObj: Record<string, Status> = {};
 

@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseIntPipe,
+  Req,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -64,7 +65,11 @@ export class CommentsController {
   })
   async create(
     @Body() createCommentDto: CreateCommentDto,
+    @Req() req: { user?: { legacyId?: number } },
   ): Promise<CommentDto> {
+    if (!createCommentDto.userId && req.user?.legacyId) {
+      createCommentDto.userId = req.user.legacyId;
+    }
     return this.commentsService.create(createCommentDto);
   }
 

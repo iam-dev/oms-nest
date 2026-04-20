@@ -189,12 +189,20 @@ export class FitterService {
     limit: number = 10,
     city?: string,
     country?: string,
+    searchTerm?: string,
+    name?: string,
+    username?: string,
+    status?: string,
   ): Promise<{ data: FitterDto[]; total: number; pages: number }> {
     const { fitters, total } = await this.fitterRepository.findAllPaginated({
       page,
       limit,
       city,
       country,
+      searchTerm,
+      name,
+      username,
+      status,
     });
 
     const dtos = fitters.map((fitter) => this.toDto(fitter));
@@ -279,6 +287,10 @@ export class FitterService {
   async findByUserId(userId: number): Promise<FitterDto | null> {
     const fitter = await this.fitterRepository.findByUserId(userId);
     return fitter ? this.toDto(fitter) : null;
+  }
+
+  async findDistinctCountries(): Promise<string[]> {
+    return this.fitterRepository.findDistinctCountries();
   }
 
   async findActiveFitters(): Promise<FitterDto[]> {

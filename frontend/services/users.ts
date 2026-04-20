@@ -183,7 +183,7 @@ export async function fetchUsers({
  * Get a single user by ID
  */
 export async function getUser(id: string): Promise<User> {
-  const response = await fetch(`${API_URL}/users/${id}`, {
+  const response = await fetch(`${API_URL}/api/v1/users/${id}`, {
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -435,7 +435,7 @@ export async function updateUser(id: string, userData: UpdateUserData): Promise<
  * Delete a user
  */
 export async function deleteUser(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/users/${id}`, {
+  const response = await fetch(`${API_URL}/api/v1/users/${id}`, {
     method: 'DELETE',
     headers: {
       'Accept': 'application/json',
