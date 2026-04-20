@@ -61,6 +61,7 @@ export default function Reports() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Saved filters state
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
@@ -490,6 +491,76 @@ export default function Reports() {
     logger.log('Ordered date filter:', orderedDate);
     logger.log('Payment date filter:', paymentDate);
   }, [orders, processedOrders, filteredOrders, headerFilters, date, orderedDate, paymentDate]);
+
+  // ========== EXPORT ALL ==========
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      // Build the same filters as the current view
+      const filters: Record<string, string | boolean> = {};
+      Object.keys(headerFilters).forEach(key => {
+        if (headerFilters[key] && headerFilters[key] !== '') {
+          if (key === 'orderId') filters.orderId = headerFilters[key];
+          else if (key === 'reference') filters.fitterReference = headerFilters[key];
+          else if (key === 'customer') filters.customerName = headerFilters[key];
+          else if (key === 'status') filters.orderStatus = headerFilters[key];
+          else if (key === 'fitter') filters.fitterName = headerFilters[key];
+          else if (key === 'supplier') filters.supplierName = headerFilters[key];
+          else if (key === 'urgent') {
+            if (headerFilters[key] === 'true') filters.urgent = true;
+            else if (headerFilters[key] === 'false') filters.urgent = false;
+          } else if (key === 'seatSize') filters.seatSizes = headerFilters[key];
+          else if (key === 'customerCountry') filters.customerCountry = headerFilters[key];
+          else if (key === 'fitterCountry') filters.fitterCountry = headerFilters[key];
+          else if (key === 'saddle') filters.saddleName = headerFilters[key];
+          else if (key === 'kneeRoll') filters.kneeRoll = headerFilters[key];
+          else if (key === 'leatherType') filters.leatherType = headerFilters[key];
+          else if (key === 'saleType') filters.saleType = headerFilters[key];
+        }
+      });
+
+      // Fetch all pages (backend caps at 100/page)
+      const allOrders: unknown[] = [];
+      let currentPage = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const data = await getEnrichedOrders({
+          page: currentPage,
+          partial: true,
+          filters: { ...filters, limit: '100' } as Record<string, string>,
+          orderBy: 'orderId',
+          order: 'desc',
+        });
+
+        let memberArr: unknown[] = [];
+        if (data['hydra:member']) memberArr = data['hydra:member'];
+        else if (Array.isArray(data.data)) memberArr = data.data;
+        else if (Array.isArray(data)) memberArr = data;
+
+        allOrders.push(...memberArr);
+
+        const total = data.total || data['hydra:totalItems'] || 0;
+        hasMore = allOrders.length < total && memberArr.length === 100;
+        currentPage++;
+      }
+
+      // Apply client-side date filtering consistent with filteredOrders
+      const filteredAll = allOrders.filter((order: unknown) => {
+        if (!date.from && !date.to) return true;
+        const orderDate = new Date(getDate(order as Record<string, unknown>));
+        if (date.from && orderDate < date.from) return false;
+        if (date.to && orderDate > date.to) return false;
+        return true;
+      });
+
+      await exportToXlsx(filteredAll as Record<string, unknown>[]);
+    } catch (err) {
+      logger.error('Export failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [headerFilters, date]);
 
   // ========== SAVED FILTERS: serialize / apply / effects ==========
 
@@ -925,8 +996,8 @@ export default function Reports() {
               <Button variant="destructive" className="bg-[#8B0000]">
                 Generate report
               </Button>
-              <Button variant="destructive" className="bg-[#8B0000]" onClick={() => exportToXlsx(filteredOrders)}>
-                Export report
+              <Button variant="destructive" className="bg-[#8B0000]" onClick={handleExport} disabled={isExporting}>
+                {isExporting ? 'Exporting...' : 'Export report'}
               </Button>
               
               {/* Reset All Filters Button */}
