@@ -171,6 +171,35 @@ export class EnrichedOrdersService {
     private readonly productionCacheService: ProductionCacheService,
   ) {}
 
+  private async cacheGet<T>(key: string): Promise<T | undefined> {
+    try {
+      const result = await Promise.race([
+        this.cacheManager.get<T>(key),
+        new Promise<undefined>((resolve) =>
+          setTimeout(() => resolve(undefined), 2000),
+        ),
+      ]);
+      return result ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async cacheSet(
+    key: string,
+    value: unknown,
+    ttl: number,
+  ): Promise<void> {
+    try {
+      await Promise.race([
+        this.cacheManager.set(key, value, ttl),
+        new Promise<void>((resolve) => setTimeout(() => resolve(), 2000)),
+      ]);
+    } catch {
+      // ignore cache errors
+    }
+  }
+
   /**
    * Look up the fitter record ID for a given legacy user ID (credentials.user_id).
    * Returns null if no fitter is associated with this user.
@@ -198,7 +227,7 @@ export class EnrichedOrdersService {
       if (isCacheEnabled && !query.noCache) {
         cacheKey = this.generateCacheKey(query);
         // Try to get from cache first
-        cached = await this.cacheManager.get(cacheKey);
+        cached = await this.cacheGet(cacheKey);
         if (cached) {
           this.logger.debug(`Cache hit for enriched orders: ${cacheKey}`);
           return {
@@ -227,7 +256,7 @@ export class EnrichedOrdersService {
 
       if (isCacheEnabled && !query.noCache) {
         // Cache the result
-        await this.cacheManager.set(cacheKey, response, cacheTTL);
+        await this.cacheSet(cacheKey, response, cacheTTL);
         this.logger.debug(
           `Cached enriched orders result: ${cacheKey} (TTL: ${cacheTTL}ms)`,
         );
@@ -246,8 +275,7 @@ export class EnrichedOrdersService {
 
   async getFilterOptions(): Promise<Record<string, string[]>> {
     const cacheKey = "enriched_orders:filter_options";
-    const cached =
-      await this.cacheManager.get<Record<string, string[]>>(cacheKey);
+    const cached = await this.cacheGet<Record<string, string[]>>(cacheKey);
     if (cached) return cached;
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -334,7 +362,7 @@ export class EnrichedOrdersService {
         factories: extract(factories),
       };
 
-      await this.cacheManager.set(cacheKey, result, 300000);
+      await this.cacheSet(cacheKey, result, 300000);
       return result;
     } finally {
       await queryRunner.release();
@@ -2422,7 +2450,10 @@ export class EnrichedOrdersService {
 
   async invalidateCache(): Promise<void> {
     try {
-      await this.cacheManager.clear();
+      await Promise.race([
+        this.cacheManager.clear(),
+        new Promise<void>((resolve) => setTimeout(() => resolve(), 2000)),
+      ]);
       this.logger.debug("Cleared all enriched orders cache");
     } catch (error) {
       this.logger.warn("Failed to invalidate cache", error);
