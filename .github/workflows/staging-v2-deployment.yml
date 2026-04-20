@@ -311,7 +311,7 @@ jobs:
       run: |
         kubectl rollout status deployment/oms-backend \
           --namespace=${{ env.K8S_NAMESPACE }} \
-          --timeout=300s
+          --timeout=600s
 
     - name: Run database migrations
       run: |
@@ -336,7 +336,7 @@ jobs:
       run: |
         kubectl rollout status deployment/oms-frontend \
           --namespace=${{ env.K8S_NAMESPACE }} \
-          --timeout=300s
+          --timeout=600s
 
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
@@ -579,6 +579,6 @@ jobs:
         echo "E2E tests failed, rolling back deployments..."
         kubectl rollout undo deployment/oms-backend -n ${{ env.K8S_NAMESPACE }}
         kubectl rollout undo deployment/oms-frontend -n ${{ env.K8S_NAMESPACE }}
-        kubectl rollout status deployment/oms-backend -n ${{ env.K8S_NAMESPACE }} --timeout=300s
-        kubectl rollout status deployment/oms-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=300s
+        kubectl rollout status deployment/oms-backend -n ${{ env.K8S_NAMESPACE }} --timeout=600s
+        kubectl rollout status deployment/oms-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=600s
         echo "Rollback completed"
