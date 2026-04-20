@@ -1049,13 +1049,15 @@ export class EnrichedOrdersService {
     }
 
     // Build final WHERE clause:
-    // - If both main and country conditions exist: (main) OR (country) — additive behaviour
-    // - If only one set exists: use it normally with AND
+    // - Country conditions (customerCountry, fitterCountry) are OR'd among themselves
+    //   (e.g. customer from US OR fitter from US), then AND'd with the main conditions
+    // - If both main and country conditions exist: (main) AND (country)
+    // - If only one set exists: use it normally
     let where: string;
     if (conditions.length > 0 && countryConditions.length > 0) {
       const mainClause = conditions.join(" AND ");
       const countryClause = countryConditions.join(" OR ");
-      where = `(${mainClause}) OR (${countryClause})`;
+      where = `(${mainClause}) AND (${countryClause})`;
     } else if (conditions.length > 0) {
       where = conditions.join(" AND ");
     } else if (countryConditions.length > 0) {
