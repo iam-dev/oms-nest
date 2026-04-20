@@ -85,7 +85,8 @@ export class ProductionCacheService implements OnModuleInit {
         this.logger.warn("Failed to connect Redis SCAN client", error);
       }
     }
-    await this.warmupCriticalData();
+    // Fire-and-forget: warmup must not block onModuleInit or app.listen() will never be called
+    void this.warmupCriticalData();
   }
 
   /**
