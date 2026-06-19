@@ -167,6 +167,7 @@ export class EnrichedOrdersController {
   @Patch("bulk-update-status")
   async bulkUpdateOrderStatus(
     @Body() body: { orderIds: number[]; status: string },
+    @Req() req: { user?: { legacyId?: number } },
   ) {
     try {
       if (!Array.isArray(body.orderIds) || body.orderIds.length === 0) {
@@ -184,9 +185,11 @@ export class EnrichedOrdersController {
       this.logger.log(
         `Bulk updating ${body.orderIds.length} orders to status: ${body.status}`,
       );
+      const userId = req.user?.legacyId;
       const result = await this.enrichedOrdersService.bulkUpdateOrderStatus(
         body.orderIds,
         body.status,
+        userId,
       );
       return result;
     } catch (error) {
@@ -209,12 +212,15 @@ export class EnrichedOrdersController {
   async updateOrderStatus(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: { status: string },
+    @Req() req: { user?: { legacyId?: number } },
   ) {
     try {
       this.logger.log(`Updating order status for ID ${id} to: ${body.status}`);
+      const userId = req.user?.legacyId;
       const result = await this.enrichedOrdersService.updateOrderStatus(
         id,
         body.status,
+        userId,
       );
       return result;
     } catch (error) {

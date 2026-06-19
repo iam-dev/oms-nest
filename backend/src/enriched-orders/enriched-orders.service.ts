@@ -1566,7 +1566,16 @@ export class EnrichedOrdersService {
     }
   }
 
-  async updateOrderStatus(orderId: number, statusName: string): Promise<any> {
+  async updateOrderStatus(
+    orderId: number,
+    statusName: string,
+    userId?: number,
+  ): Promise<{
+    success: boolean;
+    orderId: number;
+    status: string;
+    statusId: number;
+  }> {
     this.logger.log(`Updating order ${orderId} status to: ${statusName}`);
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1612,7 +1621,7 @@ export class EnrichedOrdersService {
           `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
            VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, $4, $5)`,
           [
-            fitterId || 0,
+            userId || fitterId || 0,
             orderId,
             `Changed the order status to '${statusName}'`,
             oldStatusId,
@@ -1646,6 +1655,7 @@ export class EnrichedOrdersService {
   async bulkUpdateOrderStatus(
     orderIds: number[],
     statusName: string,
+    userId?: number,
   ): Promise<{
     success: boolean;
     updated: number;
@@ -1712,7 +1722,7 @@ export class EnrichedOrdersService {
               `INSERT INTO log (user_id, user_type, only_for, order_id, text, time, order_status_updated_from, order_status_updated_to)
                VALUES ($1, 2, 0, $2, $3, EXTRACT(EPOCH FROM NOW())::integer, $4, $5)`,
               [
-                fitterId || 0,
+                userId || fitterId || 0,
                 orderId,
                 `Changed the order status to '${statusName}' (bulk update)`,
                 oldStatusId,
