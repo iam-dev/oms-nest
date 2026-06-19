@@ -793,7 +793,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
                   <Label className="text-sm font-medium pt-1">Stock:</Label>
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="stock" />
+                    <Checkbox
+                      id="stock"
+                      checked={formData.isStock}
+                      onCheckedChange={(checked) => updateFormData({ isStock: !!checked })}
+                    />
                     <label className="text-sm" htmlFor="stock">
                       This saddle will be added to my own inventory.
                     </label>
@@ -801,7 +805,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
                   <Label className="text-sm font-medium pt-1">Demo:</Label>
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="demo" />
+                    <Checkbox
+                      id="demo"
+                      checked={formData.isDemo}
+                      onCheckedChange={(checked) => updateFormData({ isDemo: !!checked })}
+                    />
                     <label className="text-sm" htmlFor="demo">
                       This saddle will be used for demo-purposes only.
                     </label>
@@ -809,7 +817,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
                   <Label className="text-sm font-medium pt-1">Repair:</Label>
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="repair" />
+                    <Checkbox
+                      id="repair"
+                      checked={formData.isRepair}
+                      onCheckedChange={(checked) => updateFormData({ isRepair: !!checked })}
+                    />
                     <label className="text-sm" htmlFor="repair">
                       This saddle will be repaired. Please add your repair instructions to the special notes field.
                     </label>
@@ -817,13 +829,21 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
                   <Label className="text-sm font-medium pt-1">Urgent:</Label>
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="urgent" defaultChecked />
+                    <Checkbox
+                      id="urgent"
+                      checked={formData.isUrgent}
+                      onCheckedChange={(checked) => updateFormData({ isUrgent: !!checked })}
+                    />
                     <label className="text-sm" htmlFor="urgent">- Give this order high priority -</label>
                   </div>
 
                   <Label className="text-sm font-medium pt-1">Sponsored:</Label>
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="sponsored" />
+                    <Checkbox
+                      id="sponsored"
+                      checked={formData.isSponsored}
+                      onCheckedChange={(checked) => updateFormData({ isSponsored: !!checked })}
+                    />
                     <label className="text-sm" htmlFor="sponsored"></label>
                   </div>
 
