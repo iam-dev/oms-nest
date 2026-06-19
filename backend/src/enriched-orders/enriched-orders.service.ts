@@ -1322,11 +1322,17 @@ export class EnrichedOrdersService {
             oitm.name as "itemName",
             lt.name as "leatherName",
             oi.custom,
+            oi.color,
             o.sequence,
             CASE
               WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
               WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
               ELSE oitm.name
+            END
+            || CASE
+              WHEN oi.color IS NOT NULL AND oi.color != ''
+                THEN ' | Color: ' || oi.color
+              ELSE ''
             END as "displayValue"
           FROM orders_info oi
           LEFT JOIN options o ON oi.option_id = o.id
@@ -1334,7 +1340,7 @@ export class EnrichedOrdersService {
           LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
             AND oi.option_id = ANY($2::int[])
           WHERE oi.order_id = $1
-          ORDER BY o.sequence
+          ORDER BY o.sequence NULLS LAST, oi.option_id
           `,
           [orderId, leatherOptionIds],
         );
