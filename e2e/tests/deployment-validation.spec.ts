@@ -116,8 +116,10 @@ test.describe('OMS Staging V2 Deployment Validation @smoke @readonly', () => {
 
     for (const endpoint of endpoints) {
       const response = await request.get(`${apiURL}${endpoint}`);
-      // Should return 401 (unauthorized) or 200 — not 404 (not found).
-      expect([401, 200]).toContain(response.status());
+      // Should return 200 (open / authenticated), 401 (auth required), or
+      // 429 (rate-limited under parallel load). All three prove the endpoint
+      // is registered — 404 would mean the module isn't mounted.
+      expect([200, 401, 429]).toContain(response.status());
     }
   });
 

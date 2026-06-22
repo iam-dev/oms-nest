@@ -1,4 +1,5 @@
 import { test, expect, request } from '@playwright/test';
+import { loginApiWithRetry } from '../shared/api-login';
 
 /**
  * Saddle Stock API E2E Tests
@@ -37,12 +38,12 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
       ignoreHTTPSErrors: true,
     });
 
-    const adminLoginResponse = await adminContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
-      }
-    });
+    const adminLoginResponse = await loginApiWithRetry(
+      adminContext,
+      API_URL,
+      process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
+      process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
+    );
 
     expect(adminLoginResponse.ok()).toBeTruthy();
 
@@ -52,12 +53,12 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
       ignoreHTTPSErrors: true,
     });
 
-    const fitterLoginResponse = await fitterContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
-        password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!'
-      }
-    });
+    const fitterLoginResponse = await loginApiWithRetry(
+      fitterContext,
+      API_URL,
+      process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
+      process.env.TEST_FITTER_PASSWORD || 'FitterPass123!',
+    );
 
     expect(fitterLoginResponse.ok()).toBeTruthy();
   });
