@@ -239,7 +239,7 @@ jobs:
         helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
           --namespace kube-system \
           --set-string fullnameOverride=sealed-secrets-controller \
-          --wait --timeout 120s
+          --wait --timeout 300s
 
     - name: Apply SealedSecret from Git
       run: |
