@@ -234,7 +234,7 @@ jobs:
 
     - name: Install sealed-secrets controller
       run: |
-        helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets/ || true
+        helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets || true
         helm repo update
         helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
           --namespace kube-system \
