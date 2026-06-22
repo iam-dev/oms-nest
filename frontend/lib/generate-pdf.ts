@@ -63,6 +63,7 @@ const optionGroups: Record<string, string> = {
   'Loops': 'FLAPS',
   'Facing - Front (on FLAPS for NON Mono)': 'FLAPS',
   'Stitch Color': 'FLAPS',
+  'Panel Type': 'PANEL',
   'Front Gusset': 'PANEL',
   'Rear Gusset': 'PANEL',
   'Gusset Leather': 'PANEL',
