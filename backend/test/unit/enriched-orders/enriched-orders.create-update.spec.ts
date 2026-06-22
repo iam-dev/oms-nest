@@ -70,8 +70,9 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
   });
 
   describe("updateOrderStatus", () => {
-    it("should update order status successfully", async () => {
+    it("should update order status successfully and forward the authenticated user id", async () => {
       const body = { status: "Approved" };
+      const req = { user: { legacyId: 42 } };
       service.updateOrderStatus.mockResolvedValue({
         success: true,
         orderId: 100,
@@ -79,9 +80,13 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
         statusId: 2,
       });
 
-      const result = await controller.updateOrderStatus(100, body);
+      const result = await controller.updateOrderStatus(100, body, req);
 
-      expect(service.updateOrderStatus).toHaveBeenCalledWith(100, "Approved");
+      expect(service.updateOrderStatus).toHaveBeenCalledWith(
+        100,
+        "Approved",
+        42,
+      );
       expect(result).toEqual({
         success: true,
         orderId: 100,
@@ -92,27 +97,31 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
 
     it("should propagate NotFoundException from service", async () => {
       const body = { status: "Approved" };
+      const req = { user: { legacyId: 42 } };
       service.updateOrderStatus.mockRejectedValue(
         new NotFoundException("Order not found"),
       );
 
-      await expect(controller.updateOrderStatus(999, body)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        controller.updateOrderStatus(999, body, req),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it("should wrap generic errors as HttpException", async () => {
       const body = { status: "Approved" };
+      const req = { user: { legacyId: 42 } };
       service.updateOrderStatus.mockRejectedValue(new Error("Database error"));
 
-      await expect(controller.updateOrderStatus(100, body)).rejects.toThrow(
-        HttpException,
-      );
+      await expect(
+        controller.updateOrderStatus(100, body, req),
+      ).rejects.toThrow(HttpException);
     });
   });
 
   describe("bulkUpdateOrderStatus", () => {
-    it("should bulk update order statuses successfully", async () => {
+    const req = { user: { legacyId: 42 } };
+
+    it("should bulk update order statuses successfully and forward the authenticated user id", async () => {
       const body = { orderIds: [1, 2, 3], status: "Approved" };
       const mockResult = {
         success: true,
@@ -126,11 +135,12 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
       };
       service.bulkUpdateOrderStatus.mockResolvedValue(mockResult);
 
-      const result = await controller.bulkUpdateOrderStatus(body);
+      const result = await controller.bulkUpdateOrderStatus(body, req);
 
       expect(service.bulkUpdateOrderStatus).toHaveBeenCalledWith(
         [1, 2, 3],
         "Approved",
+        42,
       );
       expect(result).toEqual(mockResult);
     });
@@ -138,12 +148,12 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
     it("should reject empty orderIds array", async () => {
       const body = { orderIds: [], status: "Approved" };
 
-      await expect(controller.bulkUpdateOrderStatus(body)).rejects.toThrow(
+      await expect(controller.bulkUpdateOrderStatus(body, req)).rejects.toThrow(
         HttpException,
       );
 
       try {
-        await controller.bulkUpdateOrderStatus(body);
+        await controller.bulkUpdateOrderStatus(body, req);
       } catch (error) {
         expect(error).toBeInstanceOf(HttpException);
         expect((error as HttpException).getStatus()).toBe(400);
@@ -153,7 +163,7 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
     it("should reject non-array orderIds", async () => {
       const body = { orderIds: null as any, status: "Approved" };
 
-      await expect(controller.bulkUpdateOrderStatus(body)).rejects.toThrow(
+      await expect(controller.bulkUpdateOrderStatus(body, req)).rejects.toThrow(
         HttpException,
       );
     });
@@ -162,12 +172,12 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
       const orderIds = Array.from({ length: 101 }, (_, i) => i + 1);
       const body = { orderIds, status: "Approved" };
 
-      await expect(controller.bulkUpdateOrderStatus(body)).rejects.toThrow(
+      await expect(controller.bulkUpdateOrderStatus(body, req)).rejects.toThrow(
         HttpException,
       );
 
       try {
-        await controller.bulkUpdateOrderStatus(body);
+        await controller.bulkUpdateOrderStatus(body, req);
       } catch (error) {
         expect(error).toBeInstanceOf(HttpException);
         expect((error as HttpException).getStatus()).toBe(400);
@@ -180,7 +190,7 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
         new Error("Database error"),
       );
 
-      await expect(controller.bulkUpdateOrderStatus(body)).rejects.toThrow(
+      await expect(controller.bulkUpdateOrderStatus(body, req)).rejects.toThrow(
         HttpException,
       );
     });
