@@ -114,14 +114,19 @@ export class EnrichedOrdersController {
   }
 
   @Get("edit-options")
-  async getEditFormOptions(@Query("saddleId") saddleIdStr?: string) {
+  async getEditFormOptions(
+    @Query("saddleId") saddleIdStr?: string,
+    @Query("includeDiscontinued") includeDiscontinuedStr?: string,
+  ) {
     try {
       const saddleId = saddleIdStr ? parseInt(saddleIdStr, 10) : undefined;
+      const includeDiscontinued = includeDiscontinuedStr === "true";
       this.logger.log(
-        `Fetching edit form options${saddleId ? ` for saddleId=${saddleId}` : ""}`,
+        `Fetching edit form options${saddleId ? ` for saddleId=${saddleId}` : ""}${includeDiscontinued ? " (including discontinued saddles)" : ""}`,
       );
       const result = await this.enrichedOrdersService.getEditFormOptions(
         saddleId && !isNaN(saddleId) ? saddleId : undefined,
+        includeDiscontinued,
       );
       return result;
     } catch (error) {

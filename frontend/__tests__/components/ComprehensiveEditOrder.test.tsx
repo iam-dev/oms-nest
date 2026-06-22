@@ -359,9 +359,10 @@ describe('ComprehensiveEditOrder component', () => {
     it('calls the edit-options endpoint with the saddleId from the loaded order', async () => {
       await renderAndWaitForLoad();
 
-      // saddleId from mockOrderDetail is 10
+      // saddleId from mockOrderDetail is 10; includeDiscontinued is always
+      // set so repair orders can pick legacy/discontinued saddles.
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3001/api/v1/enriched_orders/edit-options?saddleId=10',
+        'http://localhost:3001/api/v1/enriched_orders/edit-options?includeDiscontinued=true&saddleId=10',
         expect.objectContaining({ credentials: 'include' })
       );
     });

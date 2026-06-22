@@ -211,7 +211,7 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
 
       const result = await controller.getEditFormOptions();
 
-      expect(service.getEditFormOptions).toHaveBeenCalledWith(undefined);
+      expect(service.getEditFormOptions).toHaveBeenCalledWith(undefined, false);
       expect(result).toEqual(mockOptions);
     });
 
@@ -220,7 +220,7 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
 
       const result = await controller.getEditFormOptions("5");
 
-      expect(service.getEditFormOptions).toHaveBeenCalledWith(5);
+      expect(service.getEditFormOptions).toHaveBeenCalledWith(5, false);
       expect(result).toEqual(mockOptions);
     });
 
@@ -229,7 +229,23 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
 
       await controller.getEditFormOptions("abc");
 
-      expect(service.getEditFormOptions).toHaveBeenCalledWith(undefined);
+      expect(service.getEditFormOptions).toHaveBeenCalledWith(undefined, false);
+    });
+
+    it("should pass includeDiscontinued=true through to the service", async () => {
+      service.getEditFormOptions.mockResolvedValue(mockOptions);
+
+      await controller.getEditFormOptions(undefined, "true");
+
+      expect(service.getEditFormOptions).toHaveBeenCalledWith(undefined, true);
+    });
+
+    it("should treat includeDiscontinued values other than 'true' as false", async () => {
+      service.getEditFormOptions.mockResolvedValue(mockOptions);
+
+      await controller.getEditFormOptions("5", "yes");
+
+      expect(service.getEditFormOptions).toHaveBeenCalledWith(5, false);
     });
 
     it("should wrap errors as HttpException", async () => {

@@ -129,11 +129,13 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
   const orderId = order?.orderId || Number(order?.id) || 0;
 
-  // Fetch edit options filtered by saddleId
+  // Fetch edit options filtered by saddleId.
+  // includeDiscontinued=true so repair orders can reference legacy/discontinued
+  // saddle models that the standard "active" filter would hide.
   const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
-    const url = forSaddleId
-      ? `${API_URL}/api/v1/enriched_orders/edit-options?saddleId=${forSaddleId}`
-      : `${API_URL}/api/v1/enriched_orders/edit-options`;
+    const params = new URLSearchParams({ includeDiscontinued: 'true' });
+    if (forSaddleId) params.set('saddleId', forSaddleId);
+    const url = `${API_URL}/api/v1/enriched_orders/edit-options?${params.toString()}`;
     try {
       const r = await fetch(url, {
         headers: { 'Accept': 'application/json' },
@@ -225,7 +227,8 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       setShipCity(detail.shipCity || '');
       setShipState(detail.shipState || '');
       setShipZipcode(detail.shipZipcode || '');
-      setShipCountry(detail.shipCountry || '');
+      // Legacy DB stores "-1" as a sentinel for an unset country; treat it as empty.
+      setShipCountry(detail.shipCountry && detail.shipCountry !== '-1' ? detail.shipCountry : '');
 
       // Order overview
       setOrderReference(isDuplicate ? '' : (detail.fitterReference || ''));

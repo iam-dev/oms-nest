@@ -134,11 +134,13 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [newFitterSaving, setNewFitterSaving] = useState(false);
   const [newFitter, setNewFitter] = useState({ firstName: '', lastName: '', email: '' });
 
-  // Fetch edit options from backend
+  // Fetch edit options from backend.
+  // includeDiscontinued=true so repair orders can reference legacy/discontinued
+  // saddle models that the standard "active" filter would hide.
   const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
-    const url = forSaddleId
-      ? `${API_URL}/api/v1/enriched_orders/edit-options?saddleId=${forSaddleId}`
-      : `${API_URL}/api/v1/enriched_orders/edit-options`;
+    const params = new URLSearchParams({ includeDiscontinued: 'true' });
+    if (forSaddleId) params.set('saddleId', forSaddleId);
+    const url = `${API_URL}/api/v1/enriched_orders/edit-options?${params.toString()}`;
     try {
       const r = await fetch(url, {
         headers: { 'Accept': 'application/json' },
@@ -467,13 +469,14 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             customerCity: formData.shippingAddress?.city,
             customerState: formData.shippingAddress?.state,
             customerZipcode: formData.shippingAddress?.zipCode,
-            customerCountry: formData.shippingAddress?.country,
+            // Drop the legacy "-1" sentinel so we don't round-trip it on save.
+            customerCountry: formData.shippingAddress?.country === '-1' ? undefined : formData.shippingAddress?.country,
             // Shipping fields
             shipAddress: formData.shippingAddress?.street,
             shipCity: formData.shippingAddress?.city,
             shipState: formData.shippingAddress?.state,
             shipZipcode: formData.shippingAddress?.zipCode,
-            shipCountry: formData.shippingAddress?.country,
+            shipCountry: formData.shippingAddress?.country === '-1' ? undefined : formData.shippingAddress?.country,
             // Fitter
             fitterId: formData.fitter?.id ? Number(formData.fitter.id) : undefined,
             // Saddle
@@ -1334,7 +1337,12 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   <div>
                     <Label>Country</Label>
                     <Input
-                      value={formData.shippingAddress?.country || ''}
+                      value={
+                        formData.shippingAddress?.country &&
+                        formData.shippingAddress.country !== '-1'
+                          ? formData.shippingAddress.country
+                          : ''
+                      }
                       onChange={(e) => updateFormData({
                         shippingAddress: { ...formData.shippingAddress, country: e.target.value }
                       })}

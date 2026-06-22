@@ -1421,6 +1421,7 @@ export class EnrichedOrdersService {
 
   async getEditFormOptions(
     saddleId?: number,
+    includeDiscontinued = false,
   ): Promise<Record<string, unknown[]>> {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
@@ -1435,11 +1436,16 @@ export class EnrichedOrdersService {
         ORDER BY c.full_name
       `);
 
+      // Discontinued (active=0) saddles are still valid for repair orders,
+      // so callers can opt in via includeDiscontinued. Soft-deleted rows
+      // (deleted=1) are always excluded.
+      const saddleActiveFilter = includeDiscontinued ? "" : "AND s.active = 1";
       const saddles = await queryRunner.query(`
         SELECT s.id, s.brand, s.model_name as "modelName",
+          s.active,
           CONCAT(s.brand, ' ', s.model_name) as "displayName"
         FROM saddles s
-        WHERE s.active = 1 AND s.deleted = 0
+        WHERE s.deleted = 0 ${saddleActiveFilter}
         ORDER BY s.brand, s.model_name
       `);
 
