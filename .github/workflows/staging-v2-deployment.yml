@@ -330,9 +330,31 @@ jobs:
 
     - name: Wait for backend to be ready
       run: |
-        kubectl rollout status deployment/oms-backend \
-          --namespace=${{ env.K8S_NAMESPACE }} \
-          --timeout=600s
+        # Poll rollout status in short windows; if a pod sits in Terminating
+        # because its node is degraded (disk-full / NotReady), force-delete it
+        # so the rollout can complete instead of stalling for the full timeout.
+        ns=${{ env.K8S_NAMESPACE }}
+        deadline=$(( SECONDS + 600 ))
+        while [ $SECONDS -lt $deadline ]; do
+          remaining=$(( deadline - SECONDS ))
+          window=$(( remaining < 60 ? remaining : 60 ))
+          if kubectl rollout status deployment/oms-backend -n "$ns" --timeout=${window}s; then
+            echo "✅ oms-backend rolled out"
+            exit 0
+          fi
+          stuck=$(kubectl get pods -n "$ns" -l app=oms-backend \
+            -o jsonpath='{range .items[?(@.metadata.deletionTimestamp!="")]}{.metadata.name}{"\n"}{end}')
+          if [ -n "$stuck" ]; then
+            echo "⚠️  Force-deleting Terminating pod(s): $stuck"
+            echo "$stuck" | xargs -r -n1 kubectl delete pod -n "$ns" --force --grace-period=0 || true
+          else
+            echo "ℹ️  Rollout not complete yet, no Terminating pods to reap; retrying"
+          fi
+        done
+        echo "::error::oms-backend rollout did not complete within 600s"
+        kubectl get pods -n "$ns" -l app=oms-backend -o wide || true
+        kubectl describe deployment/oms-backend -n "$ns" || true
+        exit 1
 
     - name: Run database migrations
       run: |
@@ -355,9 +377,31 @@ jobs:
 
     - name: Wait for frontend to be ready
       run: |
-        kubectl rollout status deployment/oms-frontend \
-          --namespace=${{ env.K8S_NAMESPACE }} \
-          --timeout=600s
+        # Poll rollout status in short windows; if a pod sits in Terminating
+        # because its node is degraded (disk-full / NotReady), force-delete it
+        # so the rollout can complete instead of stalling for the full timeout.
+        ns=${{ env.K8S_NAMESPACE }}
+        deadline=$(( SECONDS + 600 ))
+        while [ $SECONDS -lt $deadline ]; do
+          remaining=$(( deadline - SECONDS ))
+          window=$(( remaining < 60 ? remaining : 60 ))
+          if kubectl rollout status deployment/oms-frontend -n "$ns" --timeout=${window}s; then
+            echo "✅ oms-frontend rolled out"
+            exit 0
+          fi
+          stuck=$(kubectl get pods -n "$ns" -l app=oms-frontend \
+            -o jsonpath='{range .items[?(@.metadata.deletionTimestamp!="")]}{.metadata.name}{"\n"}{end}')
+          if [ -n "$stuck" ]; then
+            echo "⚠️  Force-deleting Terminating pod(s): $stuck"
+            echo "$stuck" | xargs -r -n1 kubectl delete pod -n "$ns" --force --grace-period=0 || true
+          else
+            echo "ℹ️  Rollout not complete yet, no Terminating pods to reap; retrying"
+          fi
+        done
+        echo "::error::oms-frontend rollout did not complete within 600s"
+        kubectl get pods -n "$ns" -l app=oms-frontend -o wide || true
+        kubectl describe deployment/oms-frontend -n "$ns" || true
+        exit 1
 
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
