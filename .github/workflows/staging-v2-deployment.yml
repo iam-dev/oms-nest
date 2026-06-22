@@ -234,12 +234,33 @@ jobs:
 
     - name: Install sealed-secrets controller
       run: |
+        # Check if sealed-secrets is already installed
+        if helm list -n kube-system | grep -q sealed-secrets; then
+          echo "Sealed-secrets already installed, checking status..."
+          kubectl get pods -n kube-system -l app.kubernetes.io/name=sealed-secrets
+
+          # Try to uninstall if it exists but might be stuck
+          echo "Attempting to uninstall existing sealed-secrets..."
+          helm uninstall sealed-secrets -n kube-system --wait --timeout 60s || true
+
+          # Wait for pods to be deleted
+          kubectl wait --for=delete pod -l app.kubernetes.io/name=sealed-secrets -n kube-system --timeout=60s || true
+        fi
+
+        # Add repo and install fresh
         helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets || true
         helm repo update
+
+        # Install without --wait to avoid timeout, then check status separately
         helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
           --namespace kube-system \
           --set-string fullnameOverride=sealed-secrets-controller \
-          --wait --timeout 300s
+          --timeout 300s || true
+
+        # Wait for the controller to be ready
+        echo "Waiting for sealed-secrets controller to be ready..."
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=sealed-secrets -n kube-system --timeout=300s || \
+          kubectl get pods -n kube-system -l app.kubernetes.io/name=sealed-secrets
 
     - name: Apply SealedSecret from Git
       run: |
