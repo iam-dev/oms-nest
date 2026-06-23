@@ -117,18 +117,18 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
 
   addHeader(doc, `Order status printed on ${formatNow()}`);
 
-  let y = 40;
+  let y = 35;
   const boxStartY = y;
 
   // --- Order ID header line ---
-  y += 10;
+  y += 8;
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text(`Order ID: NL ${orderData.orderId}`, labelX, y);
   doc.text(orderData.fitter.fullName, pageWidth / 2, y, { align: 'center' });
   doc.text(`Status: ${orderData.orderStatus}`, pageWidth - margin - 5, y, { align: 'right' });
 
-  y += 8;
+  y += 7;
   doc.setFontSize(9);
 
   // --- Model, Leathertype, SerialNumber ---
@@ -143,14 +143,14 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
     doc.setFont('helvetica', 'normal');
     drawCheckbox(doc, valueX, y);
     doc.text(value, valueX + 6, y);
-    y += 6;
+    y += 5;
   }
 
-  y += 4;
+  y += 2;
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.text('Options', labelX, y);
-  y += 7;
+  y += 5;
   doc.setFontSize(9);
 
   // --- Group specs ---
@@ -167,7 +167,7 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
   }
 
   function checkPageBreak(needed: number) {
-    if (y + needed > pageHeight - 30) {
+    if (y + needed > pageHeight - 15) {
       // Draw partial border on current page
       doc.setDrawColor(0);
       doc.setLineWidth(0.5);
@@ -181,7 +181,7 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
     const val = spec.displayValue || '';
     const maxValWidth = contentWidth - (valueX - margin) - 10;
     const lines = doc.splitTextToSize(val, maxValWidth);
-    const lineHeight = lines.length * 5;
+    const lineHeight = lines.length * 4;
     checkPageBreak(lineHeight + 2);
 
     doc.setFont('helvetica', 'bold');
@@ -189,7 +189,7 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
     doc.setFont('helvetica', 'normal');
     drawCheckbox(doc, valueX, y);
     doc.text(lines, valueX + 6, y);
-    y += Math.max(lineHeight, 5);
+    y += Math.max(lineHeight, 4);
   }
 
   // Ungrouped specs (Seat Size, Tree Size, Billets, Outer Reinforcement)
@@ -203,13 +203,13 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
     const specs = grouped[groupName];
     if (specs.length === 0) continue;
 
-    y += 3;
-    checkPageBreak(12);
+    y += 1;
+    checkPageBreak(10);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text(`${groupName}:`, labelX, y);
     doc.setFontSize(9);
-    y += 6;
+    y += 5;
 
     for (const spec of specs) {
       renderSpec(spec, labelX + 20);
@@ -218,18 +218,18 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
 
   // --- Special Notes ---
   if (orderData.notes) {
-    y += 5;
-    checkPageBreak(14);
+    y += 3;
+    checkPageBreak(10);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text('Special Notes:', labelX, y);
-    y += 6;
+    y += 5;
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     const noteLines = doc.splitTextToSize(orderData.notes, contentWidth - 10);
-    checkPageBreak(noteLines.length * 5 + 2);
+    checkPageBreak(noteLines.length * 4 + 2);
     doc.text(noteLines, labelX, y);
-    y += noteLines.length * 5;
+    y += noteLines.length * 4;
   }
 
   // Draw border box
