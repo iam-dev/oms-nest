@@ -30,7 +30,7 @@ const mockData: MockData[] = [
 
 const mockColumns: Column<MockData>[] = [
   { key: 'id', title: 'ID' },
-  { key: 'name', title: 'Name', maxWidth: '200px' },
+  { key: 'name', title: 'Name', width: '200px' },
   { key: 'email', title: 'Email' },
   {
     key: 'status',
@@ -91,7 +91,7 @@ describe('DataTable', () => {
       expect(inactiveElements[0]).toHaveClass('status-badge inactive');
     });
 
-    it('applies maxWidth styles to columns', () => {
+    it('applies per-column width via colgroup', () => {
       render(
         <DataTable
           columns={mockColumns}
@@ -100,9 +100,10 @@ describe('DataTable', () => {
         />
       );
 
-      const nameHeaders = screen.getAllByText('Name');
-      const nameHeader = nameHeaders.find(el => el.tagName === 'TH');
-      expect(nameHeader).toHaveStyle({ textOverflow: 'ellipsis', overflow: 'auto' });
+      const cols = screen.getByRole('table').querySelectorAll('colgroup col');
+      // mockColumns[1] is Name with width '200px'; other columns have no width hint.
+      expect(cols[1]).toHaveStyle({ width: '200px' });
+      expect(cols[0].getAttribute('style')).toBeFalsy();
     });
   });
 
@@ -480,7 +481,7 @@ describe('DataTable', () => {
       );
 
       const tableContainer = screen.getByRole('table').closest('div');
-      expect(tableContainer).toHaveClass('overflow-auto');
+      expect(tableContainer).toHaveClass('overflow-x-auto');
     });
 
     it('renders sticky header cells', () => {
@@ -529,8 +530,11 @@ describe('DataTable', () => {
         />
       );
 
-      const container = screen.getByRole('table').closest('.overflow-auto');
+      const container = screen.getByRole('table').closest('.overflow-x-auto');
       expect(container).toBeInTheDocument();
+      // Table itself enforces a 720px floor before horizontal scroll kicks in.
+      expect(screen.getByRole('table')).toHaveClass('min-w-[720px]');
+      expect(screen.getByRole('table')).toHaveClass('table-fixed');
     });
   });
 
