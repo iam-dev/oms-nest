@@ -429,18 +429,13 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         body: JSON.stringify({ status: orderStatus }),
       });
       if (!response.ok) {
-        const fallbackResponse = await fetch(`${API_URL}/api/v1/orders/${orderId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ status: orderStatus }),
-        });
-        if (!fallbackResponse.ok) throw new Error('Failed to update status');
+        const body = await response.text().catch(() => '');
+        throw new Error(`Failed to update status (${response.status}): ${body || response.statusText}`);
       }
       toast.success(`Order status changed to "${orderStatus}"`);
     } catch (err) {
       logger.error('Failed to change order status:', err);
-      toast.error('Failed to change order status.');
+      toast.error(`Failed to change order status: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setStatusChanging(false);
     }

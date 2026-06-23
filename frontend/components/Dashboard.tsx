@@ -338,13 +338,8 @@ export default function Dashboard() {
         body: JSON.stringify({ status: 'Approved' }),
       });
       if (!response.ok) {
-        const fallbackResponse = await fetch(`${API_URL}/api/v1/orders/${oid}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ status: 'Approved' }),
-        });
-        if (!fallbackResponse.ok) throw new Error('Failed to update status');
+        const body = await response.text().catch(() => '');
+        throw new Error(`Failed to update status (${response.status}): ${body || response.statusText}`);
       }
 
       setOrders(prevOrders =>
