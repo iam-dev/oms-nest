@@ -15,6 +15,7 @@ export interface Column<T = any> {
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   render?: (value: any, row?: T) => React.ReactNode;
+  width?: string | number;
   maxWidth?: string;
 }
 
@@ -71,8 +72,17 @@ export function DataTable<T = any>({
           </div>
         </div>
       )}
-      <div className={cn("w-full", "overflow-auto", "border", "rounded-lg")} style={{ maxHeight: (data && data.length > 30) ? 800 : 'none', position: 'relative' }}>
-        <table className={cn("min-w-full", "border-separate", "border-spacing-0")}>
+      <div className={cn("w-full", "overflow-x-auto", "border", "rounded-lg")} style={{ maxHeight: (data && data.length > 30) ? 800 : 'none', position: 'relative' }}>
+        <table className={cn("w-full", "min-w-[720px]", "table-fixed", "border-separate", "border-spacing-0")}>
+          <colgroup>
+            {columns.map((column) => (
+              <col
+                key={column.key as string}
+                style={column.width ? { width: typeof column.width === 'number' ? `${column.width}px` : column.width } : undefined}
+              />
+            ))}
+            {renderActions && <col style={{ width: '120px' }} />}
+          </colgroup>
           <thead className={cn("bg-gray-100")}>
             <tr>
               {columns.map((column) => (
@@ -88,12 +98,10 @@ export function DataTable<T = any>({
                     'px-4',
                     'py-2',
                     'border-b',
-                    'text-left',
-                    column.maxWidth && `max-w-[${column.maxWidth}] truncate`
+                    'text-left'
                   )}
-                  style={column.maxWidth ? { textOverflow: 'ellipsis', overflow: 'auto' } : {}}
                 >
-                  {column.title}
+                  <div className="truncate">{column.title}</div>
                 </th>
               ))}
               {renderActions && <th className={cn('sticky', 'top-0', 'z-20', 'bg-gray-100', 'font-semibold', 'text-base', 'px-4', 'py-2', 'border-b', 'text-left')}>OPTIONS</th>}
@@ -122,12 +130,14 @@ export function DataTable<T = any>({
               (data || []).map((item, index) => (
                 <tr key={index} className={cn(index % 2 === 1 && 'even:bg-gray-50')}>
                   {columns.map((column) => (
-                    <td key={column.key as string} className={cn("p-2 border-b", column.maxWidth && `max-w-[${column.maxWidth}] overflow-x-auto whitespace-nowrap`)} style={column.maxWidth ? { textOverflow: 'ellipsis', overflow: 'auto' } : {}}>
-                      {column.render
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        ? column.render((item as any)[column.key as keyof T], item)
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        : (item as any)[column.key as keyof T]}
+                    <td key={column.key as string} className="p-2 border-b align-middle">
+                      <div className="truncate">
+                        {column.render
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          ? column.render((item as any)[column.key as keyof T], item)
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          : (item as any)[column.key as keyof T]}
+                      </div>
                     </td>
                   ))}
                   {renderActions && <td className="p-2 border-b">{renderActions(item)}</td>}
