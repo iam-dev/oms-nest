@@ -17,6 +17,12 @@ interface OrderExportData {
   notes: string;
 }
 
+export function toSeatSizeCellValue(value: string): number | string {
+  if (!value) return '';
+  if (/^\d+(\.\d+)?$/.test(value)) return parseFloat(value);
+  return value;
+}
+
 function formatExportDate(dateStr: string): string {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -109,7 +115,7 @@ export async function exportToXlsx(orders: any[]): Promise<void> {
       order.orderId || order.id || '',
       brand,
       saddle,
-      extractSeatSizes(order),
+      toSeatSizeCellValue(extractSeatSizes(order)),
       getCustomerName(order),
       getFitterName(order),
       formatExportDate(getDate(order)),

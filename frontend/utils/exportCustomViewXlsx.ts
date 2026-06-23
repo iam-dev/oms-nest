@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { ColumnConfig, ColumnGroupConfig } from '@/services/customOrderViews';
 import { CellOverride } from '@/services/customOrderCellOverrides';
 import { CUSTOM_VIEW_COLUMNS } from './customViewColumns';
+import { toSeatSizeCellValue } from './exportXlsx';
 
 interface ExportOptions {
   columns: ColumnConfig[];
@@ -139,12 +140,17 @@ export async function exportCustomViewXlsx({
     visibleColumns.forEach((col, i) => {
       // Check for override first
       const overrideKey = `${orderId}:${col.key}`;
+      let value: string | number;
       if (overrideMap.has(overrideKey)) {
-        row.getCell(i + 1).value = overrideMap.get(overrideKey)!;
+        value = overrideMap.get(overrideKey)!;
       } else {
         const colDef = colDefMap.get(col.key);
-        row.getCell(i + 1).value = colDef ? colDef.getValue(order) : '';
+        value = colDef ? colDef.getValue(order) : '';
       }
+      if (col.key === 'seatSize' && typeof value === 'string') {
+        value = toSeatSizeCellValue(value);
+      }
+      row.getCell(i + 1).value = value;
     });
     currentRow++;
   }
@@ -264,12 +270,17 @@ function addWorksheet(
     const row = ws.getRow(currentRow);
     visibleColumns.forEach((col, i) => {
       const overrideKey = `${orderId}:${col.key}`;
+      let value: string | number;
       if (overrideMap.has(overrideKey)) {
-        row.getCell(i + 1).value = overrideMap.get(overrideKey)!;
+        value = overrideMap.get(overrideKey)!;
       } else {
         const colDef = colDefMap.get(col.key);
-        row.getCell(i + 1).value = colDef ? colDef.getValue(order) : '';
+        value = colDef ? colDef.getValue(order) : '';
       }
+      if (col.key === 'seatSize' && typeof value === 'string') {
+        value = toSeatSizeCellValue(value);
+      }
+      row.getCell(i + 1).value = value;
     });
     currentRow++;
   }
