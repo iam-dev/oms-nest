@@ -23,6 +23,7 @@ import { fetchOrderDetail, createDraftOrder, bulkCreateDraftOrders, type OrderDe
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { exportOrderToXlsx } from '@/utils/exportXlsx';
+import { renderLegacyLogContent } from '@/utils/legacyLogContent';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
 
@@ -749,7 +750,11 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
                     <div className="bg-gray-100 rounded-lg p-2">
                       <div className="text-[10px] text-gray-600">{entry.date}</div>
                       <div className="font-medium text-[#8B0000] text-xs">{entry.user}</div>
-                      {entry.action && <div className="text-xs">{entry.action}</div>}
+                      {entry.action && (
+                        <div className="text-xs whitespace-pre-wrap">
+                          {renderLegacyLogContent(entry.action)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
