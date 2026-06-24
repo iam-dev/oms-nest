@@ -272,6 +272,26 @@ export class FitterService {
       );
     }
 
+    // Persist firstName/lastName back to credentials.full_name (the legacy schema
+    // has no separate first/last columns). Skip when both come in empty so we
+    // don't blank an existing name.
+    if (
+      (updateFitterDto.firstName !== undefined ||
+        updateFitterDto.lastName !== undefined) &&
+      fitter.userId
+    ) {
+      const newFullName = [updateFitterDto.firstName, updateFitterDto.lastName]
+        .filter((part): part is string => !!part && part.trim().length > 0)
+        .join(" ")
+        .trim();
+      if (newFullName) {
+        await this.dataSource.query(
+          `UPDATE credentials SET full_name = $1 WHERE user_id = $2`,
+          [newFullName, fitter.userId],
+        );
+      }
+    }
+
     const savedFitter = await this.fitterRepository.save(fitter);
     return this.toDto(savedFitter);
   }

@@ -343,13 +343,22 @@ export async function fetchEntities({
     // Special handling for fitters entity to transform NestJS response to Hydra format
     // Backend now JOINs with user table to provide name, username, enabled, lastLogin
     if (entity === 'fitters' && result.data && Array.isArray(result.data)) {
-      result['hydra:member'] = result.data.map((fitter: Record<string, unknown>) => ({
-        ...fitter,
-        name: fitter.name || fitter.displayName || `Fitter ${fitter.id}`,
-        email: fitter.emailaddress || fitter.email,
-        enabled: fitter.enabled ?? fitter.isActive ?? true,
-        username: fitter.username || `fitter${fitter.id}`,
-      }));
+      result['hydra:member'] = result.data.map((fitter: Record<string, unknown>) => {
+        // The legacy schema stores only a single full_name column, returned as `name`.
+        // Split it into firstName/lastName so the edit form populates the two inputs.
+        const nameParts = ((fitter.name as string) || '')
+          .split(' ')
+          .filter((part: string) => part.length > 0);
+        return {
+          ...fitter,
+          name: fitter.name || fitter.displayName || `Fitter ${fitter.id}`,
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+          email: fitter.emailaddress || fitter.email,
+          enabled: fitter.enabled ?? fitter.isActive ?? true,
+          username: fitter.username || `fitter${fitter.id}`,
+        };
+      });
       result['hydra:totalItems'] = result.total || result.data.length;
       delete result.data;
     }

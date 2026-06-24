@@ -13,6 +13,7 @@ import { MailService } from "../../../src/mail/mail.service";
 describe("FitterService", () => {
   let service: FitterService;
   let repository: jest.Mocked<IFitterRepository>;
+  let dataSource: { query: jest.Mock };
 
   const mockFitter = new Fitter(
     1,
@@ -87,6 +88,7 @@ describe("FitterService", () => {
 
     service = module.get<FitterService>(FitterService);
     repository = module.get(IFitterRepository);
+    dataSource = module.get(DataSource);
   });
 
   afterEach(() => {
@@ -310,6 +312,30 @@ describe("FitterService", () => {
       await expect(service.update(999, { city: "New York" })).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it("should write joined firstName + lastName to credentials.full_name", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      repository.save.mockResolvedValue(mockFitter);
+
+      await service.update(1, { firstName: "Jane", lastName: "Doe" });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        `UPDATE credentials SET full_name = $1 WHERE user_id = $2`,
+        ["Jane Doe", mockFitter.userId],
+      );
+    });
+
+    it("should not touch credentials.full_name when both names are empty", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      repository.save.mockResolvedValue(mockFitter);
+
+      await service.update(1, { firstName: "", lastName: "" });
+
+      const fullNameUpdates = dataSource.query.mock.calls.filter(
+        ([sql]: [string]) => sql.includes("full_name"),
+      );
+      expect(fullNameUpdates).toHaveLength(0);
     });
   });
 
