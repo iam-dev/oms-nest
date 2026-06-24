@@ -28,6 +28,11 @@ spec:
         prometheus.io/port: "3001"
         prometheus.io/path: "/metrics"
     spec:
+      # Keep app workloads on the regular app pool. The pool-634m1k6jz-build
+      # pool's only node has a malfunctioning Cilium CNI agent that fails
+      # pod sandbox creation (cilium-cni: Cilium API client timeout exceeded).
+      nodeSelector:
+        doks.digitalocean.com/node-pool: pool-psxen27q2
       terminationGracePeriodSeconds: 10
       securityContext:
         runAsNonRoot: true
