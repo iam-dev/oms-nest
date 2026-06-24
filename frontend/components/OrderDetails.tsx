@@ -256,25 +256,22 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
       });
 
       if (!response.ok) {
-        // Fallback: update directly via orders endpoint
-        const fallbackResponse = await fetch(`${API_URL}/api/v1/orders/${orderId}/status`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ status: orderStatus }),
-        });
-        if (!fallbackResponse.ok) {
-          throw new Error('Failed to update status');
-        }
+        const body = await response.text().catch(() => '');
+        throw new Error(`Failed to update status (${response.status}): ${body || response.statusText}`);
+      }
+
+      // Refetch detail so the rest of the panel reflects what was saved
+      const refreshed = await fetchOrderDetail(orderId);
+      setDetailData(refreshed);
+      if (refreshed.orderStatus) {
+        setOrderStatus(refreshed.orderStatus);
       }
 
       alert(`Order status changed to "${orderStatus}"`);
       onOrderChanged?.();
     } catch (err) {
       logger.error('Failed to change order status:', err);
-      alert('Failed to change order status. The backend endpoint may not be implemented yet.');
+      alert(`Failed to change order status: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setStatusChanging(false);
     }
