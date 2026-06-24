@@ -352,8 +352,40 @@ jobs:
           fi
         done
         echo "::error::oms-backend rollout did not complete within 600s"
+        echo "::group::Pods (wide)"
         kubectl get pods -n "$ns" -l app=oms-backend -o wide || true
+        echo "::endgroup::"
+        echo "::group::Deployment describe"
         kubectl describe deployment/oms-backend -n "$ns" || true
+        echo "::endgroup::"
+        echo "::group::ReplicaSets"
+        kubectl get rs -n "$ns" -l app=oms-backend -o wide || true
+        echo "::endgroup::"
+        echo "::group::Pod describe (with Events)"
+        for pod in $(kubectl get pods -n "$ns" -l app=oms-backend -o jsonpath='{.items[*].metadata.name}'); do
+          echo "----- $pod -----"
+          kubectl describe pod "$pod" -n "$ns" || true
+        done
+        echo "::endgroup::"
+        echo "::group::Recent namespace events"
+        kubectl get events -n "$ns" --sort-by=.lastTimestamp | tail -60 || true
+        echo "::endgroup::"
+        echo "::group::Pod logs (current + previous)"
+        for pod in $(kubectl get pods -n "$ns" -l app=oms-backend -o jsonpath='{.items[*].metadata.name}'); do
+          echo "----- $pod logs (current, tail 200) -----"
+          kubectl logs -n "$ns" "$pod" --tail=200 --all-containers || true
+          echo "----- $pod logs (previous, tail 200) -----"
+          kubectl logs -n "$ns" "$pod" --previous --tail=200 --all-containers || true
+        done
+        echo "::endgroup::"
+        echo "::group::Nodes hosting these pods"
+        nodes=$(kubectl get pods -n "$ns" -l app=oms-backend -o jsonpath='{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u)
+        for node in $nodes; do
+          [ -z "$node" ] && continue
+          echo "----- $node -----"
+          kubectl describe node "$node" | sed -n '/^Conditions:/,/^[A-Z]/p' || true
+        done
+        echo "::endgroup::"
         exit 1
 
     - name: Run database migrations
@@ -399,8 +431,40 @@ jobs:
           fi
         done
         echo "::error::oms-frontend rollout did not complete within 600s"
+        echo "::group::Pods (wide)"
         kubectl get pods -n "$ns" -l app=oms-frontend -o wide || true
+        echo "::endgroup::"
+        echo "::group::Deployment describe"
         kubectl describe deployment/oms-frontend -n "$ns" || true
+        echo "::endgroup::"
+        echo "::group::ReplicaSets"
+        kubectl get rs -n "$ns" -l app=oms-frontend -o wide || true
+        echo "::endgroup::"
+        echo "::group::Pod describe (with Events)"
+        for pod in $(kubectl get pods -n "$ns" -l app=oms-frontend -o jsonpath='{.items[*].metadata.name}'); do
+          echo "----- $pod -----"
+          kubectl describe pod "$pod" -n "$ns" || true
+        done
+        echo "::endgroup::"
+        echo "::group::Recent namespace events"
+        kubectl get events -n "$ns" --sort-by=.lastTimestamp | tail -60 || true
+        echo "::endgroup::"
+        echo "::group::Pod logs (current + previous)"
+        for pod in $(kubectl get pods -n "$ns" -l app=oms-frontend -o jsonpath='{.items[*].metadata.name}'); do
+          echo "----- $pod logs (current, tail 200) -----"
+          kubectl logs -n "$ns" "$pod" --tail=200 --all-containers || true
+          echo "----- $pod logs (previous, tail 200) -----"
+          kubectl logs -n "$ns" "$pod" --previous --tail=200 --all-containers || true
+        done
+        echo "::endgroup::"
+        echo "::group::Nodes hosting these pods"
+        nodes=$(kubectl get pods -n "$ns" -l app=oms-frontend -o jsonpath='{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u)
+        for node in $nodes; do
+          [ -z "$node" ] && continue
+          echo "----- $node -----"
+          kubectl describe node "$node" | sed -n '/^Conditions:/,/^[A-Z]/p' || true
+        done
+        echo "::endgroup::"
         exit 1
 
     - name: Deploy ingress configuration
