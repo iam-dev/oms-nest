@@ -10,6 +10,11 @@ on:
     # Run security scans daily at 2 AM UTC
     - cron: '0 2 * * *'
 
+# WF-029: minimum permissions at workflow level; jobs that need broader access
+# (security-events write, packages write) declare their own permissions block.
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: iam-dev/oms-nest-backend
@@ -53,13 +58,8 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: 🔎 SAST with CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: typescript, javascript
-
-      - name: 🔍 CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+      # WF-017: CodeQL removed here — codeql.yml is the canonical workflow.
+      # Running it inline as well caused triple execution on every push to staging.
 
   # 🧪 Dependency and License Scanning
   dependency-scan:
@@ -83,7 +83,8 @@ jobs:
         working-directory: backend
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=critical
+          # WF-021: audit-level raised from critical to high
+          npm audit --omit=dev --audit-level=high
           # Generate dependency report
           npm list --all --json > dependency-report.json
 
@@ -91,13 +92,15 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=critical
+          # WF-021: audit-level raised from critical to high
+          npm audit --omit=dev --audit-level=high
 
       - name: 📦 E2E Dependencies Audit
         working-directory: e2e
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=critical
+          # WF-021: audit-level raised from critical to high
+          npm audit --omit=dev --audit-level=high
 
       - name: 📊 Upload Dependency Reports
         uses: actions/upload-artifact@v4
@@ -354,10 +357,29 @@ jobs:
 
       - name: 🚀 Start backend services
         working-directory: backend
+        # WF-022: TODO(WF-022): start:dev used here; evaluate switching to start:prod
+        # once CI env vars and build artefacts are confirmed compatible.
+        # WF-024: trap EXIT so the background process is always killed even if a
+        # later step in this shell exits non-zero before the Cleanup step runs.
         run: |
+          _cleanup_backend() { [ -f backend.pid ] && kill "$(cat backend.pid)" 2>/dev/null || true; }
+          trap _cleanup_backend EXIT
           npm run start:dev &
           echo $! > backend.pid
-          sleep 30
+          # WF-023: replaced sleep 30 with a poll loop matching pr-checks.yml pattern
+          echo "Waiting for backend to be ready..."
+          for i in $(seq 1 60); do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health | grep -q "200"; then
+              echo "Backend is ready!"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Backend failed to start within 60 attempts"
+              exit 1
+            fi
+            echo "Attempt $i: Backend not ready yet, waiting 5s..."
+            sleep 5
+          done
         env:
           DATABASE_URL: postgresql://oms:test_password@localhost:5432/oms_test
           REDIS_URL: redis://localhost:6379/1
@@ -381,10 +403,25 @@ jobs:
 
       - name: 🎨 Start frontend services
         working-directory: frontend
+        # WF-024: trap EXIT so the background frontend process is always killed.
         run: |
+          _cleanup_frontend() { [ -f frontend.pid ] && kill "$(cat frontend.pid)" 2>/dev/null || true; }
+          trap _cleanup_frontend EXIT
           npm run dev &
           echo $! > frontend.pid
-          sleep 15
+          echo "Waiting for frontend to be ready..."
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -qE "^[23]"; then
+              echo "Frontend is ready!"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Frontend failed to start within 30 attempts"
+              exit 1
+            fi
+            echo "Attempt $i: Frontend not ready yet, waiting 5s..."
+            sleep 5
+          done
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXTAUTH_URL: http://localhost:3000
@@ -393,9 +430,9 @@ jobs:
 
       - name: 🔍 Verify services are running
         run: |
-          echo "🔍 Checking backend health..."
+          echo "Checking backend health..."
           curl -f http://localhost:3001/api/health || exit 1
-          echo "🔍 Checking frontend..."
+          echo "Checking frontend..."
           curl -f http://localhost:3000 || exit 1
 
       - name: 🎭 Run comprehensive E2E tests

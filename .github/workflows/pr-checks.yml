@@ -6,6 +6,12 @@ on:
     branches: [main, staging]
     types: [opened, synchronize, reopened]
 
+# WF-029: minimum permissions at workflow level; jobs that need broader access
+# declare their own permissions block (security-checks: security-events write,
+# pr-summary: pull-requests write).
+permissions:
+  contents: read
+
 jobs:
   # Code quality checks
   code-quality:
@@ -88,21 +94,18 @@ jobs:
         working-directory: backend
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=critical
+          # WF-021: audit-level raised from critical to high
+          npm audit --omit=dev --audit-level=high
 
       - name: Frontend security audit
         working-directory: frontend
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=critical
+          # WF-021: audit-level raised from critical to high
+          npm audit --omit=dev --audit-level=high
 
-      - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@v4
-        with:
-          languages: typescript
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+      # WF-017: CodeQL removed here — codeql.yml is the canonical workflow.
+      # Running it inline caused triple execution on every PR to staging/main.
 
   # API contract validation
   api-validation:
@@ -141,15 +144,21 @@ jobs:
 
       - name: Start backend server
         working-directory: backend
+        # WF-022: TODO(WF-022): start:dev used here; evaluate switching to start:prod
+        # once CI env vars and build artefacts are confirmed compatible.
+        # WF-024: trap EXIT so the background process is killed if a later step exits early.
         run: |
+          _cleanup() { kill "$(cat backend.pid 2>/dev/null)" 2>/dev/null || true; }
+          trap _cleanup EXIT
           npm run start:dev &
+          echo $! > backend.pid
           echo "Waiting for backend to be ready..."
           for i in $(seq 1 60); do
             if curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health/ready | grep -q "200"; then
               echo "Backend is ready!"
               break
             fi
-            if [ $i -eq 60 ]; then
+            if [ "$i" -eq 60 ]; then
               echo "Backend failed to start within 60 attempts"
               exit 1
             fi
@@ -245,16 +254,22 @@ jobs:
 
       - name: Install dependencies and start backend
         working-directory: backend
+        # WF-022: TODO(WF-022): start:dev used here; evaluate switching to start:prod
+        # once CI env vars and build artefacts are confirmed compatible.
+        # WF-024: trap EXIT so the background process is killed if a later step exits early.
         run: |
+          _cleanup() { kill "$(cat backend.pid 2>/dev/null)" 2>/dev/null || true; }
+          trap _cleanup EXIT
           npm ci
           npm run start:dev &
+          echo $! > backend.pid
           echo "Waiting for backend to be ready..."
           for i in $(seq 1 60); do
             if curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health/ready | grep -q "200"; then
               echo "Backend is ready!"
               break
             fi
-            if [ $i -eq 60 ]; then
+            if [ "$i" -eq 60 ]; then
               echo "Backend failed to start within 60 attempts"
               exit 1
             fi
@@ -349,39 +364,44 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Comment PR with results
-        uses: actions/github-script@v7
+      - name: Build PR summary message
+        id: build-summary
+        # Construct summary as a multi-line env var to avoid expression injection
+        # (job result values come from trusted github context, but we still keep
+        #  them in an env var to follow safe-patterns convention).
+        env:
+          RESULT_CODE_QUALITY: ${{ needs.code-quality.result }}
+          RESULT_SECURITY: ${{ needs.security-checks.result }}
+          RESULT_API: ${{ needs.api-validation.result }}
+          RESULT_PERF: ${{ needs.performance-check.result }}
+          RESULT_DOCS: ${{ needs.documentation-check.result }}
+        run: |
+          icon() { [ "$1" = "success" ] && echo "PASS" || { [ "$1" = "failure" ] && echo "FAIL" || echo "WARN"; }; }
+          SUMMARY="## PR Quality Check Results
+
+          | Check | Result |
+          |---|---|
+          | Code Quality | $(icon "$RESULT_CODE_QUALITY") $RESULT_CODE_QUALITY |
+          | Security Checks | $(icon "$RESULT_SECURITY") $RESULT_SECURITY |
+          | API Validation | $(icon "$RESULT_API") $RESULT_API |
+          | Performance Check | $(icon "$RESULT_PERF") $RESULT_PERF |
+          | Documentation Check | $(icon "$RESULT_DOCS") $RESULT_DOCS |
+
+          ---
+          *Automated by OMS CI/CD Pipeline*"
+          # Write to GITHUB_OUTPUT using heredoc to handle newlines
+          {
+            echo "summary<<__EOF__"
+            echo "$SUMMARY"
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sticky PR comment with results
+        # WF-027: replaced github-script (appends new comment each run) with
+        # sticky-pull-request-comment which edits the existing bot comment.
+        # TODO(WF-010): pin this action to a specific commit SHA once the team
+        # has validated the current v2 tag behaviour.
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          script: |
-            const jobResults = {
-              'code-quality': '${{ needs.code-quality.result }}',
-              'security-checks': '${{ needs.security-checks.result }}',
-              'api-validation': '${{ needs.api-validation.result }}',
-              'performance-check': '${{ needs.performance-check.result }}',
-              'documentation-check': '${{ needs.documentation-check.result }}'
-            };
-
-            let summary = "## PR Quality Check Results\n\n";
-
-            for (const [job, result] of Object.entries(jobResults)) {
-              const icon = result === 'success' ? 'PASS' : result === 'failure' ? 'FAIL' : 'WARN';
-              const status = result.charAt(0).toUpperCase() + result.slice(1);
-              summary += `**${icon}** **${job.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}**: ${status}\n`;
-            }
-
-            const allPassed = Object.values(jobResults).every(result => result === 'success');
-
-            if (allPassed) {
-              summary += "\n**All checks passed!** This PR is ready for review.";
-            } else {
-              summary += "\n**Some checks failed.** Please review the failed checks above.";
-            }
-
-            summary += "\n\n---\n*Automated by OMS CI/CD Pipeline*";
-
-            await github.rest.issues.createComment({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
+          header: pr-quality-checks
+          message: ${{ steps.build-summary.outputs.summary }}
