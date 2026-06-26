@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   Logger,
   SetMetadata,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { RlsService } from "./rls.service";
@@ -87,6 +88,11 @@ export const SkipRlsContext = () => SetMetadata("skipRlsContext", true);
 /**
  * Enhanced RLS Guard that respects SkipRlsContext decorator
  * on both handler (method) and class (controller) levels.
+ *
+ * BE-005: endpoints not marked @SkipRlsContext must have an authenticated user
+ * (i.e. the JWT guard must have run first). If user or user.id is absent and
+ * the endpoint is RLS-protected, throw UnauthorizedException rather than silently
+ * passing through.
  */
 @Injectable()
 export class EnhancedRlsGuard extends RlsGuard {
@@ -98,6 +104,14 @@ export class EnhancedRlsGuard extends RlsGuard {
 
     if (skipRls) {
       return true;
+    }
+
+    // BE-005: For RLS-protected endpoints, require an authenticated user.
+    const request = context.switchToHttp().getRequest();
+    if (!request.user || !request.user.id) {
+      throw new UnauthorizedException(
+        "Authentication required for RLS-protected endpoint",
+      );
     }
 
     return super.canActivate(context);

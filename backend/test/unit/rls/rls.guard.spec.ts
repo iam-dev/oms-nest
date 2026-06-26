@@ -7,6 +7,7 @@ import {
   createMockExecutionContext,
   createMockReflector,
 } from "../helpers/test-helpers";
+import { UnauthorizedException } from "@nestjs/common";
 
 describe("RlsGuard", () => {
   let guard: RlsGuard;
@@ -194,5 +195,40 @@ describe("EnhancedRlsGuard", () => {
       undefined,
       undefined,
     );
+  });
+
+  // BE-005: EnhancedRlsGuard must reject unauthenticated requests on RLS-protected endpoints
+  it("should throw UnauthorizedException when no user on non-skipped RLS endpoint", async () => {
+    mockReflector.getAllAndOverride.mockReturnValue(false); // Not skipped
+
+    const context = createMockExecutionContext(); // No user
+
+    await expect(guard.canActivate(context)).rejects.toThrow(
+      UnauthorizedException,
+    );
+    expect(mockRlsService.setUserContext).not.toHaveBeenCalled();
+  });
+
+  it("should throw UnauthorizedException when user has no id on non-skipped RLS endpoint", async () => {
+    mockReflector.getAllAndOverride.mockReturnValue(false); // Not skipped
+
+    const context = createMockExecutionContext({
+      user: { role: { id: RoleEnum.admin } }, // user present but no id
+    });
+
+    await expect(guard.canActivate(context)).rejects.toThrow(
+      UnauthorizedException,
+    );
+    expect(mockRlsService.setUserContext).not.toHaveBeenCalled();
+  });
+
+  it("should allow unauthenticated request when SkipRlsContext is set", async () => {
+    mockReflector.getAllAndOverride.mockReturnValue(true); // Skipped
+
+    const context = createMockExecutionContext(); // No user
+
+    const result = await guard.canActivate(context);
+    expect(result).toBe(true);
+    expect(mockRlsService.setUserContext).not.toHaveBeenCalled();
   });
 });

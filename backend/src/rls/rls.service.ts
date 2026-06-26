@@ -72,8 +72,35 @@ export class RlsService {
           [fitterId],
         );
       }
+
     } finally {
-      await queryRunner.release();
+      // BE-004 (safer minimal fix): clear session-scoped config before returning this
+      // connection to the pool. set_config(…, false) is session-scoped — without this
+      // cleanup, a pooled connection could expose the previous user's RLS context to
+      // the next request that acquires it.
+      //
+      // TODO(security/BE-004): For a complete fix, switch to transaction-local
+      // set_config(…, true) so context is automatically cleared at transaction end,
+      // and ensure all dependent queries execute inside the same transaction as the SET.
+      // That requires a larger refactor of all callers.
+      try {
+        await queryRunner.query(`SELECT set_config('rls.user_id', '', false)`);
+        await queryRunner.query(
+          `SELECT set_config('rls.user_role', '6', false)`,
+        ); // 6 = RoleEnum.user (safe default, no elevated access)
+        await queryRunner.query(
+          `SELECT set_config('rls.factory_id', '', false)`,
+        );
+        await queryRunner.query(
+          `SELECT set_config('rls.fitter_id', '', false)`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Failed to clear RLS context before pool release: ${(err as Error).message}`,
+        );
+      } finally {
+        await queryRunner.release();
+      }
     }
   }
 
