@@ -64,25 +64,15 @@ export class AuthService {
       });
     }
 
-    // Check if account is locked (properties might exist in extended user from DB)
-    const extendedUser = user as User & {
-      lockedUntil?: Date;
-      failedLoginAttempts?: number;
-      role?: any;
-    };
-    if (extendedUser.lockedUntil && extendedUser.lockedUntil > new Date()) {
-      throw new UnprocessableEntityException({
-        status: HttpStatus.UNPROCESSABLE_ENTITY,
-        errors: {
-          account: "locked",
-        },
-      });
-    }
-
-    // Unlock account if lockout period has expired
-    if (extendedUser.lockedUntil && extendedUser.lockedUntil <= new Date()) {
-      await this.usersService.unlockAccount(user.id);
-    }
+    // TODO(security/BE-001): Implement brute-force lockout.
+    // The User domain and credentials table currently have no `failed_login_attempts`
+    // or `locked_until` columns. To implement properly:
+    //   1. Add `failedLoginAttempts: number` and `lockedUntil: Date | null` to the
+    //      User domain, UserEntity, and a DB migration.
+    //   2. On wrong password → increment counter; when count >= 5 set lockedUntil = now+15min.
+    //   3. On successful login → reset both fields to 0 / null.
+    //   4. Check lockedUntil here before the password compare and throw 422 {account:"locked"}.
+    // Until then the original dead-code lockout branch has been removed to avoid confusion.
 
     if (!user.password) {
       throw new UnprocessableEntityException({
@@ -646,7 +636,20 @@ export class AuthService {
   }
 
   async logout(data: Pick<JwtRefreshPayloadType, "sessionId">) {
-    return this.sessionService.deleteById(data.sessionId);
+    // TODO(security/BE-002): Session management is disabled for staging compatibility
+    // (session table may not exist). When re-enabling sessions, remove this guard
+    // and ensure the session table is present in all environments.
+    // Session creation is commented out in validateLogin(); refreshToken is effectively
+    // non-functional until sessions are re-enabled.
+    if (!data.sessionId) {
+      // No session to delete — no-op instead of crashing.
+      return;
+    }
+    return this.sessionService.deleteById(data.sessionId).catch((err) => {
+      this.logger.warn(
+        `Logout: failed to delete session ${data.sessionId}: ${err.message}`,
+      );
+    });
   }
 
   private async getTokensData(data: {
