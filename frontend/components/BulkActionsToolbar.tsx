@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 import { orderStatuses } from '@/utils/orderConstants';
 import { bulkUpdateOrderStatus, fetchOrderDetail } from '@/services/enrichedOrders';
 import { generateBulkOrderPDF, type OrderData } from '@/lib/generate-pdf';
@@ -43,6 +44,33 @@ function formatOrderDate(orderTime: string | null): string {
   } catch {
     return orderTime;
   }
+}
+
+/**
+ * Run tasks with at most `concurrency` in-flight at a time.
+ * Returns results in the same order as inputs, mirroring Promise.allSettled.
+ */
+async function limitedAllSettled<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let index = 0;
+
+  async function worker(): Promise<void> {
+    while (index < tasks.length) {
+      const i = index++;
+      try {
+        results[i] = { status: 'fulfilled', value: await tasks[i]() };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
 }
 
 export function BulkActionsToolbar({
@@ -73,13 +101,17 @@ export function BulkActionsToolbar({
       );
       logger.log('Bulk status update result:', result);
       if (result.failed > 0) {
-        alert(`Updated ${result.updated} orders. ${result.failed} failed.`);
+        // FE-023: replace alert() with toast
+        toast.error(`Updated ${result.updated} orders. ${result.failed} failed.`);
+      } else {
+        toast.success(`Updated ${result.updated} order${result.updated !== 1 ? 's' : ''} to "${selectedStatus}".`);
       }
       onStatusUpdated();
       onClearSelection();
     } catch (err) {
       logger.error('Bulk status update failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to update statuses');
+      // FE-023: replace alert() with toast
+      toast.error(err instanceof Error ? err.message : 'Failed to update statuses');
     } finally {
       setUpdating(false);
     }
@@ -89,10 +121,20 @@ export function BulkActionsToolbar({
     setPrinting(true);
     try {
       const orderIds = Array.from(selectedOrderIds);
-      const ordersData: OrderData[] = [];
 
-      for (const orderId of orderIds) {
-        const detailData = await fetchOrderDetail(orderId);
+      // FE-022: fetch all order details concurrently (max 5 in-flight) instead of serially.
+      const fetchTasks = orderIds.map((orderId) => () => fetchOrderDetail(orderId));
+      const settled = await limitedAllSettled(fetchTasks, 5);
+
+      const ordersData: OrderData[] = [];
+      let fetchFailed = 0;
+
+      for (const result of settled) {
+        if (result.status === 'rejected') {
+          fetchFailed++;
+          continue;
+        }
+        const detailData = result.value;
 
         const saddleModel = `${detailData.brandName || ''} ${detailData.modelName || ''}`.trim();
         const saddleLeatherType = detailData.leatherName || '';
@@ -144,6 +186,16 @@ export function BulkActionsToolbar({
         });
       }
 
+      // FE-022: report partial failures without discarding successes
+      if (fetchFailed > 0) {
+        toast.error(`${fetchFailed} order${fetchFailed !== 1 ? 's' : ''} could not be fetched and will be skipped in the PDF.`);
+      }
+
+      if (ordersData.length === 0) {
+        toast.error('No order data could be loaded — PDF generation aborted.');
+        return;
+      }
+
       const doc = generateBulkOrderPDF(ordersData);
       const pdfBlob = doc.output('blob');
       const url = URL.createObjectURL(pdfBlob);
@@ -153,9 +205,11 @@ export function BulkActionsToolbar({
           printWindow.print();
         });
       }
+      // TODO(FE-023): prefer an iframe → window.print() pattern to avoid popup blockers
     } catch (err) {
       logger.error('Bulk print failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to generate PDF');
+      // FE-023: replace alert() with toast
+      toast.error(err instanceof Error ? err.message : 'Failed to generate PDF');
     } finally {
       setPrinting(false);
     }
