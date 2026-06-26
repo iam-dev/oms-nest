@@ -119,6 +119,9 @@ security-report*.json
 audit-*.log
 vulnerability-*.json
 *.security
+# Internal security/code reviews — NEVER commit (vulnerability disclosures live here)
+docs/reviews/
+docs/reviews/**
 
 # Backup files
 *.bak
