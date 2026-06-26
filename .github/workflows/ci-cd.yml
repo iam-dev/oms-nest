@@ -33,13 +33,13 @@ jobs:
           fetch-depth: 0
 
       - name: 🔍 GitLeaks Secret Detection
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v2 # TODO(WF-010): pin to commit SHA once SHA for v2 is verified
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
       - name: 🛡️ Trivy Filesystem Security Scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.28.0 (WF-007/WF-010)
         if: always()
         with:
           scan-type: 'fs'
@@ -217,7 +217,7 @@ jobs:
           MAIL_REQUIRE_TLS: "false"
 
       - name: Upload backend test coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v3 # TODO(WF-010): pin to commit SHA once SHA for v3 is verified
         with:
           directory: backend/coverage
           flags: backend
@@ -256,7 +256,7 @@ jobs:
         run: npm run build
 
       - name: Upload frontend test coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v3 # TODO(WF-010): pin to commit SHA once SHA for v3 is verified
         with:
           directory: frontend/coverage
           flags: frontend
@@ -528,19 +528,25 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.28.0 (WF-007/WF-010)
         with:
           image-ref: ${{ env.REGISTRY }}/${{ matrix.image_name }}:scan
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
 
+      # WF-008/WF-009: The scan above is amd64-only; the push below previously included
+      # linux/arm64 — meaning the arm64 layer was never scanned before publish.
+      # Safer partial fix: restrict publish to linux/amd64 so scan == publish.
+      # TODO(WF-008): proper fix is: build once → push by digest → scan by digest →
+      # re-tag (single buildx bake run). Implement in a follow-up branch when arm64
+      # is required by infra, to avoid a rushed multi-arch rebuild here.
       - name: Push Docker image
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -14,7 +14,7 @@ on:
         options:
         - staging-v2
       force_deploy:
-        description: 'Force deployment even if tests fail'
+        description: 'Force clean resource wipe before deploy (does NOT bypass test failures — WF-005)'
         required: false
         default: false
         type: boolean
@@ -41,7 +41,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.28.0 (WF-007/WF-010)
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -89,10 +89,10 @@ jobs:
 
     - name: Run unit tests
       run: npm test -- --passWithNoTests --coverage
-      continue-on-error: ${{ github.event.inputs.force_deploy == 'true' }}
+      # WF-005: continue-on-error override removed; force_deploy no longer bypasses test failures
 
     - name: Upload test coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v3 # TODO(WF-010): pin to commit SHA once SHA for v3 is verified
       with:
         files: ./backend/coverage/lcov.info
         flags: backend
@@ -157,7 +157,7 @@ jobs:
 
     - name: Run tests
       run: npm test
-      continue-on-error: ${{ github.event.inputs.force_deploy == 'true' }}
+      # WF-005: continue-on-error override removed; force_deploy no longer bypasses test failures
 
     - name: Build application
       run: npm run build
@@ -213,7 +213,7 @@ jobs:
         version: 'v1.28.0'
 
     - name: Configure kubectl for DigitalOcean
-      uses: digitalocean/action-doctl@v2
+      uses: digitalocean/action-doctl@v2 # TODO(WF-010): pin to commit SHA once SHA for v2 is verified
       with:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
@@ -233,34 +233,26 @@ jobs:
         kubectl wait --for=delete pods --all -n ${{ env.K8S_NAMESPACE }} --timeout=120s || true
 
     - name: Install sealed-secrets controller
+      # WF-006: idempotent install — skip reinstall if already running healthy.
+      # Only reinstall when not present; use helm upgrade --install for safe upgrades.
       run: |
-        # Check if sealed-secrets is already installed
-        if helm list -n kube-system | grep -q sealed-secrets; then
-          echo "Sealed-secrets already installed, checking status..."
-          kubectl get pods -n kube-system -l app.kubernetes.io/name=sealed-secrets
-
-          # Try to uninstall if it exists but might be stuck
-          echo "Attempting to uninstall existing sealed-secrets..."
-          helm uninstall sealed-secrets -n kube-system --wait --timeout 60s || true
-
-          # Wait for pods to be deleted
-          kubectl wait --for=delete pod -l app.kubernetes.io/name=sealed-secrets -n kube-system --timeout=60s || true
-        fi
-
-        # Add repo and install fresh
         helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets || true
         helm repo update
 
-        # Install without --wait to avoid timeout, then check status separately
-        helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
-          --namespace kube-system \
-          --set-string fullnameOverride=sealed-secrets-controller \
-          --timeout 300s || true
+        if helm list -n kube-system | grep -q sealed-secrets; then
+          echo "Sealed-secrets already installed, skipping reinstall"
+        else
+          # WF-004: no '|| true' — failures surface loudly
+          helm install sealed-secrets sealed-secrets/sealed-secrets \
+            --namespace kube-system \
+            --set-string fullnameOverride=sealed-secrets-controller \
+            --wait --timeout 300s
+        fi
 
-        # Wait for the controller to be ready
+        # Wait for the controller to be ready regardless of install/skip path
         echo "Waiting for sealed-secrets controller to be ready..."
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=sealed-secrets -n kube-system --timeout=300s || \
-          kubectl get pods -n kube-system -l app.kubernetes.io/name=sealed-secrets
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=sealed-secrets \
+          -n kube-system --timeout=300s
 
     - name: Apply SealedSecret from Git
       run: |
@@ -283,12 +275,18 @@ jobs:
         done
 
     - name: Create registry credentials
+      # WF-002: password passed via env var so it is not visible in /proc/*/cmdline
+      env:
+        DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        DOCKER_USERNAME: ${{ github.actor }}
+        DOCKER_REGISTRY: ${{ env.REGISTRY }}
+        K8S_NS: ${{ env.K8S_NAMESPACE }}
       run: |
         kubectl create secret docker-registry registry-credentials \
-          --namespace=${{ env.K8S_NAMESPACE }} \
-          --docker-server=${{ env.REGISTRY }} \
-          --docker-username=${{ github.actor }} \
-          --docker-password=${{ secrets.GITHUB_TOKEN }} \
+          --namespace="$K8S_NS" \
+          --docker-server="$DOCKER_REGISTRY" \
+          --docker-username="$DOCKER_USERNAME" \
+          --docker-password="$DOCKER_PASSWORD" \
           --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Verify secrets exist
@@ -537,7 +535,7 @@ jobs:
 
     # kubectl access for creating/deleting test users in the staging database
     - name: Configure kubectl for DigitalOcean
-      uses: digitalocean/action-doctl@v2
+      uses: digitalocean/action-doctl@v2 # TODO(WF-010): pin to commit SHA once SHA for v2 is verified
       with:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
@@ -571,58 +569,30 @@ jobs:
         done
 
     - name: Create E2E test users on staging
+      # WF-003/WF-012: script extracted to file; passwords passed via --env so they
+      # are not interpolated into the shell command line (not visible in /proc/*/cmdline).
       working-directory: .
+      env:
+        E2E_ADMIN_PASSWORD: ${{ steps.e2e-creds.outputs.E2E_ADMIN_PASSWORD }}
+        E2E_FITTER_PASSWORD: ${{ steps.e2e-creds.outputs.E2E_FITTER_PASSWORD }}
+        K8S_NS: ${{ env.K8S_NAMESPACE }}
       run: |
         # Select a Running pod that is NOT being terminated
-        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend \
+        POD=$(kubectl get pods -n "$K8S_NS" -l app=oms-backend \
           -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
           | awk -F'\t' '$2 == "" { print $1; exit }')
         if [ -z "$POD" ]; then
           echo "::error::No ready backend pod found"
-          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend
+          kubectl get pods -n "$K8S_NS" -l app=oms-backend
           exit 1
         fi
         echo "Using backend pod: $POD"
-        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
-          const bcrypt = require('bcryptjs');
-          const { Client } = require('pg');
-          const c = new Client({
-            host: process.env.DATABASE_HOST,
-            port: parseInt(process.env.DATABASE_PORT || '5432'),
-            user: process.env.DATABASE_USERNAME,
-            password: process.env.DATABASE_PASSWORD,
-            database: process.env.DATABASE_NAME,
-            ssl: { rejectUnauthorized: false }
-          });
-          (async () => {
-            await c.connect();
-            const adminHash = await bcrypt.hash('${{ steps.e2e-creds.outputs.E2E_ADMIN_PASSWORD }}', 10);
-            const fitterHash = await bcrypt.hash('${{ steps.e2e-creds.outputs.E2E_FITTER_PASSWORD }}', 10);
-            await c.query(
-              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT (user_name) DO UPDATE SET password_hash = EXCLUDED.password_hash, blocked = 0, deleted = 0',
-              ['e2e-admin@test.com', adminHash, 'E2E Admin', 2]
-            );
-            await c.query(
-              'INSERT INTO credentials (user_name, password_hash, full_name, user_type, last_login, password_reset_hash, blocked, deleted) VALUES (\$1,\$2,\$3,\$4,0,\\'\\',0,0) ON CONFLICT (user_name) DO UPDATE SET password_hash = EXCLUDED.password_hash, blocked = 0, deleted = 0',
-              ['e2e-fitter@test.com', fitterHash, 'E2E Fitter', 1]
-            );
-            // Create fitters table entry so getUserRole() resolves user_type=1 correctly
-            const fitterResult = await c.query(
-              'SELECT user_id FROM credentials WHERE user_name = \$1',
-              ['e2e-fitter@test.com']
-            );
-            const fitterUserId = fitterResult.rows[0].user_id;
-            await c.query(
-              \`INSERT INTO fitters (user_id, deleted, address, zipcode, state, city, country, phone_no, cell_no, currency, emailaddress)
-               VALUES (\$1, 0, '', '', '', '', '', '', '', 1, 'e2e-fitter@test.com')
-               ON CONFLICT DO NOTHING\`,
-              [fitterUserId]
-            );
-            await c.end();
-            console.log('E2E test users created/updated with random passwords (including fitters entry)');
-            process.exit(0);
-          })().catch(e => { console.error('Failed to create test users:', e.message); process.exit(1); });
-        "
+        # Pipe the script via stdin (-i) so it never appears on the process command line.
+        # Passwords are forwarded as env vars — not shell-interpolated into the script text.
+        kubectl exec -n "$K8S_NS" "$POD" -i \
+          --env="E2E_ADMIN_PASSWORD=$E2E_ADMIN_PASSWORD" \
+          --env="E2E_FITTER_PASSWORD=$E2E_FITTER_PASSWORD" \
+          -- node - < .github/workflows/scripts/e2e-create-users.js
 
     - name: Run E2E tests
       # NOTE: Staging E2E tests are smoke/readonly only (enforced by playwright.config.ts grep filter)
@@ -637,10 +607,13 @@ jobs:
         TEST_FITTER_PASSWORD: ${{ steps.e2e-creds.outputs.E2E_FITTER_PASSWORD }}
 
     - name: Delete E2E test users from staging
+      # WF-003: script extracted to file; no secrets needed for deletion
       if: always()
       working-directory: .
+      env:
+        K8S_NS: ${{ env.K8S_NAMESPACE }}
       run: |
-        POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=oms-backend \
+        POD=$(kubectl get pods -n "$K8S_NS" -l app=oms-backend \
           -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
           | awk -F'\t' '$2 == "" { print $1; exit }' 2>/dev/null || true)
         if [ -z "$POD" ]; then
@@ -648,36 +621,9 @@ jobs:
           exit 0
         fi
         echo "Cleaning up test users from pod: $POD"
-        kubectl exec -n ${{ env.K8S_NAMESPACE }} "$POD" -- node -e "
-          const { Client } = require('pg');
-          const c = new Client({
-            host: process.env.DATABASE_HOST,
-            port: parseInt(process.env.DATABASE_PORT || '5432'),
-            user: process.env.DATABASE_USERNAME,
-            password: process.env.DATABASE_PASSWORD,
-            database: process.env.DATABASE_NAME,
-            ssl: { rejectUnauthorized: false }
-          });
-          (async () => {
-            await c.connect();
-            // Clean up fitters entry first (references credentials.user_id)
-            const fitterResult = await c.query(
-              'SELECT user_id FROM credentials WHERE user_name = \$1',
-              ['e2e-fitter@test.com']
-            );
-            if (fitterResult.rows.length > 0) {
-              await c.query('DELETE FROM fitters WHERE user_id = \$1', [fitterResult.rows[0].user_id]);
-              console.log('Deleted fitters entry for e2e-fitter');
-            }
-            const result = await c.query(
-              'DELETE FROM credentials WHERE user_name IN (\$1, \$2)',
-              ['e2e-admin@test.com', 'e2e-fitter@test.com']
-            );
-            console.log('Deleted', result.rowCount, 'E2E test users');
-            await c.end();
-            process.exit(0);
-          })().catch(e => { console.error('Failed to delete test users:', e.message); process.exit(1); });
-        " || echo "Warning: test user cleanup failed (non-fatal)"
+        kubectl exec -n "$K8S_NS" "$POD" -i \
+          -- node - < .github/workflows/scripts/e2e-delete-users.js \
+          || echo "Warning: test user cleanup failed (non-fatal)"
 
     - name: Upload E2E test results
       uses: actions/upload-artifact@v4
@@ -696,7 +642,7 @@ jobs:
 
     steps:
     - name: Configure kubectl for DigitalOcean
-      uses: digitalocean/action-doctl@v2
+      uses: digitalocean/action-doctl@v2 # TODO(WF-010): pin to commit SHA once SHA for v2 is verified
       with:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
