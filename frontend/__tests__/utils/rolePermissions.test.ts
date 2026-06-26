@@ -407,8 +407,9 @@ describe('Role Permissions System', () => {
         });
       });
 
-      it('can edit when status is undefined', () => {
-        expect(canEditOrder(UserRole.FITTER, undefined)).toBe(true);
+      // FE-035: fitter must fail closed when status is unknown — backend is authoritative.
+      it('cannot edit when status is undefined (fail-closed)', () => {
+        expect(canEditOrder(UserRole.FITTER, undefined)).toBe(false);
       });
 
       it('has base ORDER_EDIT screen permission', () => {
@@ -521,14 +522,44 @@ describe('Role Permissions System', () => {
         'DASHBOARD', 'ORDERS', 'CUSTOMERS', 'FITTERS', 'REPORTS',
         'BRANDS', 'MODELS', 'LEATHER_TYPES', 'OPTIONS', 'EXTRAS', 'PRESETS',
       ];
-      
+
       adminScreens.forEach(screen => {
         const adminHasAccess = hasScreenPermission(UserRole.ADMIN, screen);
         const supervisorHasAccess = hasScreenPermission(UserRole.SUPERVISOR, screen);
-        
+
         if (adminHasAccess) {
           expect(supervisorHasAccess).toBe(true);
         }
+      });
+    });
+  });
+
+  // FE-034: SUPERVISOR is strictly superior to ADMIN — every screen ADMIN can access,
+  // SUPERVISOR must also be able to access.
+  describe('FE-034 — SUPERVISOR strictly superior to ADMIN', () => {
+    it('SUPERVISOR can access every screen that ADMIN can access', () => {
+      const allScreens = Object.keys(SCREEN_PERMISSIONS) as ScreenType[];
+      allScreens.forEach((screen) => {
+        if (hasScreenPermission(UserRole.ADMIN, screen)) {
+          expect(hasScreenPermission(UserRole.SUPERVISOR, screen)).toBe(true);
+        }
+      });
+    });
+
+    it('SUPERVISOR has exclusive access to ADMIN-inaccessible management screens', () => {
+      const supervisorExclusiveScreens: ScreenType[] = [
+        'USER_CREATE',
+        'USER_EDIT',
+        'USER_DELETE',
+        'USER_VIEW',
+        'WAREHOUSE_CREATE',
+        'WAREHOUSE_EDIT',
+        'WAREHOUSE_DELETE',
+        'WAREHOUSE_VIEW',
+      ];
+      supervisorExclusiveScreens.forEach((screen) => {
+        expect(hasScreenPermission(UserRole.SUPERVISOR, screen)).toBe(true);
+        expect(hasScreenPermission(UserRole.ADMIN, screen)).toBe(false);
       });
     });
   });

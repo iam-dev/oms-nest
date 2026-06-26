@@ -114,7 +114,12 @@ export const Permission = {
 } as const;
 
 /**
- * Check if a user role has permission to access a screen/feature
+ * Check if a user role has permission to access a screen/feature.
+ *
+ * FE-034: SUPERVISOR is strictly superior to ADMIN — it inherits every screen
+ * that ADMIN can access, plus its own exclusive screens (USER_*, WAREHOUSE_*).
+ * SUPERVISOR does NOT inherit FITTER-only screens (e.g. MY_SADDLE_STOCK) because
+ * those represent a domain-specific role, not a rank.
  */
 export function hasScreenPermission(
   userRole: UserRole | null,
@@ -125,12 +130,14 @@ export function hasScreenPermission(
   const allowedRoles = SCREEN_PERMISSIONS[screen] as readonly UserRole[];
   if (!allowedRoles) return false;
 
-  // Handle role hierarchy - SUPERVISOR inherits ADMIN permissions
+  // FE-034: SUPERVISOR inherits all ADMIN permissions.
+  // Whenever the permission list contains any role besides FITTER-only roles,
+  // SUPERVISOR has access if it would normally have it as SUPERVISOR or ADMIN.
   if (userRole === UserRole.SUPERVISOR) {
     return allowedRoles.includes(UserRole.SUPERVISOR) || allowedRoles.includes(UserRole.ADMIN);
   }
 
-  // ADMIN can access most things except supplier-specific features
+  // ADMIN can access most things except SUPERVISOR-only and FITTER/SUPPLIER-specific features
   if (userRole === UserRole.ADMIN) {
     return allowedRoles.includes(UserRole.ADMIN);
   }
@@ -181,9 +188,11 @@ export function canEditOrder(
     return true;
   }
 
-  // Fitter can edit only if status is not restricted
+  // Fitter can edit only if status is not restricted.
+  // FE-035: fail closed when orderStatus is undefined — an unknown status should
+  // not silently grant edit access; the backend is authoritative.
   if (userRole === UserRole.FITTER) {
-    if (!orderStatus) return true;
+    if (!orderStatus) return false;
     return !FITTER_RESTRICTED_STATUSES.includes(orderStatus);
   }
 
