@@ -1,100 +1,84 @@
-r# GitHub Workflows for OMS Deployment
+# GitHub Actions Workflows
 
-This directory contains CI/CD workflows for automated deployment of the Order Management System (OMS).
+CI/CD workflows for the Order Management System (OMS).
 
-## Workflows
+## Active Workflows
 
-### `staging-deployment.yml`
-Automated deployment to the `oms-staging-v2` Kubernetes namespace.
+| File | Trigger | Purpose |
+|---|---|---|
+| `staging-v2-deployment.yml` | Push to `staging`, `workflow_dispatch` | Build, push images, deploy to `oms-nest-staging`, run E2E |
+| `codeql.yml` | Push/PR to `staging`/`main`, weekly schedule | Canonical CodeQL SAST scan |
+| `ci-cd.yml` | Push/PR to `staging`/`main`, daily schedule, `workflow_dispatch` | Full DevSecOps pipeline: security scan, unit tests, E2E, image build |
+| `pr-checks.yml` | PR opened/synchronised/reopened against `staging`/`main` | Code quality, security audit, API contract, performance, docs |
 
-**Triggers:**
-- Push to `main` or `develop` branches
-- Pull requests with `deploy-staging-v2` label
-- Manual workflow dispatch
+<!-- TODO(WF-016): ci-cd.yml and pr-checks.yml have significant overlap — both
+     run linting, unit tests, dependency audits, and a backend health check.
+     Before consolidating, the team should decide whether ci-cd.yml should
+     replace pr-checks.yml entirely or whether the two serve distinct roles
+     (pr-checks as a fast-feedback gate, ci-cd as the full nightly build).
+     Do not restructure without team sign-off. -->
 
-**Pipeline Steps:**
-1. **Security Scan** - Trivy vulnerability scanning
-2. **Backend Build** - Lint, test, build, and push Docker image
-3. **Frontend Build** - Lint, test, build, and push Docker image
-4. **Deploy to Staging** - Deploy to Kubernetes with secrets management
-5. **E2E Tests** - Run Playwright tests against deployed environment
-6. **Notifications** - Slack alerts on success/failure
+## Deployment Workflow (`staging-v2-deployment.yml`)
 
-## Required GitHub Secrets
+### Triggers
+- Push to `staging` branch
+- Manual `workflow_dispatch` with `force_deploy` option
 
-Configure these secrets in your GitHub repository settings:
+### Pipeline
+1. **Security Scan** — Trivy filesystem scan, SARIF uploaded to GitHub Security tab
+2. **Backend Build** — lint, typecheck, unit tests, Docker image pushed to `ghcr.io`
+3. **Frontend Build** — lint, typecheck, unit tests, Docker image pushed to `ghcr.io`
+4. **Deploy to Staging** — `kubectl set image` updates running deployments in `oms-nest-staging`
+5. **E2E Tests** — Playwright smoke suite against the live staging URLs
+6. **Rollback** — `kubectl rollout undo` if E2E tests fail (and deploy succeeded)
 
-### Database Configuration
-- `DB_USERNAME` - PostgreSQL username for staging
-- `DB_PASSWORD` - PostgreSQL password for staging
-- `DB_HOST` - PostgreSQL host address
-- `DB_NAME` - Database name for staging
+### Namespace
+`oms-nest-staging`
 
-### Application Secrets
-- `JWT_SECRET_KEY` - JWT signing secret
-- `ENCRYPTION_SECRET` - Application encryption key
-- `REDIS_HOST` - Redis server host
-- `REDIS_PASSWORD` - Redis authentication password
+### URLs
+- Frontend: `https://next-staging.ordermysaddle.com`
+- Backend API: `https://api-nest-staging.ordermysaddle.com`
 
-### Infrastructure
-- `DIGITALOCEAN_ACCESS_TOKEN` - DigitalOcean API token for K8s access
+## Secrets
 
-### Testing
-- `TEST_USER_EMAIL` - Test user email for E2E tests
-- `TEST_USER_PASSWORD` - Test user password for E2E tests
+All application secrets are delivered via a **SealedSecret** committed at
+`kubernetes/staging-v2/sealed-secret.yaml`. The controller decrypts it into
+a Kubernetes `Secret` named `oms-app-secrets` inside `oms-nest-staging`.
 
-### Notifications
-- `SLACK_WEBHOOK_URL` - Slack webhook for deployment notifications
+No individual database or JWT secrets need to be set in GitHub repository
+settings — everything is in the SealedSecret.
 
-## Usage
+Required GitHub Actions secrets (infrastructure only):
 
-### Automatic Deployment
-Push to `main` or `develop` branch to trigger automatic deployment.
+| Secret | Purpose |
+|---|---|
+| `DIGITALOCEAN_ACCESS_TOKEN` | DigitalOcean API token (kubeconfig access) |
+| `DOKS_CLUSTER_NAME` | DOKS cluster identifier |
+| `CODECOV_TOKEN` | Codecov upload token (optional; `fail_ci_if_error: false` until set) |
 
-### Manual Deployment
-1. Go to GitHub Actions tab
-2. Select "Deploy to Staging V2" workflow
-3. Click "Run workflow"
-4. Choose environment and options
+## Shared Scripts
 
-### PR-based Deployment
-Add the `deploy-staging-v2` label to any PR to trigger deployment.
-
-## Security Features
-
-- **Vulnerability scanning** with Trivy
-- **SARIF upload** for GitHub Security tab integration
-- **Least-privilege secrets** management
-- **Read-only root filesystem** in containers
-- **Network policies** for traffic isolation
-- **Resource limits** and security contexts
-
-## Monitoring
-
-After deployment, the workflow automatically:
-- Verifies pod readiness
-- Performs health checks on endpoints
-- Runs comprehensive E2E test suite
-- Sends notifications to Slack
+| Script | Used by |
+|---|---|
+| `scripts/wait-rollout.sh` | `staging-v2-deployment.yml` (backend + frontend wait steps) |
 
 ## Rollback
 
-To rollback a deployment:
 ```bash
-kubectl rollout undo deployment/oms-backend -n oms-staging-v2
-kubectl rollout undo deployment/oms-frontend -n oms-staging-v2
+kubectl rollout undo deployment/oms-backend  -n oms-nest-staging
+kubectl rollout undo deployment/oms-frontend -n oms-nest-staging
 ```
 
 ## Debugging
 
-View deployment logs:
 ```bash
-kubectl logs -f deployment/oms-backend -n oms-staging-v2
-kubectl describe pod -l app=oms-backend -n oms-staging-v2
-```
+# Pod status
+kubectl get pods -n oms-nest-staging -o wide
 
-Check service status:
-```bash
-kubectl get all -n oms-staging-v2
-kubectl get ingress -n oms-staging-v2
+# Logs
+kubectl logs -f deployment/oms-backend  -n oms-nest-staging
+kubectl logs -f deployment/oms-frontend -n oms-nest-staging
+
+# Events
+kubectl get events -n oms-nest-staging --sort-by=.lastTimestamp | tail -40
 ```
