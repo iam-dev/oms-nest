@@ -1,5 +1,10 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsArray, ValidateNested, ArrayMinSize, ArrayMaxSize } from "class-validator";
+import {
+  IsArray,
+  ValidateNested,
+  ArrayMinSize,
+  ArrayMaxSize,
+} from "class-validator";
 import { Type } from "class-transformer";
 import { CreateCellOverrideDto } from "./create-cell-override.dto";
 

@@ -15,7 +15,9 @@ import {
  */
 export const CurrentUserId = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): number => {
-    const request = ctx.switchToHttp().getRequest<{ user?: { legacyId?: number } }>();
+    const request = ctx
+      .switchToHttp()
+      .getRequest<{ user?: { legacyId?: number } }>();
     const legacyId = request.user?.legacyId;
 
     if (legacyId === undefined || legacyId === null) {

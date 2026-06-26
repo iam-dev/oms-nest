@@ -72,7 +72,6 @@ export class RlsService {
           [fitterId],
         );
       }
-
     } finally {
       // BE-004 (safer minimal fix): clear session-scoped config before returning this
       // connection to the pool. set_config(…, false) is session-scoped — without this
