@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsString, IsNumber } from "class-validator";
+import { IsNotEmpty, IsString, IsNumber, MaxLength } from "class-validator";
 
 export class CreateCellOverrideDto {
   @ApiProperty({ description: "Order ID", example: 1234 })
@@ -13,10 +13,12 @@ export class CreateCellOverrideDto {
   columnKey: string | undefined;
 
   @ApiProperty({
-    description: "Override value",
+    description: "Override value (max 2000 characters)",
     example: "Custom Customer Name",
+    maxLength: 2000,
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(2000)
   overrideValue: string | undefined;
 }

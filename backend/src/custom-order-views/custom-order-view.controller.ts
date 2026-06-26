@@ -10,8 +10,6 @@ import {
   HttpCode,
   HttpStatus,
   ParseIntPipe,
-  Req,
-  UnauthorizedException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -26,6 +24,7 @@ import { RoleEnum } from "../roles/roles.enum";
 import { CustomOrderViewService } from "./custom-order-view.service";
 import { CreateCustomOrderViewDto } from "./dto/create-custom-order-view.dto";
 import { UpdateCustomOrderViewDto } from "./dto/update-custom-order-view.dto";
+import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 
 @ApiTags("Custom Order Views")
 @Controller({ path: "custom-order-views", version: "1" })
@@ -35,56 +34,49 @@ import { UpdateCustomOrderViewDto } from "./dto/update-custom-order-view.dto";
 export class CustomOrderViewController {
   constructor(private readonly service: CustomOrderViewService) {}
 
-  private getUserId(req: { user?: { legacyId?: number } }): number {
-    const id = req.user?.legacyId;
-    if (!id)
-      throw new UnauthorizedException("User legacyId not found in JWT payload");
-    return id;
-  }
-
   @Post()
   @ApiOperation({ summary: "Create a custom order view" })
   @ApiResponse({ status: 201, description: "View created" })
   async create(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Body() dto: CreateCustomOrderViewDto,
   ) {
-    return this.service.create(this.getUserId(req), dto);
+    return this.service.create(userId, dto);
   }
 
   @Get()
   @ApiOperation({ summary: "List all custom order views for current user" })
   @ApiResponse({ status: 200, description: "List of views" })
-  async findAll(@Req() req: { user?: { legacyId?: number } }) {
-    return this.service.findAll(this.getUserId(req));
+  async findAll(@CurrentUserId() userId: number) {
+    return this.service.findAll(userId);
   }
 
   @Get("default")
   @ApiOperation({ summary: "Get the default view for current user" })
   @ApiResponse({ status: 200, description: "Default view or null" })
-  async findDefault(@Req() req: { user?: { legacyId?: number } }) {
-    return this.service.findDefault(this.getUserId(req));
+  async findDefault(@CurrentUserId() userId: number) {
+    return this.service.findDefault(userId);
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Get a specific custom order view" })
   @ApiResponse({ status: 200, description: "View details" })
   async findOne(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Param("id", ParseIntPipe) id: number,
   ) {
-    return this.service.findOne(id, this.getUserId(req));
+    return this.service.findOne(id, userId);
   }
 
   @Patch(":id")
   @ApiOperation({ summary: "Update a custom order view" })
   @ApiResponse({ status: 200, description: "Updated view" })
   async update(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Param("id", ParseIntPipe) id: number,
     @Body() dto: UpdateCustomOrderViewDto,
   ) {
-    return this.service.update(id, this.getUserId(req), dto);
+    return this.service.update(id, userId, dto);
   }
 
   @Delete(":id")
@@ -92,9 +84,9 @@ export class CustomOrderViewController {
   @ApiOperation({ summary: "Delete a custom order view" })
   @ApiResponse({ status: 204, description: "Deleted" })
   async remove(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Param("id", ParseIntPipe) id: number,
   ) {
-    return this.service.remove(id, this.getUserId(req));
+    return this.service.remove(id, userId);
   }
 }

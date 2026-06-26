@@ -38,6 +38,17 @@ export class CustomOrderCellOverrideRepository {
   ): Promise<CustomOrderCellOverrideEntity[]> {
     if (items.length === 0) return [];
 
+    // BE-008: This is a single INSERT … ON CONFLICT DO UPDATE statement, which
+    // PostgreSQL executes atomically at the row level — no explicit transaction
+    // wrapper is required.
+    //
+    // TODO(security/BE-008): Add cache invalidation after a successful upsert.
+    // ProductionCacheService is not currently wired into this module. To add it:
+    //   1. Import CacheModule into CustomOrderCellOverrideModule.
+    //   2. Inject ProductionCacheService into this repository (or into the service layer).
+    //   3. After the upsert, call:
+    //        await this.cacheService.invalidateByTag(`custom-order-cell-overrides:user:${userId}`)
+    //      (userId must be threaded through from the caller).
     const result = await this.repository
       .createQueryBuilder()
       .insert()

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { MailData } from "./interfaces/mail-data.interface";
 
@@ -6,12 +6,36 @@ import { MailerService } from "../mailer/mailer.service";
 import path from "path";
 import { AllConfigType } from "../config/config.type";
 
+/** Pattern that a valid frontend domain must match. Must be an absolute URL with no trailing path. */
+const FRONTEND_DOMAIN_PATTERN = /^https?:\/\/[^/]+$/;
+
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
+  private readonly logger = new Logger(MailService.name);
+
   constructor(
     private readonly mailerService: MailerService,
     private readonly configService: ConfigService<AllConfigType>,
   ) {}
+
+  /**
+   * BE-007: Validate frontendDomain at startup so misconfigured URLs fail fast
+   * rather than producing malformed password-reset / confirmation links silently.
+   */
+  onModuleInit(): void {
+    const domain = this.configService.get("app.frontendDomain", {
+      infer: true,
+    });
+
+    if (!domain || !FRONTEND_DOMAIN_PATTERN.test(domain)) {
+      throw new Error(
+        `[MailService] app.frontendDomain is invalid: "${domain}". ` +
+          `Expected an absolute URL matching ${FRONTEND_DOMAIN_PATTERN} (e.g. "https://example.com").`,
+      );
+    }
+
+    this.logger.log(`MailService: frontendDomain validated as "${domain}"`);
+  }
 
   async userSignUp(mailData: MailData<{ hash: string }>): Promise<void> {
     const emailConfirmTitle = "Confirm Email";
