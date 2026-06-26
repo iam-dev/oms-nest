@@ -1,7 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, ForbiddenException } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
 import { SaddleStockDto } from "./dto/saddle-stock.dto";
+import { RoleEnum } from "../roles/roles.enum";
 
 interface SaddleStockQueryResult {
   data: SaddleStockDto[];
@@ -35,7 +36,20 @@ export class SaddleStockService {
     page: number = 1,
     limit: number = 30,
     search?: string,
+    userRoleId?: number,
   ): Promise<SaddleStockQueryResult> {
+    // BE-019: Enforce role-based access at the service layer so the restriction
+    // cannot be bypassed if the controller is refactored or bypassed in tests.
+    if (type === "all" && userRoleId === RoleEnum.fitter) {
+      throw new ForbiddenException(
+        "Fitter role cannot access the 'all' saddle stock view",
+      );
+    }
+
+    // BE-018: Truncate search to 100 chars at service entry to prevent
+    // excessively long ILIKE parameters from reaching the database.
+    const safeSearch = search ? search.substring(0, 100) : undefined;
+
     const offset = (page - 1) * limit;
 
     let whereClause = `o.fitter_stock = true AND o.deleted_at IS NULL`;
@@ -58,14 +72,14 @@ export class SaddleStockService {
       }
     }
 
-    if (search) {
+    if (safeSearch) {
       whereClause += ` AND (
         o.serial_number ILIKE $${paramIndex}
         OR s.brand ILIKE $${paramIndex}
         OR s.model_name ILIKE $${paramIndex}
         OR cr.full_name ILIKE $${paramIndex}
       )`;
-      params.push(`%${search}%`);
+      params.push(`%${safeSearch}%`);
       paramIndex++;
     }
 
