@@ -1,3 +1,4 @@
+import { UnauthorizedException } from "@nestjs/common";
 import { RolesGuard } from "../../../../src/auth/guards/roles.guard";
 import {
   createMockExecutionContext,
@@ -61,23 +62,23 @@ describe("RolesGuard", () => {
     expect(result).toBe(false);
   });
 
-  it("should deny when user has no role object", () => {
+  it("should throw UnauthorizedException when user has no role object (BE-025)", () => {
+    // BE-025: missing role.id on an authenticated request must throw,
+    // not silently return false, so the caller gets a 401 not a 403.
     mockReflector.getAllAndOverride.mockReturnValue([2]);
 
     const context = createMockExecutionContext({
       user: {},
     });
 
-    const result = guard.canActivate(context);
-    expect(result).toBe(false);
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 
-  it("should deny when user is missing entirely", () => {
+  it("should throw UnauthorizedException when user is missing entirely (BE-025)", () => {
     mockReflector.getAllAndOverride.mockReturnValue([2]);
 
     const context = createMockExecutionContext();
 
-    const result = guard.canActivate(context);
-    expect(result).toBe(false);
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 });

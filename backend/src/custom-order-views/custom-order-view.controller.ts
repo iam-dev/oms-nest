@@ -17,8 +17,7 @@ import {
   ApiResponse,
   ApiCookieAuth,
 } from "@nestjs/swagger";
-import { AuthGuard } from "@nestjs/passport";
-import { RolesGuard } from "../roles/roles.guard";
+import { JwtRolesGuard } from "../auth/guards/jwt-roles.guard";
 import { Roles } from "../roles/roles.decorator";
 import { RoleEnum } from "../roles/roles.enum";
 import { CustomOrderViewService } from "./custom-order-view.service";
@@ -29,8 +28,10 @@ import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 @ApiTags("Custom Order Views")
 @Controller({ path: "custom-order-views", version: "1" })
 @ApiCookieAuth("token")
-@Roles(RoleEnum.admin, RoleEnum.supervisor)
-@UseGuards(AuthGuard("jwt"), RolesGuard)
+// BE-012: FITTER and FACTORY roles added — custom-order-views are per-user, not admin-only.
+// Seeded users (e.g. adamwhitehouse) are fitters who need read/write access to their own views.
+@Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter, RoleEnum.factory)
+@UseGuards(JwtRolesGuard)
 export class CustomOrderViewController {
   constructor(private readonly service: CustomOrderViewService) {}
 
