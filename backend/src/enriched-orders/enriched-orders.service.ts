@@ -281,6 +281,10 @@ export class EnrichedOrdersService {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       const [
@@ -460,6 +464,10 @@ export class EnrichedOrdersService {
       await queryRunner.connect();
 
       // Set RLS bypass context (user_id = 0 triggers system_bypass policies)
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Execute count query
@@ -1167,6 +1175,10 @@ export class EnrichedOrdersService {
 
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Fetch comprehensive order data with all joins
@@ -1426,6 +1438,10 @@ export class EnrichedOrdersService {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       const fitters = await queryRunner.query(`
@@ -1594,6 +1610,10 @@ export class EnrichedOrdersService {
 
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Look up the status ID from the statuses table
@@ -1688,6 +1708,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Look up the status ID from the statuses table
@@ -1791,6 +1815,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Verify order exists and get old status for audit
@@ -2025,6 +2053,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Resolve status name to integer ID
@@ -2212,6 +2244,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Copy the source order into a new row with Unordered status (0)
@@ -2318,6 +2354,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Verify source order exists
