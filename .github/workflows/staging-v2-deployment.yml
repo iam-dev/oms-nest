@@ -92,11 +92,14 @@ jobs:
       # WF-005: continue-on-error override removed; force_deploy no longer bypasses test failures
 
     - name: Upload test coverage
-      uses: codecov/codecov-action@v3 # TODO(WF-010): pin to commit SHA once SHA for v3 is verified
+      # TODO(WF-010/WF-028): pin codecov-action to commit SHA once CODECOV_TOKEN is confirmed
+      uses: codecov/codecov-action@v5
       with:
         files: ./backend/coverage/lcov.info
         flags: backend
         name: backend-coverage
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false  # TODO(WF-028): set true once CODECOV_TOKEN is confirmed in repo secrets
 
     - name: Log in to Container Registry
       uses: docker/login-action@v3
@@ -301,15 +304,19 @@ jobs:
           fi
         done
 
-    - name: Update image tags in K8s manifests
+    # WF-020: replaced sed-based manifest patching with kubectl set image to avoid
+    # brittle string-substitution that breaks when placeholder values drift.
+    - name: Set backend image tag
       run: |
-        cd kubernetes/staging-v2
+        kubectl set image deployment/oms-backend \
+          oms-backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-latest \
+          -n ${{ env.K8S_NAMESPACE }}
 
-        # Update backend image tag
-        sed -i "s|ghcr.io/YOUR_ORG/oms-backend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-latest|g" backend-deployment.yaml
-
-        # Update frontend image tag
-        sed -i "s|ghcr.io/YOUR_ORG/oms-frontend:latest|${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-latest|g" frontend-deployment.yaml
+    - name: Set frontend image tag
+      run: |
+        kubectl set image deployment/oms-frontend \
+          oms-frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-latest \
+          -n ${{ env.K8S_NAMESPACE }}
 
     - name: Deploy Redis cache
       run: kubectl apply -f kubernetes/staging-v2/database-deployment.yaml
@@ -327,64 +334,8 @@ jobs:
         kubectl rollout restart deployment/oms-backend --namespace=${{ env.K8S_NAMESPACE }}
 
     - name: Wait for backend to be ready
-      run: |
-        # Poll rollout status in short windows; if a pod sits in Terminating
-        # because its node is degraded (disk-full / NotReady), force-delete it
-        # so the rollout can complete instead of stalling for the full timeout.
-        ns=${{ env.K8S_NAMESPACE }}
-        deadline=$(( SECONDS + 600 ))
-        while [ $SECONDS -lt $deadline ]; do
-          remaining=$(( deadline - SECONDS ))
-          window=$(( remaining < 60 ? remaining : 60 ))
-          if kubectl rollout status deployment/oms-backend -n "$ns" --timeout=${window}s; then
-            echo "✅ oms-backend rolled out"
-            exit 0
-          fi
-          stuck=$(kubectl get pods -n "$ns" -l app=oms-backend \
-            -o jsonpath='{range .items[?(@.metadata.deletionTimestamp!="")]}{.metadata.name}{"\n"}{end}')
-          if [ -n "$stuck" ]; then
-            echo "⚠️  Force-deleting Terminating pod(s): $stuck"
-            echo "$stuck" | xargs -r -n1 kubectl delete pod -n "$ns" --force --grace-period=0 || true
-          else
-            echo "ℹ️  Rollout not complete yet, no Terminating pods to reap; retrying"
-          fi
-        done
-        echo "::error::oms-backend rollout did not complete within 600s"
-        echo "::group::Pods (wide)"
-        kubectl get pods -n "$ns" -l app=oms-backend -o wide || true
-        echo "::endgroup::"
-        echo "::group::Deployment describe"
-        kubectl describe deployment/oms-backend -n "$ns" || true
-        echo "::endgroup::"
-        echo "::group::ReplicaSets"
-        kubectl get rs -n "$ns" -l app=oms-backend -o wide || true
-        echo "::endgroup::"
-        echo "::group::Pod describe (with Events)"
-        for pod in $(kubectl get pods -n "$ns" -l app=oms-backend -o jsonpath='{.items[*].metadata.name}'); do
-          echo "----- $pod -----"
-          kubectl describe pod "$pod" -n "$ns" || true
-        done
-        echo "::endgroup::"
-        echo "::group::Recent namespace events"
-        kubectl get events -n "$ns" --sort-by=.lastTimestamp | tail -60 || true
-        echo "::endgroup::"
-        echo "::group::Pod logs (current + previous)"
-        for pod in $(kubectl get pods -n "$ns" -l app=oms-backend -o jsonpath='{.items[*].metadata.name}'); do
-          echo "----- $pod logs (current, tail 200) -----"
-          kubectl logs -n "$ns" "$pod" --tail=200 --all-containers || true
-          echo "----- $pod logs (previous, tail 200) -----"
-          kubectl logs -n "$ns" "$pod" --previous --tail=200 --all-containers || true
-        done
-        echo "::endgroup::"
-        echo "::group::Nodes hosting these pods"
-        nodes=$(kubectl get pods -n "$ns" -l app=oms-backend -o jsonpath='{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u)
-        for node in $nodes; do
-          [ -z "$node" ] && continue
-          echo "----- $node -----"
-          kubectl describe node "$node" | sed -n '/^Conditions:/,/^[A-Z]/p' || true
-        done
-        echo "::endgroup::"
-        exit 1
+      # WF-013: extracted to shared script to eliminate duplication with frontend wait block
+      run: bash .github/workflows/scripts/wait-rollout.sh oms-backend app=oms-backend ${{ env.K8S_NAMESPACE }}
 
     - name: Run database migrations
       run: |
@@ -406,64 +357,8 @@ jobs:
         kubectl rollout restart deployment/oms-frontend --namespace=${{ env.K8S_NAMESPACE }}
 
     - name: Wait for frontend to be ready
-      run: |
-        # Poll rollout status in short windows; if a pod sits in Terminating
-        # because its node is degraded (disk-full / NotReady), force-delete it
-        # so the rollout can complete instead of stalling for the full timeout.
-        ns=${{ env.K8S_NAMESPACE }}
-        deadline=$(( SECONDS + 600 ))
-        while [ $SECONDS -lt $deadline ]; do
-          remaining=$(( deadline - SECONDS ))
-          window=$(( remaining < 60 ? remaining : 60 ))
-          if kubectl rollout status deployment/oms-frontend -n "$ns" --timeout=${window}s; then
-            echo "✅ oms-frontend rolled out"
-            exit 0
-          fi
-          stuck=$(kubectl get pods -n "$ns" -l app=oms-frontend \
-            -o jsonpath='{range .items[?(@.metadata.deletionTimestamp!="")]}{.metadata.name}{"\n"}{end}')
-          if [ -n "$stuck" ]; then
-            echo "⚠️  Force-deleting Terminating pod(s): $stuck"
-            echo "$stuck" | xargs -r -n1 kubectl delete pod -n "$ns" --force --grace-period=0 || true
-          else
-            echo "ℹ️  Rollout not complete yet, no Terminating pods to reap; retrying"
-          fi
-        done
-        echo "::error::oms-frontend rollout did not complete within 600s"
-        echo "::group::Pods (wide)"
-        kubectl get pods -n "$ns" -l app=oms-frontend -o wide || true
-        echo "::endgroup::"
-        echo "::group::Deployment describe"
-        kubectl describe deployment/oms-frontend -n "$ns" || true
-        echo "::endgroup::"
-        echo "::group::ReplicaSets"
-        kubectl get rs -n "$ns" -l app=oms-frontend -o wide || true
-        echo "::endgroup::"
-        echo "::group::Pod describe (with Events)"
-        for pod in $(kubectl get pods -n "$ns" -l app=oms-frontend -o jsonpath='{.items[*].metadata.name}'); do
-          echo "----- $pod -----"
-          kubectl describe pod "$pod" -n "$ns" || true
-        done
-        echo "::endgroup::"
-        echo "::group::Recent namespace events"
-        kubectl get events -n "$ns" --sort-by=.lastTimestamp | tail -60 || true
-        echo "::endgroup::"
-        echo "::group::Pod logs (current + previous)"
-        for pod in $(kubectl get pods -n "$ns" -l app=oms-frontend -o jsonpath='{.items[*].metadata.name}'); do
-          echo "----- $pod logs (current, tail 200) -----"
-          kubectl logs -n "$ns" "$pod" --tail=200 --all-containers || true
-          echo "----- $pod logs (previous, tail 200) -----"
-          kubectl logs -n "$ns" "$pod" --previous --tail=200 --all-containers || true
-        done
-        echo "::endgroup::"
-        echo "::group::Nodes hosting these pods"
-        nodes=$(kubectl get pods -n "$ns" -l app=oms-frontend -o jsonpath='{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u)
-        for node in $nodes; do
-          [ -z "$node" ] && continue
-          echo "----- $node -----"
-          kubectl describe node "$node" | sed -n '/^Conditions:/,/^[A-Z]/p' || true
-        done
-        echo "::endgroup::"
-        exit 1
+      # WF-013: extracted to shared script to eliminate duplication with backend wait block
+      run: bash .github/workflows/scripts/wait-rollout.sh oms-frontend app=oms-frontend ${{ env.K8S_NAMESPACE }}
 
     - name: Deploy ingress configuration
       run: kubectl apply -f kubernetes/staging-v2/ingress.yaml
@@ -621,9 +516,9 @@ jobs:
           exit 0
         fi
         echo "Cleaning up test users from pod: $POD"
+        # WF-026: surface real cleanup errors instead of swallowing with `|| echo`
         kubectl exec -n "$K8S_NS" "$POD" -i \
-          -- node - < .github/workflows/scripts/e2e-delete-users.js \
-          || echo "Warning: test user cleanup failed (non-fatal)"
+          -- node - < .github/workflows/scripts/e2e-delete-users.js
 
     - name: Upload E2E test results
       uses: actions/upload-artifact@v4
@@ -637,8 +532,10 @@ jobs:
   rollback:
     name: Rollback on E2E Failure
     runs-on: ubuntu-latest
-    needs: [e2e-tests]
-    if: failure()
+    needs: [deploy-staging, e2e-tests]
+    # WF-025: only roll back when e2e-tests actually failed AND a deploy had
+    # succeeded — avoids spurious rollbacks caused by infra/setup failures.
+    if: failure() && needs.e2e-tests.result == 'failure' && needs.deploy-staging.result == 'success'
 
     steps:
     - name: Configure kubectl for DigitalOcean
