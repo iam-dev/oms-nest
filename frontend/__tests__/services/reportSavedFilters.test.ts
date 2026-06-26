@@ -6,6 +6,7 @@ import {
   deleteSavedFilter,
   SavedFilter,
 } from '@/services/reportSavedFilters';
+import { SessionExpiredError } from '@/services/api-config';
 
 // Mock global.fetch — fetchWithRefresh delegates to the real fetch internally.
 // Mocking at this layer intercepts all calls made by fetchWithRefresh.
@@ -145,13 +146,12 @@ describe('reportSavedFilters service', () => {
       await expect(getDefaultFilter()).rejects.toThrow('Failed to fetch default filter: 500');
     });
 
-    it('throws on 401 response (not a 404)', async () => {
+    it('throws SessionExpiredError on 401 response (not a 404)', async () => {
+      // FE-006: fetchWithRefresh now throws SessionExpiredError on 401 after a failed
+      // refresh attempt, rather than propagating the raw 401 response to callers.
       (fetch as jest.Mock).mockResolvedValue(mockErrorResponse(401));
 
-      // Note: fetchWithRefresh may redirect on 401; here we verify the service
-      // would throw if it receives a non-ok status that is not 404.
-      // We simulate fetchWithRefresh already returned the 401 response unchanged.
-      await expect(getDefaultFilter()).rejects.toThrow('Failed to fetch default filter: 401');
+      await expect(getDefaultFilter()).rejects.toBeInstanceOf(SessionExpiredError);
     });
   });
 

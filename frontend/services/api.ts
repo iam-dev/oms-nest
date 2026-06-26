@@ -5,16 +5,6 @@ import { API_URL, fetchWithRefresh } from './api-config';
 // Default request timeout in milliseconds (30 seconds)
 const REQUEST_TIMEOUT_MS = 30000;
 
-// Helper function to safely escape strings for OData filters
-function escapeODataString(str: string): string {
-  if (typeof str !== 'string') {
-    return String(str).replace(/'/g, "''");
-  }
-  // Escape single quotes by doubling them (OData standard)
-  // Also remove potentially dangerous characters
-  return str.replace(/'/g, "''").replace(/[<>]/g, '');
-}
-
 // Helper: build REST API filter parameters from filters object
 function buildOrderFilterParams(filters: Record<string, string>): Record<string, string> {
   const params: Record<string, string> = {};
