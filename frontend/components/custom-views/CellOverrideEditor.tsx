@@ -26,14 +26,38 @@ export function CellOverrideEditor({
   const [isOpen, setIsOpen] = useState(false);
   const [value, setValue] = useState(overrideValue || originalValue);
 
+  // FE-011/FE-012: input-validation choke point — enforce max length,
+  // reject control characters, and reject whitespace-only values.
+  const MAX_OVERRIDE_LENGTH = 500;
+  const CONTROL_CHAR_RE = /[\x00-\x1F\x7F]/;
+
   const handleSave = () => {
-    if (value.trim() === originalValue) {
-      // If value matches original, remove the override
+    const trimmed = value.trim();
+
+    if (trimmed.length === 0) {
+      // Whitespace-only: treat as a reset request
+      if (overrideValue !== undefined) {
+        onRemove(orderId, columnKey);
+      }
+      setIsOpen(false);
+      return;
+    }
+
+    if (trimmed.length > MAX_OVERRIDE_LENGTH) {
+      return; // input element maxLength already blocks this; guard for API calls
+    }
+
+    if (CONTROL_CHAR_RE.test(trimmed)) {
+      return; // silently block — browser input shouldn't produce these
+    }
+
+    if (trimmed === originalValue) {
+      // Value matches original, remove the override
       if (overrideValue !== undefined) {
         onRemove(orderId, columnKey);
       }
     } else {
-      onSave(orderId, columnKey, value.trim());
+      onSave(orderId, columnKey, trimmed);
     }
     setIsOpen(false);
   };
@@ -61,6 +85,7 @@ export function CellOverrideEditor({
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
             placeholder="Override value..."
+            maxLength={500}
             autoFocus
           />
           <div className="flex justify-between">
