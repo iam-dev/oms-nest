@@ -6,20 +6,33 @@ import { Request } from "express";
 import { OrNeverType } from "../../utils/types/or-never.type";
 import { JwtPayloadType } from "./types/jwt-payload.type";
 import { AllConfigType } from "../../config/config.type";
+import { UsersService } from "../../users/users.service";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
-  constructor(configService: ConfigService<AllConfigType>) {
+  constructor(
+    configService: ConfigService<AllConfigType>,
+    private readonly usersService: UsersService,
+  ) {
     super({
       jwtFromRequest: (req: Request) => req?.cookies?.token ?? null,
       secretOrKey: configService.getOrThrow("auth.secret", { infer: true }),
     });
   }
 
-  // Why we don't check if the user exists in the database:
-  // https://github.com/brocoders/nestjs-boilerplate/blob/main/docs/auth.md#about-jwt-strategy
-  public validate(payload: JwtPayloadType): OrNeverType<JwtPayloadType> {
+  /**
+   * Validate JWT payload: verify the user still exists and is enabled.
+   * Rejects disabled or deleted accounts even if the token is still valid.
+   */
+  public async validate(
+    payload: JwtPayloadType,
+  ): Promise<OrNeverType<JwtPayloadType>> {
     if (!payload.id) {
+      throw new UnauthorizedException();
+    }
+
+    const user = await this.usersService.findById(payload.id);
+    if (!user || user.enabled === false) {
       throw new UnauthorizedException();
     }
 
