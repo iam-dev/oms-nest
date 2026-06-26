@@ -183,6 +183,7 @@
     "lodash": ">=4.17.23",
     "basic-ftp": ">=5.2.0",
     "serialize-javascript": ">=7.0.3",
+    "multer": "$multer",
     "@angular-devkit/core": {
       "ajv": ">=8.18.0"
     },
