@@ -1,3 +1,10 @@
+// TODO(FE-040): Introduce a Zod schema for the comprehensive order edit payload and
+// remove all `any` casts in this file.  Suggested approach:
+//   1. Define `comprehensiveOrderSchema = z.object({ ... })` mirroring UpdateOrderPayload.
+//   2. Derive the form type with `z.infer<typeof comprehensiveOrderSchema>`.
+//   3. Replace manual useState fields with `useForm<ComprehensiveOrderForm>({ resolver: zodResolver(...) })`.
+//   4. Replace `Record<string, any>` and untyped API responses with strict types.
+// This is a large refactor — do not attempt incrementally without full test coverage.
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -258,53 +265,65 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   }, [orderId, loadData]);
 
   // Customer search
+  // FE-043: abort the in-flight fetch on each keystroke to avoid stale result races.
   useEffect(() => {
     if (customerSearchTerm.length < 2) {
       setCustomerSearchResults([]);
       return;
     }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setCustomerSearchLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/v1/customers?search=${encodeURIComponent(customerSearchTerm)}&limit=10`, {
-          headers: {
-            'Accept': 'application/json',
-          },
+          headers: { 'Accept': 'application/json' },
           credentials: 'include',
+          signal: controller.signal,
         });
         if (res.ok) {
           const data = await res.json();
           setCustomerSearchResults(data['hydra:member'] || []);
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
       setCustomerSearchLoading(false);
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [customerSearchTerm]);
 
   // Fitter search
+  // FE-043: abort the in-flight fetch on each keystroke to avoid stale result races.
   useEffect(() => {
     if (fitterSearchTerm.length < 2) {
       setFitterSearchResults([]);
       return;
     }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setFitterSearchLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/v1/fitters?search=${encodeURIComponent(fitterSearchTerm)}&limit=10`, {
-          headers: {
-            'Accept': 'application/json',
-          },
+          headers: { 'Accept': 'application/json' },
           credentials: 'include',
+          signal: controller.signal,
         });
         if (res.ok) {
           const data = await res.json();
           setFitterSearchResults(data['hydra:member'] || []);
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
       setFitterSearchLoading(false);
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fitterSearchTerm]);
 
   const handleSubmit = async () => {

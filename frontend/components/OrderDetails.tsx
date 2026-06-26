@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -77,6 +78,8 @@ function formatPrice(value: number | null | undefined): string {
 }
 
 export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsProps) {
+  // FE-039: use Next.js router for client-side navigation instead of full page reloads
+  const router = useRouter();
   const orderId = Number(order.id) || Number(order.orderId) || 0;
   const displayOrderId = order.orderId || orderId;
 
@@ -448,7 +451,8 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
               <button
                 onClick={() => {
                   onClose?.();
-                  window.location.href = `/orders?viewOrder=${detailData.repairSourceOrderId}`;
+                  // FE-039: use router.push for client-side navigation (no full reload)
+                  router.push(`/orders?viewOrder=${detailData.repairSourceOrderId}`);
                 }}
                 className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-2 hover:bg-amber-200 cursor-pointer transition-colors"
               >
@@ -459,7 +463,8 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
               <button
                 onClick={() => {
                   onClose?.();
-                  window.location.href = `/repairs?viewOrder=${detailData.repairOrderIds![0]}`;
+                  // FE-039: use router.push for client-side navigation (no full reload)
+                  router.push(`/repairs?viewOrder=${detailData.repairOrderIds![0]}`);
                 }}
                 className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2 hover:bg-blue-200 cursor-pointer transition-colors"
               >
