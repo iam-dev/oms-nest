@@ -171,6 +171,22 @@ export class RlsService {
    * @param factoryId - Optional factory ID
    * @param fitterId - Optional fitter ID
    */
+  // TODO(security/BE-031): executeWithUserContext has an atomicity gap.
+  //
+  // Current behaviour: setUserContext + queryFn + restoreContext are three
+  // separate database round-trips.  Under connection pool usage, another
+  // coroutine can acquire the same connection between any of these steps,
+  // inheriting the wrong RLS context.
+  //
+  // Recommended fix:
+  //   1. Acquire a dedicated queryRunner via `this.dataSource.createQueryRunner()`.
+  //   2. Run setUserContext, queryFn, and restoreContext on that queryRunner within
+  //      a single transaction (BEGIN / COMMIT).  This ensures the SET LOCAL
+  //      variables are scoped to the transaction and cannot leak to other callers.
+  //   3. Release the queryRunner in a finally block.
+  //
+  // This is a behaviour-changing refactor that requires careful testing of all
+  // RLS-aware endpoints before deployment.
   async executeWithUserContext<T>(
     userId: string,
     userRole: RoleEnum,

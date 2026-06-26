@@ -47,7 +47,33 @@ async function bootstrap() {
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);
 
-  app.use(helmet());
+  // BE-033: Configure CSP explicitly rather than relying on helmet's defaults.
+  // reportOnly: true means violations are reported (to console / a future
+  // report-uri endpoint) but NOT enforced yet.  Flip to reportOnly: false once
+  // CSP violation reports have been reviewed and the directive set is confirmed
+  // safe for all frontend assets and API responses.
+  //
+  // TODO(BE-033): After reviewing CSP violation reports in staging, remove
+  // reportOnly: true to switch to enforce mode.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        reportOnly: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"], // unsafe-inline may be needed by Swagger UI
+          imgSrc: ["'self'", "data:"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+        },
+      },
+    }),
+  );
   app.use(cookieParser());
   app.enableShutdownHooks();
   app.setGlobalPrefix(

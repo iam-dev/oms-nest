@@ -1,3 +1,19 @@
+// TODO(security/BE-023): Seed data for a specific user ("adamwhitehouse") should NOT
+// live inside a TypeORM migration.  Migrations are structural changes; seeding named
+// user data is a side-effect that:
+//   • Cannot be rolled back safely — the `down()` method deletes by name, but if the
+//     user later creates their own views/groups with the same names those will also be
+//     deleted.
+//   • Couples the migration history to production user accounts.
+//   • Makes CI/staging seeding fragile (the migration silently no-ops when the user
+//     doesn't exist, so tests may run against a different schema than production).
+//
+// Plan:
+//   1. Move this seed to `backend/src/database/seeds/relational/` following the
+//      existing seed runner pattern.
+//   2. Use an explicit `INSERT ... ON CONFLICT DO NOTHING` guard (already present)
+//      so re-runs are idempotent.
+//   3. Remove this migration from the migration history once the seed is in place.
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 interface ViewConfig {
