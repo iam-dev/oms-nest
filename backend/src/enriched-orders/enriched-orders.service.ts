@@ -710,8 +710,13 @@ export class EnrichedOrdersService {
     // (see filter-options query); strip it so the brand/model split still
     // matches the underlying catalogue row and pre-suffix saved filters
     // keep working.
+    // Match exactly " (Deleted)" at the end (no leading/trailing \s*) to avoid
+    // polynomial backtracking on attacker-controlled input. The dropdown query
+    // always appends a single literal space + "(Deleted)", and a final .trim()
+    // below soaks up any incidental whitespace either side.
+    const DELETED_SUFFIX_RE = / \(Deleted\)$/i;
     const stripDeletedSuffix = (v: string): string =>
-      v.replace(/\s*\(Deleted\)\s*$/i, "").trim();
+      v.replace(DELETED_SUFFIX_RE, "").trim();
     if (query.saddleName) {
       const saddleValues = String(query.saddleName)
         .split(",")
