@@ -2,7 +2,6 @@ import { Test, TestingModule } from "@nestjs/testing";
 import {
   HttpStatus,
   UnprocessableEntityException,
-  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -401,8 +400,9 @@ describe("AuthService", () => {
       });
     });
 
-    it("should throw error when user not found", async () => {
-      // Arrange
+    it("should return idempotent success when user not found (BE-015)", async () => {
+      // BE-015: confirmEmail must NOT leak user existence via 404.
+      // When the user is not found the token is stale — treat as already confirmed.
       const hash = "valid-hash";
       const jwtPayload = {
         confirmEmailUserId: "550e8400-e29b-41d4-a716-446655440999",
@@ -410,17 +410,18 @@ describe("AuthService", () => {
       jwtService.verifyAsync.mockResolvedValue(jwtPayload);
       usersService.findById.mockResolvedValue(null);
 
-      // Act & Assert
-      await expect(service.confirmEmail(hash)).rejects.toThrow(
-        NotFoundException,
-      );
+      // Act: should resolve without throwing
+      await expect(service.confirmEmail(hash)).resolves.toBeUndefined();
       expect(usersService.findById).toHaveBeenCalledWith(
         "550e8400-e29b-41d4-a716-446655440999",
       );
+      // update() must NOT be called — there is nothing to enable
+      expect(usersService.update).not.toHaveBeenCalled();
     });
 
-    it("should throw error when user already enabled", async () => {
-      // Arrange
+    it("should return idempotent success when user already enabled (BE-015)", async () => {
+      // BE-015: confirmEmail must NOT leak user existence via 404.
+      // When the user is already enabled treat re-confirmation as a no-op.
       const hash = "valid-hash";
       const jwtPayload = {
         confirmEmailUserId: "550e8400-e29b-41d4-a716-446655440001",
@@ -431,13 +432,13 @@ describe("AuthService", () => {
         enabled: true,
       } as User);
 
-      // Act & Assert
-      await expect(service.confirmEmail(hash)).rejects.toThrow(
-        NotFoundException,
-      );
+      // Act: should resolve without throwing
+      await expect(service.confirmEmail(hash)).resolves.toBeUndefined();
       expect(usersService.findById).toHaveBeenCalledWith(
         "550e8400-e29b-41d4-a716-446655440001",
       );
+      // update() must NOT be called — user is already enabled
+      expect(usersService.update).not.toHaveBeenCalled();
     });
   });
 

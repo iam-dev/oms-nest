@@ -32,9 +32,21 @@ import { SkipRlsContext } from "../rls/rls.guard";
 const isTest =
   process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development";
 
+// BE-028: Drive cookie `secure` flag from an explicit COOKIE_SECURE env var
+// rather than inferring from NODE_ENV.  This allows staging environments that
+// run NODE_ENV=staging (not "development") to still serve non-HTTPS cookies
+// when needed, and lets production configs be explicit.
+//
+// COOKIE_SECURE defaults to "true" in all non-development environments.
+// Set COOKIE_SECURE=false in .env for local HTTP-only development.
+const cookieSecure: boolean =
+  process.env.COOKIE_SECURE !== undefined
+    ? process.env.COOKIE_SECURE === "true"
+    : process.env.NODE_ENV !== "development";
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV !== "development",
+  secure: cookieSecure,
   sameSite: "lax" as const,
   path: "/",
   maxAge: 10 * 60 * 60 * 1000, // 10 hours
@@ -42,7 +54,7 @@ const COOKIE_OPTIONS = {
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV !== "development",
+  secure: cookieSecure,
   sameSite: "lax" as const,
   path: "/api/v1/auth/refresh",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
