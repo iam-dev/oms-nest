@@ -31,6 +31,9 @@ spec:
       # Keep app workloads on the regular app pool. The pool-634m1k6jz-build
       # pool's only node has a malfunctioning Cilium CNI agent that fails
       # pod sandbox creation (cilium-cni: Cilium API client timeout exceeded).
+      # TODO(WF-019): This hard-coded node-pool pin should move to a Helm value
+      # (e.g. nodeSelector: {{ .Values.nodeSelectorPool }}) or be replaced with
+      # a taint/toleration approach so it survives node-pool name changes.
       nodeSelector:
         doks.digitalocean.com/node-pool: pool-psxen27q2
       terminationGracePeriodSeconds: 10
@@ -71,7 +74,10 @@ spec:
         # Security context
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
+          # WF-030: enabled readOnlyRootFilesystem; /tmp and /app/.cache are
+          # covered by the emptyDir volumeMounts below, so the app has write
+          # access to the paths it actually needs.
+          readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 1001
           capabilities:
@@ -145,33 +151,7 @@ spec:
   selector:
     app: oms-backend
 
----
-# Horizontal Pod Autoscaler
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: oms-backend-hpa
-  namespace: oms-nest-staging
-  labels:
-    app: oms-backend
-    environment: staging
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: oms-backend
-  minReplicas: 1
-  maxReplicas: 1
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
+# WF-018: HPA removed. With minReplicas=maxReplicas=1 it was a no-op and
+# created a race condition with kubectl rollout restart (HPA could fight the
+# rollout controller). Re-add with meaningful min/max bounds if autoscaling
+# is required in future.
