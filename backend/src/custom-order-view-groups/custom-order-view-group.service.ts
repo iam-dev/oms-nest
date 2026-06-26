@@ -37,16 +37,21 @@ export class CustomOrderViewGroupService {
 
   async findAllWithViews(userId: number): Promise<ViewGroupWithViews[]> {
     const groups = await this.repository.findAllByUser(userId);
-    const result: ViewGroupWithViews[] = [];
 
-    for (const group of groups) {
-      const views = group.id
-        ? await this.viewRepository.findByGroup(group.id)
-        : [];
-      result.push(Object.assign({}, group, { views }) as ViewGroupWithViews);
-    }
+    // BE-014: replaced per-group findByGroup loop (N+1) with a single
+    // IN(...groupIds) query bucketed in memory.
+    const groupIds = groups
+      .map((g) => g.id)
+      .filter((id): id is number => id != null);
 
-    return result;
+    const viewsByGroup = await this.viewRepository.findByGroupIds(groupIds);
+
+    return groups.map(
+      (group) =>
+        Object.assign({}, group, {
+          views: group.id ? (viewsByGroup.get(group.id) ?? []) : [],
+        }) as ViewGroupWithViews,
+    );
   }
 
   async findOne(id: number, userId: number): Promise<ViewGroupWithViews> {

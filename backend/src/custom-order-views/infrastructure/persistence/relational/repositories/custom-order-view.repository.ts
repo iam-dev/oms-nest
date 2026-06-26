@@ -59,6 +59,31 @@ export class CustomOrderViewRepository {
     });
   }
 
+  /**
+   * BE-014: Batch fetch views for multiple group IDs in a single IN(...) query
+   * instead of one query per group (N+1 pattern).
+   */
+  async findByGroupIds(
+    groupIds: number[],
+  ): Promise<Map<number, CustomOrderViewEntity[]>> {
+    if (groupIds.length === 0) return new Map();
+
+    const rows = await this.repository
+      .createQueryBuilder("v")
+      .where("v.groupId IN (:...groupIds)", { groupIds })
+      .orderBy("v.tabOrder", "ASC")
+      .addOrderBy("v.name", "ASC")
+      .getMany();
+
+    const bucket = new Map<number, CustomOrderViewEntity[]>();
+    for (const row of rows) {
+      const gid = row.groupId as number;
+      if (!bucket.has(gid)) bucket.set(gid, []);
+      bucket.get(gid)!.push(row);
+    }
+    return bucket;
+  }
+
   async delete(id: number): Promise<void> {
     await this.repository.delete(id);
   }

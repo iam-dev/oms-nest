@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException, ForbiddenException } from "@nestjs/common";
+import { getDataSourceToken } from "@nestjs/typeorm";
 import { ReportSavedFilterService } from "../../../src/report-saved-filters/report-saved-filter.service";
 import { ReportSavedFilterRepository } from "../../../src/report-saved-filters/infrastructure/persistence/relational/repositories/report-saved-filter.repository";
 import { ReportSavedFilterEntity } from "../../../src/report-saved-filters/infrastructure/persistence/relational/entities/report-saved-filter.entity";
@@ -31,7 +32,41 @@ describe("ReportSavedFilterService", () => {
     isDefault: true,
   } as ReportSavedFilterEntity;
 
+  // Reusable mock queryRunner for BE-013 transaction tests
+  const mockQueryRunner = {
+    connect: jest.fn().mockResolvedValue(undefined),
+    startTransaction: jest.fn().mockResolvedValue(undefined),
+    commitTransaction: jest.fn().mockResolvedValue(undefined),
+    rollbackTransaction: jest.fn().mockResolvedValue(undefined),
+    release: jest.fn().mockResolvedValue(undefined),
+    manager: {
+      update: jest.fn().mockResolvedValue(undefined),
+      save: jest.fn(),
+      create: jest.fn(),
+    },
+  };
+
+  const mockDataSource = {
+    createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+  };
+
   beforeEach(async () => {
+    jest.clearAllMocks();
+
+    // Reset mocks to their default implementations
+    mockQueryRunner.connect.mockResolvedValue(undefined);
+    mockQueryRunner.startTransaction.mockResolvedValue(undefined);
+    mockQueryRunner.commitTransaction.mockResolvedValue(undefined);
+    mockQueryRunner.rollbackTransaction.mockResolvedValue(undefined);
+    mockQueryRunner.release.mockResolvedValue(undefined);
+    mockQueryRunner.manager.update.mockResolvedValue(undefined);
+    mockQueryRunner.manager.save.mockImplementation(
+      (_entity: unknown, data: unknown) => Promise.resolve(data),
+    );
+    mockQueryRunner.manager.create.mockImplementation(
+      (_entity: unknown, data: unknown) => data,
+    );
+
     const mockRepository = {
       create: jest.fn(),
       findAllByUser: jest.fn(),
@@ -48,6 +83,10 @@ describe("ReportSavedFilterService", () => {
         {
           provide: ReportSavedFilterRepository,
           useValue: mockRepository,
+        },
+        {
+          provide: getDataSourceToken(),
+          useValue: mockDataSource,
         },
       ],
     }).compile();
@@ -106,56 +145,56 @@ describe("ReportSavedFilterService", () => {
       expect(result).toEqual(mockEntity);
     });
 
-    it("should clear existing defaults before creating when isDefault=true", async () => {
-      // Arrange
+    it("should use a transaction to clear defaults then create when isDefault=true (BE-013)", async () => {
+      // BE-013: the isDefault=true create path runs inside a queryRunner transaction.
+      // The repository.clearDefaults / repository.create methods are NOT called directly —
+      // the transaction uses queryRunner.manager.update + queryRunner.manager.save instead.
       const dto: CreateReportSavedFilterDto = {
         name: "New Default Filter",
         filters: { fitters: ["Jane"] },
         isDefault: true,
       };
-      const newDefaultEntity = {
+      const savedEntity = {
         ...mockEntity,
         isDefault: true,
       } as ReportSavedFilterEntity;
-      repository.clearDefaults.mockResolvedValue(undefined);
-      repository.create.mockResolvedValue(newDefaultEntity);
+      mockQueryRunner.manager.save.mockResolvedValue(savedEntity);
+      mockQueryRunner.manager.create.mockReturnValue(savedEntity);
 
       // Act
       const result = await service.create(USER_ID, dto);
 
-      // Assert
-      expect(repository.clearDefaults).toHaveBeenCalledWith(USER_ID);
-      expect(repository.create).toHaveBeenCalledWith({
-        userId: USER_ID,
-        name: dto.name,
-        filters: dto.filters,
-        isDefault: true,
-      });
+      // Assert: transaction lifecycle
+      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.rollbackTransaction).not.toHaveBeenCalled();
+      expect(mockQueryRunner.release).toHaveBeenCalled();
+
+      // Assert: clears defaults atomically via manager.update
+      expect(mockQueryRunner.manager.update).toHaveBeenCalledWith(
+        expect.anything(),
+        { userId: USER_ID, isDefault: true },
+        { isDefault: false },
+      );
+      // Assert: entity saved via manager.save (not repository.create)
+      expect(mockQueryRunner.manager.save).toHaveBeenCalled();
+      expect(repository.clearDefaults).not.toHaveBeenCalled();
+      expect(repository.create).not.toHaveBeenCalled();
       expect(result.isDefault).toBe(true);
     });
 
-    it("should call clearDefaults before create (order matters)", async () => {
-      // Arrange
+    it("should rollback transaction and rethrow if save fails when isDefault=true", async () => {
       const dto: CreateReportSavedFilterDto = {
-        name: "Ordered Default",
+        name: "Failing Default",
         filters: {},
         isDefault: true,
       };
-      const callOrder: string[] = [];
-      repository.clearDefaults.mockImplementation(() => {
-        callOrder.push("clearDefaults");
-        return Promise.resolve(undefined);
-      });
-      repository.create.mockImplementation(() => {
-        callOrder.push("create");
-        return Promise.resolve(mockEntity);
-      });
+      const saveError = new Error("DB save failed");
+      mockQueryRunner.manager.save.mockRejectedValue(saveError);
 
-      // Act
-      await service.create(USER_ID, dto);
-
-      // Assert
-      expect(callOrder).toEqual(["clearDefaults", "create"]);
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(saveError);
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.release).toHaveBeenCalled();
     });
   });
 
@@ -288,25 +327,28 @@ describe("ReportSavedFilterService", () => {
       expect(repository.update).not.toHaveBeenCalled();
     });
 
-    it("should clear other defaults when setting isDefault=true", async () => {
-      // Arrange
+    it("should use a transaction to clear defaults then update when isDefault=true (BE-013)", async () => {
+      // BE-013: the isDefault=true update path runs inside a queryRunner transaction.
       const dto: UpdateReportSavedFilterDto = { isDefault: true };
       const updatedEntity = {
         ...mockEntity,
         isDefault: true,
       } as ReportSavedFilterEntity;
-      repository.findById.mockResolvedValue(mockEntity);
-      repository.clearDefaults.mockResolvedValue(undefined);
-      repository.update.mockResolvedValue(updatedEntity);
+      repository.findById
+        .mockResolvedValueOnce(mockEntity) // initial ownership check
+        .mockResolvedValueOnce(updatedEntity); // re-fetch after transaction
 
       // Act
       const result = await service.update(FILTER_ID, USER_ID, dto);
 
-      // Assert
-      expect(repository.clearDefaults).toHaveBeenCalledWith(USER_ID);
-      expect(repository.update).toHaveBeenCalledWith(FILTER_ID, {
-        isDefault: true,
-      });
+      // Assert: transaction lifecycle
+      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.rollbackTransaction).not.toHaveBeenCalled();
+      expect(mockQueryRunner.release).toHaveBeenCalled();
+
+      // Assert: repository.clearDefaults NOT called — manager.update used instead
+      expect(repository.clearDefaults).not.toHaveBeenCalled();
       expect(result.isDefault).toBe(true);
     });
 
