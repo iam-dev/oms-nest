@@ -23,6 +23,7 @@ import { fetchOrderDetail, createDraftOrder, bulkCreateDraftOrders, type OrderDe
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { exportOrderToXlsx } from '@/utils/exportXlsx';
+import { sanitizeForCell } from '@/utils/cellSanitization';
 import { renderLegacyLogContent } from '@/utils/legacyLogContent';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
@@ -350,11 +351,11 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
 
   const handleCopySaddleInfo = async () => {
     const lines: string[] = [];
-    if (saddleModel) lines.push(`Model\t${saddleModel}`);
-    if (saddleLeatherType) lines.push(`Leathertype\t${saddleLeatherType}`);
-    if (serialNumber) lines.push(`SerialNumber\t${serialNumber}`);
+    if (saddleModel) lines.push(`Model\t${sanitizeForCell(saddleModel)}`);
+    if (saddleLeatherType) lines.push(`Leathertype\t${sanitizeForCell(saddleLeatherType)}`);
+    if (serialNumber) lines.push(`SerialNumber\t${sanitizeForCell(serialNumber)}`);
     for (const spec of saddleSpecs) {
-      lines.push(`${spec.optionName}\t${spec.displayValue || ''}`);
+      lines.push(`${sanitizeForCell(spec.optionName)}\t${sanitizeForCell(spec.displayValue || '')}`);
     }
     try {
       await navigator.clipboard.writeText(lines.join('\n'));

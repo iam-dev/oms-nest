@@ -3,6 +3,7 @@ import { ColumnConfig, ColumnGroupConfig } from '@/services/customOrderViews';
 import { CellOverride } from '@/services/customOrderCellOverrides';
 import { CUSTOM_VIEW_COLUMNS } from './customViewColumns';
 import { toSeatSizeCellValue } from './exportXlsx';
+import { sanitizeForCell } from './cellSanitization';
 
 interface ExportOptions {
   columns: ColumnConfig[];
@@ -148,9 +149,11 @@ export async function exportCustomViewXlsx({
         value = colDef ? colDef.getValue(order) : '';
       }
       if (col.key === 'seatSize' && typeof value === 'string') {
+        // toSeatSizeCellValue returns number | string; numeric values are safe.
         value = toSeatSizeCellValue(value);
       }
-      row.getCell(i + 1).value = value;
+      // Sanitize string values to prevent formula injection; numbers pass through as-is.
+      row.getCell(i + 1).value = typeof value === 'string' ? sanitizeForCell(value) : value;
     });
     currentRow++;
   }
@@ -278,9 +281,11 @@ function addWorksheet(
         value = colDef ? colDef.getValue(order) : '';
       }
       if (col.key === 'seatSize' && typeof value === 'string') {
+        // toSeatSizeCellValue returns number | string; numeric values are safe.
         value = toSeatSizeCellValue(value);
       }
-      row.getCell(i + 1).value = value;
+      // Sanitize string values to prevent formula injection; numbers pass through as-is.
+      row.getCell(i + 1).value = typeof value === 'string' ? sanitizeForCell(value) : value;
     });
     currentRow++;
   }
