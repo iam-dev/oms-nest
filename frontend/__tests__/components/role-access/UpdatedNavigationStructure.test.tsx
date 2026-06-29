@@ -8,9 +8,9 @@ import * as rolePermissionsModule from '@/utils/rolePermissions';
 // Mock the navigation components
 jest.mock('@/components/SaddlesSidebarSection', () => {
   const SaddlesSidebarSection = () => {
-    const mockUseUserRole = (useUserRoleModule as { useUserRole: () => { role: unknown } }).useUserRole;
+    const mockUseUserRole = (jest.requireMock('@/hooks/useUserRole') as { useUserRole: () => { role: unknown } }).useUserRole;
     const { role } = mockUseUserRole();
-    const mockHasScreenPermission = (rolePermissionsModule as { hasScreenPermission: (...args: unknown[]) => boolean }).hasScreenPermission;
+    const mockHasScreenPermission = (jest.requireMock('@/utils/rolePermissions') as { hasScreenPermission: (...args: unknown[]) => boolean }).hasScreenPermission;
 
     const saddleItems = ['Models', 'Brands', 'Leather Types', 'Options', 'Extras', 'Presets'];
     const permissionMap: Record<string, string> = {
@@ -47,9 +47,9 @@ jest.mock('@/components/SaddlesSidebarSection', () => {
 
 jest.mock('@/components/AccountManagementSidebarSection', () => {
   const AccountManagementSidebarSection = () => {
-    const mockUseUserRole = (useUserRoleModule as { useUserRole: () => { role: unknown } }).useUserRole;
+    const mockUseUserRole = (jest.requireMock('@/hooks/useUserRole') as { useUserRole: () => { role: unknown } }).useUserRole;
     const { role } = mockUseUserRole();
-    const mockHasScreenPermission = (rolePermissionsModule as { hasScreenPermission: (...args: unknown[]) => boolean }).hasScreenPermission;
+    const mockHasScreenPermission = (jest.requireMock('@/utils/rolePermissions') as { hasScreenPermission: (...args: unknown[]) => boolean }).hasScreenPermission;
 
     const accountItems = [
       { name: 'Users', permission: 'USER_MANAGEMENT' },

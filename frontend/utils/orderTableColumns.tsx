@@ -156,14 +156,12 @@ export function getOrderTableColumns(
           seatSizes = row.seat_sizes.map((s: unknown) => normalize(String(s)));
         }
         // Check saddleSpecifications.seatSize
-        else if (row.saddleSpecifications && typeof row.saddleSpecifications === 'object') {
-          const specs = row.saddleSpecifications as Record<string, unknown>;
-          if (specs.seatSize) {
-            if (Array.isArray(specs.seatSize)) {
-              seatSizes = specs.seatSize.map((s: unknown) => normalize(String(s)));
-            } else {
-              seatSizes = [normalize(String(specs.seatSize))];
-            }
+        else if ((row.saddleSpecifications as Record<string, unknown> | undefined)?.seatSize) {
+          const specSeatSize = (row.saddleSpecifications as Record<string, unknown>).seatSize;
+          if (Array.isArray(specSeatSize)) {
+            seatSizes = specSeatSize.map((s: unknown) => normalize(String(s)));
+          } else {
+            seatSizes = [normalize(String(specSeatSize))];
           }
         }
         // Fallback to seatSizes (camelCase)
