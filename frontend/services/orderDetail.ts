@@ -3,43 +3,12 @@
 import { fetchEntities } from './api';
 import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
-
-// API endpoints from the old implementation
-const API_ENDPOINTS = {
-  orders: '/orders',
-  orderLines: '/order_lines',
-  comments: '/comments',
-  options: '/enforced_normal_option_items',
-  productSaddleExtras: '/product_saddle_extra_containers',
-  fitters: '/fitters',
-  models: '/models',
-  presets: '/presets',
-  productSaddleItems: '/product_saddle_item_containers',
-  modelItems: '/model_item_containers',
-  modelLeatherPrices: '/model_leather_price_containers',
-  customers: '/customers',
-  suppliers: '/factories',
-  leatherTypes: '/leathertypes',
-  productSaddles: '/products'
-};
-
-export interface ComprehensiveOrderData {
-  order: any;
-  orderLines: any[];
-  comments: any[];
-  options: any[];
-  productSaddleExtras: any[];
-  productSaddleItems: any[];
-  modelItems: any[];
-  modelLeatherPrices: any[];
-  fitters: any[];
-  models: any[];
-  presets: any[];
-  customers: any[];
-  suppliers: any[];
-  leatherTypes: any[];
-  productSaddles: any[];
-}
+import type {
+  ComprehensiveOrderData,
+  Customer,
+  Fitter,
+  ProductSaddle,
+} from '@/types/ComprehensiveOrder';
 
 /**
  * Fetch comprehensive order data for editing
@@ -139,11 +108,11 @@ export async function fetchComprehensiveOrderData(orderId: number): Promise<Comp
     logger.log('Fetched order:', order);
 
     // Get product saddle related data if the order has product saddles
-    const productSaddleExtras: any[] = [];
-    const productSaddleItems: any[] = [];
-    const modelItems: any[] = [];
-    const modelLeatherPrices: any[] = [];
-    const productSaddles: any[] = [];
+    const productSaddleExtras: ComprehensiveOrderData['productSaddleExtras'] = [];
+    const productSaddleItems: ComprehensiveOrderData['productSaddleItems'] = [];
+    const modelItems: ComprehensiveOrderData['modelItems'] = [];
+    const modelLeatherPrices: ComprehensiveOrderData['modelLeatherPrices'] = [];
+    const productSaddles: ProductSaddle[] = [];
 
     const orderLines = orderLinesResponse['hydra:member'] || [];
     
@@ -275,7 +244,7 @@ export async function fetchComprehensiveOrderData(orderId: number): Promise<Comp
 /**
  * Search customers by name (for customer selection in order editing)
  */
-export async function searchCustomers(searchTerm: string, limit: number = 20): Promise<any[]> {
+export async function searchCustomers(searchTerm: string, limit: number = 20): Promise<Customer[]> {
   try {
     const response = await fetchEntities({
       entity: 'customers',
@@ -297,7 +266,7 @@ export async function searchCustomers(searchTerm: string, limit: number = 20): P
 /**
  * Search fitters by name (for fitter selection in order editing)
  */
-export async function searchFitters(searchTerm: string, limit: number = 20): Promise<any[]> {
+export async function searchFitters(searchTerm: string, limit: number = 20): Promise<Fitter[]> {
   try {
     const response = await fetchEntities({
       entity: 'fitters',
@@ -319,7 +288,7 @@ export async function searchFitters(searchTerm: string, limit: number = 20): Pro
 /**
  * Save order with all related data
  */
-export async function saveComprehensiveOrder(orderData: any): Promise<any> {
+export async function saveComprehensiveOrder(orderData: Record<string, unknown>): Promise<unknown> {
   try {
     logger.log('Saving comprehensive order data:', orderData);
     
@@ -351,7 +320,7 @@ export async function saveComprehensiveOrder(orderData: any): Promise<any> {
 /**
  * Get available product saddle configurations for a given model
  */
-export async function getProductSaddleConfigurations(modelId: number): Promise<any[]> {
+export async function getProductSaddleConfigurations(modelId: number): Promise<ProductSaddle[]> {
   try {
     const response = await fetchEntities({
       entity: 'products',

@@ -1,5 +1,8 @@
 import React from 'react';
 import { TableHeaderFilter } from '../components/shared/TableHeaderFilter';
+import type { Customer } from '@/types/Customer';
+
+type CustomerRow = Customer & { fitter?: { $ref?: string; name?: string } | null };
 
 export type CustomerHeaderFilters = Record<string, string>;
 export type SetCustomerHeaderFilters = (key: string, value: string) => void;
@@ -18,7 +21,7 @@ export function getCustomerTableColumns(headerFilters: CustomerHeaderFilters, se
           entityType="customer"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '200px',
     },
     {
@@ -32,7 +35,7 @@ export function getCustomerTableColumns(headerFilters: CustomerHeaderFilters, se
           entityType="customer"
         />
       ),
-      render: (v: any, row: any) => {
+      render: (_v: unknown, row: CustomerRow) => {
         // Show fitter name from the customer's fitter relationship
         if (!row || !row.fitter) return '';
         // Handle fitter references ($ref) vs full objects
@@ -52,10 +55,10 @@ export function getCustomerTableColumns(headerFilters: CustomerHeaderFilters, se
           entityType="customer"
         />
       ),
-      render: (v: any, row: any) => {
+      render: (v: unknown, row: CustomerRow) => {
         // Ensure we always show the customer's name, never "Loading..."
         if (row && row.name) return row.name;
-        return v ?? '';
+        return String(v ?? '');
       },
       maxWidth: '200px',
     },
@@ -70,7 +73,7 @@ export function getCustomerTableColumns(headerFilters: CustomerHeaderFilters, se
           entityType="customer"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'city',
@@ -83,7 +86,7 @@ export function getCustomerTableColumns(headerFilters: CustomerHeaderFilters, se
           entityType="customer"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'email',
@@ -96,7 +99,7 @@ export function getCustomerTableColumns(headerFilters: CustomerHeaderFilters, se
           entityType="customer"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
   ];
 }

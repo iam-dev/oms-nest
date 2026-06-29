@@ -5,16 +5,6 @@ import { API_URL, fetchWithRefresh } from './api-config';
 // Default request timeout in milliseconds (30 seconds)
 const REQUEST_TIMEOUT_MS = 30000;
 
-// Helper function to safely escape strings for OData filters
-function escapeODataString(str: string): string {
-  if (typeof str !== 'string') {
-    return String(str).replace(/'/g, "''");
-  }
-  // Escape single quotes by doubling them (OData standard)
-  // Also remove potentially dangerous characters
-  return str.replace(/'/g, "''").replace(/[<>]/g, '');
-}
-
 // Helper: build REST API filter parameters from filters object
 function buildOrderFilterParams(filters: Record<string, string>): Record<string, string> {
   const params: Record<string, string> = {};
@@ -41,71 +31,7 @@ function buildOrderFilterParams(filters: Record<string, string>): Record<string,
   return params;
 }
 
-// Enhanced filter builder for enriched orders using REST API parameters
-function buildEnrichedOrderFilters(filters: Record<string, any>): Record<string, any> {
-  const apiFilters: Record<string, any> = {};
-
-  // Direct field mappings for NestJS backend
-  const directMappings = [
-    'orderId', 'orderStatus', 'customerName', 'fitterName',
-    'supplierName', 'urgent', 'reference', 'fitterReference'
-  ];
-
-  directMappings.forEach(field => {
-    if (filters[field] !== undefined && filters[field] !== null && filters[field] !== '') {
-      // Handle boolean values specially for urgent field
-      if (field === 'urgent' && typeof filters[field] === 'boolean') {
-        apiFilters[field] = filters[field];
-      } else {
-        apiFilters[field] = String(filters[field]);
-      }
-    }
-  });
-
-  // Handle special cases
-  if (filters.id) {
-    // IDs are now integers - convert to string for API
-    apiFilters['id'] = String(filters.id);
-  }
-
-  if (filters.seatSizes) {
-    apiFilters['seatSizes'] = filters.seatSizes;
-  }
-
-  // Handle date ranges for NestJS API
-  if (filters.orderTimeAfter) {
-    apiFilters['orderTimeAfter'] = filters.orderTimeAfter;
-  }
-
-  if (filters.orderTimeBefore) {
-    apiFilters['orderTimeBefore'] = filters.orderTimeBefore;
-  }
-
-  return apiFilters;
-}
-
-// Universal search helper
-function buildUniversalSearchFilters(searchTerm: string, entity: string): Record<string, string> {
-  const filters: Record<string, string> = {};
-
-  if (!searchTerm) return filters;
-
-  // If it's a number, likely an ID (order ID, user ID, etc.)
-  if (/^\d+$/.test(searchTerm)) {
-    if (entity === 'enriched_orders') {
-      filters['orderId'] = searchTerm;
-    } else {
-      filters['id'] = searchTerm;
-    }
-    return filters;
-  }
-
-  // For text searches, we'll handle this in the client-side filtering
-  // since API Platform doesn't have great cross-field search
-  return {};
-}
-
-export async function fetchOrders({ page = 1, partial = true, filters = {} } = {}) {
+export async function fetchOrders({ page = 1, filters = {} }: { page?: number; partial?: boolean; filters?: Record<string, string> } = {}) {
   const url = new URL(`${API_URL}/api/v1/orders`);
   url.searchParams.set('page', String(page));
   url.searchParams.set('order[orderId]', 'desc');
@@ -148,7 +74,7 @@ export async function fetchOrderStatusStats() {
 }
 
 // Placeholder for future reports API
-export async function fetchReports(params: Record<string, any> = {}) {
+export async function fetchReports(params: Record<string, unknown> = {}) {
   // Example endpoint, adjust as needed
   const url = new URL(`${API_URL}/api/v1/reports`);
   Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, String(value)));
@@ -216,7 +142,7 @@ export async function fetchEntities({
         const orderObj = JSON.parse(extraParams.order as string);
         const [sortField, sortOrder] = Object.entries(orderObj)[0];
         url += `&order[${sortField}]=${sortOrder}`;
-      } catch (e) {
+      } catch {
         logger.warn('Invalid order parameter format, using default');
         url += `&order[${orderBy}]=${order}`;
       }
@@ -310,9 +236,9 @@ export async function fetchEntities({
 
     // Special handling for users entity to map name to firstName/lastName
     if (entity === 'users' && result['hydra:member'] && Array.isArray(result['hydra:member'])) {
-      result['hydra:member'] = result['hydra:member'].map((backendUser: any) => {
+      result['hydra:member'] = result['hydra:member'].map((backendUser: Record<string, unknown>) => {
         // Split name into firstName and lastName
-        const nameParts = (backendUser.name || '').split(' ').filter((part: string) => part.length > 0);
+        const nameParts = (String(backendUser.name ?? '')).split(' ').filter((part: string) => part.length > 0);
         const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -372,7 +298,7 @@ export async function fetchEntities({
 
     // Special handling for presets entity to map backend fields to frontend interface
     if (entity === 'presets' && result.data && Array.isArray(result.data)) {
-      result['hydra:member'] = result.data.map((preset: any) => ({
+      result['hydra:member'] = result.data.map((preset: Record<string, unknown>) => ({
         ...preset,
         active: preset.isActive ?? (preset.deleted === 0),
       }));
@@ -394,7 +320,7 @@ export async function fetchEntities({
 }
 
 // Function to update an order
-export async function updateOrder(orderId: number | string, updateData: Record<string, any>) {
+export async function updateOrder(orderId: number | string, updateData: Record<string, unknown>) {
   const url = `${API_URL}/api/v1/orders/${orderId}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -419,7 +345,7 @@ export async function updateOrder(orderId: number | string, updateData: Record<s
 }
 
 // Function to create a new order
-export async function createOrder(orderData: Record<string, any>) {
+export async function createOrder(orderData: Record<string, unknown>) {
   const url = `${API_URL}/api/v1/orders`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -444,7 +370,7 @@ export async function createOrder(orderData: Record<string, any>) {
 }
 
 // Function to create a new customer
-export async function createCustomer(customerData: Record<string, any>) {
+export async function createCustomer(customerData: Record<string, unknown>) {
   const url = `${API_URL}/api/v1/customers`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

@@ -4,8 +4,9 @@
  */
 
 import { ApiClient } from '../shared/api-client';
-import { TEST_USERS, ENTITY_CONFIGS } from '../shared/test-data';
-import { ApiValidators, ApiTestUtils, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
+import type { ApiError } from '../shared/api-client';
+import { ENTITY_CONFIGS } from '../shared/test-data';
+import { ApiValidators, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
 
 describe('Orders API', () => {
   let apiClient: ApiClient;
@@ -26,8 +27,8 @@ describe('Orders API', () => {
       try {
         await apiClient.get('/orders');
         fail('/orders should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -35,8 +36,8 @@ describe('Orders API', () => {
       try {
         await apiClient.get(ordersConfig.endpoint); // /enriched_orders
         fail('/enriched_orders should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -44,30 +45,22 @@ describe('Orders API', () => {
       try {
         await apiClient.get('/orders/1');
         fail('Individual order access should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
 
   describe('Order Filtering Parameters', () => {
     // Test the OData filtering parameters that the UI uses
-    const filterParams = {
-      orderStatus: 'pending,confirmed',
-      fitter: 'John Doe',
-      customer: 'Test Customer',
-      seatSize: '17',
-      urgent: 'true'
-    };
-
     it('should accept order status filtering', async () => {
       try {
         await apiClient.get(ordersConfig.endpoint, {
           $filter: `orderStatus eq 'pending' or orderStatus eq 'confirmed'`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         // The request structure was correct, just unauthorized
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -78,8 +71,8 @@ describe('Orders API', () => {
           $filter: `substringof('John Doe',fitter/name) eq true`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -89,8 +82,8 @@ describe('Orders API', () => {
           $filter: `substringof('Test Customer',customer/name) eq true`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -100,8 +93,8 @@ describe('Orders API', () => {
           $filter: `seatSize eq '17'`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -111,8 +104,8 @@ describe('Orders API', () => {
           $filter: `urgent eq true`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -128,8 +121,8 @@ describe('Orders API', () => {
           $filter: complexFilter
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -150,8 +143,8 @@ describe('Orders API', () => {
             $orderby: `${field} ${direction}`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -162,8 +155,8 @@ describe('Orders API', () => {
           $orderby: 'urgent desc, orderTime desc, id asc'
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -175,8 +168,8 @@ describe('Orders API', () => {
           $top: 25
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -187,8 +180,8 @@ describe('Orders API', () => {
           $top: 30
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -205,8 +198,8 @@ describe('Orders API', () => {
         try {
           await apiClient.get(ordersConfig.endpoint, params);
           fail(`Invalid parameters ${JSON.stringify(params)} should be rejected`);
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([
             HTTP_STATUS.UNAUTHORIZED,
             HTTP_STATUS.BAD_REQUEST
           ]);
@@ -233,8 +226,8 @@ describe('Orders API', () => {
             $filter: `orderStatus eq '${status}'`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -244,8 +237,8 @@ describe('Orders API', () => {
       try {
         await apiClient.get(ordersConfig.endpoint, { status: 'invalid_status' });
         fail('Invalid status request should be handled');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -256,8 +249,8 @@ describe('Orders API', () => {
       try {
         await apiClient.get(ordersConfig.endpoint, { customer: 'John Doe' });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -272,8 +265,8 @@ describe('Orders API', () => {
         try {
           await apiClient.get(ordersConfig.endpoint, { $filter: filter });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -290,8 +283,8 @@ describe('Orders API', () => {
         try {
           await apiClient.get(ordersConfig.endpoint, { $filter: filter });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -313,8 +306,8 @@ describe('Orders API', () => {
             search: term
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -334,8 +327,8 @@ describe('Orders API', () => {
             search: encodeURIComponent(term)
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -354,8 +347,8 @@ describe('Orders API', () => {
             search: term
           });
           fail('Malicious search should be handled');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -376,8 +369,8 @@ describe('Orders API', () => {
       try {
         await apiClient.post('/orders', validOrderData);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -395,8 +388,8 @@ describe('Orders API', () => {
         try {
           await apiClient.post('/orders', incompleteData);
           fail(`Missing required field ${field} should be rejected`);
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -417,8 +410,8 @@ describe('Orders API', () => {
             orderStatus: transition.to
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -453,8 +446,8 @@ describe('Orders API', () => {
       try {
         await apiClient.get(ordersConfig.endpoint, largePageParams);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -471,9 +464,8 @@ describe('Orders API', () => {
 
       // All should fail with authentication error consistently
       results.forEach(result => {
-        expect(result.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        expect((result as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       });
     }, TEST_TIMEOUTS.NORMAL);
   });
 });
-

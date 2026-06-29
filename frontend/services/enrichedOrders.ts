@@ -2,6 +2,30 @@
 import { fetchEntities } from './api';
 import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
+import type { EnrichedOrder } from '@/types/EnrichedOrder';
+
+/** Hydra JSON-LD paginated collection response */
+export interface HydraResponse<T> {
+  'hydra:member': T[];
+  'hydra:totalItems': number;
+  'hydra:view'?: {
+    '@id'?: string;
+    'hydra:first'?: string;
+    'hydra:last'?: string;
+    'hydra:next'?: string;
+    'hydra:previous'?: string;
+  };
+}
+
+/**
+ * The enriched-orders API returns a flat row with `orderId` (the legacy
+ * business key) alongside `id` (the primary key).  Extend `EnrichedOrder`
+ * to capture that extra runtime field without loosening to `any`.
+ */
+export interface EnrichedOrderRow extends EnrichedOrder {
+  orderId?: number;
+  orderStatus?: string;
+}
 
 interface GetEnrichedOrdersParams {
   page?: number;
@@ -29,14 +53,13 @@ interface SearchFilters {
 }
 
 // Function to search for a specific order by ID through multiple pages
-export async function searchForOrderByPages(orderId: string | number): Promise<any> {
+export async function searchForOrderByPages(orderId: string | number): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Starting paginated search for order ID:', orderId);
   
   // We'll try the first 10 pages to find the order
   const targetOrderId = Number(orderId);
   const pageLimit = 10;
-  const itemsPerPage = 30; // Default API pagination
-  
+
   for (let page = 1; page <= pageLimit; page++) {
     logger.log(`Searching page ${page} for order ID ${orderId}`);
     
@@ -58,14 +81,14 @@ export async function searchForOrderByPages(orderId: string | number): Promise<a
       logger.log(`Page ${page} has ${response['hydra:member'].length} orders`);
       
       // Check for the order on this page
-      const foundOrder = response['hydra:member'].find((order: any) => {
+      const foundOrder = response['hydra:member'].find((order: EnrichedOrderRow) => {
         const currentOrderId = Number(order.orderId);
         return currentOrderId === targetOrderId;
       });
-      
+
       // Sample a few orders to see what's on this page
       if (page === 1 || page % 3 === 0) { // Log first page and every third page
-        const orderIds = response['hydra:member'].map((order: any) => Number(order.orderId)).sort((a: number, b: number) => a - b);
+        const orderIds = response['hydra:member'].map((order: EnrichedOrderRow) => Number(order.orderId)).sort((a: number, b: number) => a - b);
         logger.log(`Sample order IDs on page ${page}: ${orderIds.slice(0, 5)}...`);
         logger.log(`Order ID range on page ${page}: ${Math.min(...orderIds)} - ${Math.max(...orderIds)}`);
       }
@@ -87,7 +110,7 @@ export async function searchForOrderByPages(orderId: string | number): Promise<a
       // Check if we've gone past where the order would be
       // Since we're sorting by orderId desc, if the lowest orderId on this page is already less than our target
       // then we won't find it in later pages either
-      const lowestOrderIdOnPage = Math.min(...response['hydra:member'].map((order: any) => Number(order.orderId)));
+      const lowestOrderIdOnPage = Math.min(...response['hydra:member'].map((order: EnrichedOrderRow) => Number(order.orderId)));
       
       if (lowestOrderIdOnPage < targetOrderId) {
         logger.log(`Lowest order ID on page ${page} (${lowestOrderIdOnPage}) is already below target ${targetOrderId}, stopping search`);
@@ -128,7 +151,7 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
 
   // Process filter parameters for API Platform
   // Remove array notation that prevents server-side filtering
-  const cleanedFilters: Record<string, any> = {};
+  const cleanedFilters: Record<string, string> = {};
 
   Object.keys(formattedFilters).forEach(key => {
     const value = formattedFilters[key];
@@ -169,7 +192,7 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   logger.log('enrichedOrders.ts: API response received:', {
     totalItems: response['hydra:totalItems'],
     memberCount: response['hydra:member']?.length,
-    firstOrderStatuses: response['hydra:member']?.slice(0, 3).map((order: any) => order.orderStatus)
+    firstOrderStatuses: response['hydra:member']?.slice(0, 3).map((order: EnrichedOrderRow) => order.orderStatus)
   });
   
   // Server-side filtering should now work properly without array notation
@@ -390,7 +413,7 @@ export interface OrderDetailData {
   orderStep: number | null;
   currency: string | null;
   fitterReference: string | null;
-  orderData: any;
+  orderData: Record<string, unknown> | null;
 
   // Order address
   orderName: string | null;
@@ -530,7 +553,7 @@ export async function fetchOrderDetail(orderId: number): Promise<OrderDetailData
 // ========== COMPREHENSIVE SEARCH FUNCTIONS ==========
 
 // Search by specific order ID (numeric)
-export async function searchByOrderId(orderId: string | number): Promise<any> {
+export async function searchByOrderId(orderId: string | number): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Order ID:', orderId);
   return getEnrichedOrders({
     filters: { orderId: String(orderId) },
@@ -540,7 +563,7 @@ export async function searchByOrderId(orderId: string | number): Promise<any> {
 }
 
 // Search by order status
-export async function searchByOrderStatus(status: string): Promise<any> {
+export async function searchByOrderStatus(status: string): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Order Status:', status);
   
   // Try the exact status first
@@ -604,7 +627,7 @@ export async function searchByOrderStatus(status: string): Promise<any> {
 }
 
 // Search by customer name
-export async function searchByCustomerName(customerName: string): Promise<any> {
+export async function searchByCustomerName(customerName: string): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Customer Name:', customerName);
   return getEnrichedOrders({
     filters: { customerName },
@@ -614,7 +637,7 @@ export async function searchByCustomerName(customerName: string): Promise<any> {
 }
 
 // Search by fitter name
-export async function searchByFitterName(fitterName: string): Promise<any> {
+export async function searchByFitterName(fitterName: string): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Fitter Name:', fitterName);
   return getEnrichedOrders({
     filters: { fitterName },
@@ -624,7 +647,7 @@ export async function searchByFitterName(fitterName: string): Promise<any> {
 }
 
 // Search by supplier name
-export async function searchBySupplier(supplierName: string): Promise<any> {
+export async function searchBySupplier(supplierName: string): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Supplier Name:', supplierName);
   return getEnrichedOrders({
     filters: { supplierName },
@@ -634,7 +657,7 @@ export async function searchBySupplier(supplierName: string): Promise<any> {
 }
 
 // Search by date range
-export async function searchByDateRange(fromDate: Date, toDate: Date): Promise<any> {
+export async function searchByDateRange(fromDate: Date, toDate: Date): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Date Range:', fromDate, 'to', toDate);
   
   const fromDateStr = fromDate.toISOString().split('T')[0];
@@ -651,7 +674,7 @@ export async function searchByDateRange(fromDate: Date, toDate: Date): Promise<a
 }
 
 // Search by urgent status
-export async function searchByUrgentStatus(urgent: boolean): Promise<any> {
+export async function searchByUrgentStatus(urgent: boolean): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Searching by Urgent Status:', urgent);
   return getEnrichedOrders({
     filters: { urgent: urgent ? 'true' : 'false' },
@@ -661,7 +684,7 @@ export async function searchByUrgentStatus(urgent: boolean): Promise<any> {
 }
 
 // Universal search that tries multiple fields
-export async function universalSearch(searchTerm: string): Promise<any> {
+export async function universalSearch(searchTerm: string): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Performing universal search for:', searchTerm);
   
   // If search term is numeric, search by order ID
@@ -710,12 +733,12 @@ export async function universalSearch(searchTerm: string): Promise<any> {
     logger.log('Individual field search results:', results.map(r => r['hydra:totalItems']));
     
     // Combine all results, removing duplicates by orderId
-    const allOrders = new Map();
+    const allOrders = new Map<number | undefined, EnrichedOrderRow>();
     let totalItems = 0;
-    
+
     results.forEach(result => {
       if (result['hydra:member']) {
-        result['hydra:member'].forEach((order: any) => {
+        result['hydra:member'].forEach((order: EnrichedOrderRow) => {
           if (!allOrders.has(order.orderId)) {
             allOrders.set(order.orderId, order);
             totalItems++;
@@ -742,7 +765,7 @@ export async function universalSearch(searchTerm: string): Promise<any> {
 }
 
 // Advanced search with multiple filters
-export async function advancedSearch(filters: SearchFilters): Promise<any> {
+export async function advancedSearch(filters: SearchFilters): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Performing advanced search with filters:', filters);
   
   const searchFilters: Record<string, string> = {};
@@ -776,7 +799,7 @@ export async function advancedSearch(filters: SearchFilters): Promise<any> {
 }
 
 // Dashboard-specific search for status filtering
-export async function getOrdersByStatus(status: string): Promise<any> {
+export async function getOrdersByStatus(status: string): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Getting orders by status for dashboard:', status);
   return searchByOrderStatus(status);
 }
@@ -792,7 +815,7 @@ export async function getAllStatusValues(): Promise<string[]> {
     
     const statusValues = new Set<string>();
     if (response['hydra:member']) {
-      response['hydra:member'].forEach((order: any) => {
+      response['hydra:member'].forEach((order: EnrichedOrderRow) => {
         if (order.orderStatus) {
           statusValues.add(order.orderStatus);
         }
@@ -809,11 +832,12 @@ export async function getAllStatusValues(): Promise<string[]> {
 }
 
 // Search with pagination support for large datasets
-export async function paginatedSearch(searchParams: SearchFilters & { page?: number; limit?: number }): Promise<any> {
+export async function paginatedSearch(searchParams: SearchFilters & { page?: number; limit?: number }): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Performing paginated search:', searchParams);
   
-  const { page = 1, ...filters } = searchParams;
-  
+  const filters = { ...searchParams };
+  delete filters.page;
+
   return advancedSearch({
     ...filters,
     // Add pagination to the search

@@ -8,7 +8,7 @@ export interface CountryManager {
   enabled?: boolean;
   createdAt?: string;
   updatedAt?: string;
-  [key: string]: any; // Allow additional properties
+  [key: string]: unknown; // Allow additional properties
 }
 
 export interface CountryManagersResponse {

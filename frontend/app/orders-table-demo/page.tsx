@@ -5,6 +5,7 @@ import { useReactTable, flexRender, getCoreRowModel, ColumnDef } from '@tanstack
 import { SimpleDataTable } from '@/components/shared/SimpleDataTable';
 import { getEnrichedOrders } from '@/services/enrichedOrders';
 import { getCustomerName, getFitterName, getSupplierName } from '@/utils/orderHydration';
+import type { Order as OrderDomainType } from '@/types/Order';
 
 // Define the columns for the order table
 type Order = {
@@ -93,11 +94,14 @@ export default function OrdersTableDemoPage() {
     orderStatus: order.orderStatus || '',
     orderTime: order.orderTime || order.createdAt || '',
     urgent: order.urgent || false,
-    customer: getCustomerName(order) || '',
-    fitter: getFitterName(order) || '',
-    supplier: getSupplierName(order) || ''
+    customer: getCustomerName(order as unknown as OrderDomainType & Record<string, unknown>) || '',
+    fitter: getFitterName(order as unknown as OrderDomainType & Record<string, unknown>) || '',
+    supplier: getSupplierName(order as unknown as OrderDomainType & Record<string, unknown>) || ''
   }));
 
+  // TODO(react-hooks): TanStack Table's useReactTable returns methods that cannot be safely
+  // memoized; this is a known false-positive for this third-party hook integration.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: processedOrders,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

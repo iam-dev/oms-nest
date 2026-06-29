@@ -6,10 +6,10 @@ export interface SaddleStock {
   stockOwner?: {
     id: string;
     name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  model: string | { name?: string; [key: string]: any };
-  leatherType?: string | { name?: string; [key: string]: any };
+  model: string | { name?: string; [key: string]: unknown };
+  leatherType?: string | { name?: string; [key: string]: unknown };
   preset?: string;
   demo: boolean;
   customizableProduct: boolean;
@@ -20,7 +20,7 @@ export interface SaddleStock {
     name: string;
     value: string | number;
   }>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface SaddleStockSearchResult {

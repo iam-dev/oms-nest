@@ -9,11 +9,11 @@ interface FetchParams {
   extraParams?: Record<string, string | number | boolean>;
 }
 
-interface UseEntityDataOptions extends FetchParams {
+interface UseEntityDataOptions<T = unknown> extends FetchParams {
   entity: string;
   searchTerm?: string;
   filters?: Record<string, string>;
-  initialData?: any[];
+  initialData?: T[];
   autoFetch?: boolean;
 }
 
@@ -22,7 +22,7 @@ interface UseEntityDataOptions extends FetchParams {
  * @param options - Configuration options for the hook
  * @returns Data, loading state, error state, and refetch function
  */
-export function useEntityData<T = any>({
+export function useEntityData<T = unknown>({
   entity,
   page = 1,
   partial = true,
@@ -33,18 +33,31 @@ export function useEntityData<T = any>({
   extraParams = {},
   initialData = [],
   autoFetch = true,
-}: UseEntityDataOptions) {
+}: UseEntityDataOptions<T>) {
   const [data, setData] = useState<T[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [totalItems, setTotalItems] = useState(0);
 
-  // Memoize extraParams to prevent infinite re-renders
-  const memoizedExtraParams = useMemo(() => ({
-    ...extraParams,
-    ...filters,
-    ...(searchTerm && { searchTerm })
-  }), [JSON.stringify(extraParams), JSON.stringify(filters), searchTerm]);
+  // Memoize extraParams to prevent infinite re-renders.
+  // JSON.stringify is extracted to plain variables so the dep array contains only
+  // simple expressions (required by react-hooks/exhaustive-deps in eslint-config-next 16).
+  // `extraParams` and `filters` are intentionally omitted from the dep array — using the
+  // serialised keys as deps provides object-identity-independent comparison without
+  // introducing circular re-renders.
+  const extraParamsKey = JSON.stringify(extraParams);
+  const filtersKey = JSON.stringify(filters);
+  const memoizedExtraParams = useMemo(
+    () => ({
+      ...extraParams,
+      ...filters,
+      ...(searchTerm && { searchTerm }),
+    }),
+    // TODO(react-hooks): extraParams/filters are tracked via serialised keys above;
+    // adding the raw objects would cause infinite re-renders on every render cycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [extraParamsKey, filtersKey, searchTerm],
+  );
 
   const fetchData = useCallback(async (params: FetchParams = {}, forceFresh = false) => {
     setLoading(true);
@@ -91,6 +104,9 @@ export function useEntityData<T = any>({
   // Fetch data on mount or when dependencies change
   useEffect(() => {
     if (autoFetch) {
+      // TODO(react-hooks): fetchData is an async function; setState calls happen inside
+      // promise callbacks, not synchronously in the effect body — standard fetch pattern.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchData();
     }
   }, [fetchData, autoFetch]);
@@ -104,7 +120,7 @@ export function useEntityData<T = any>({
   const updateEntityOptimistically = useCallback((updatedEntity: Partial<T> & { id: string | number }) => {
     setData(currentData =>
       currentData.map(item =>
-        (item as any).id === updatedEntity.id
+        (item as { id?: string | number }).id === updatedEntity.id
           ? { ...item, ...updatedEntity }
           : item
       )
@@ -120,7 +136,7 @@ export function useEntityData<T = any>({
   // Remove entity optimistically
   const removeEntityOptimistically = useCallback((entityId: string | number) => {
     setData(currentData =>
-      currentData.filter(item => (item as any).id !== entityId)
+      currentData.filter(item => (item as { id?: string | number }).id !== entityId)
     );
     setTotalItems(current => Math.max(0, current - 1));
   }, []);

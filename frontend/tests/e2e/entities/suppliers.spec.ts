@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { AuthHelper, TEST_USERS } from '../shared/auth-helpers';
-import { ApiHelper, ENTITY_CONFIGS } from '../shared/api-helpers';
+import { ApiHelper } from '../shared/api-helpers';
 
 test.describe('Suppliers Entity Management', () => {
   let authHelper: AuthHelper;
@@ -25,14 +25,15 @@ test.describe('Suppliers Entity Management', () => {
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
 
     // Wait for API call
-    const response = await apiHelper.waitForApiResponse('/suppliers');
+    const response = await apiHelper.waitForApiResponse('/suppliers') as { 'hydra:member'?: Record<string, unknown>[] };
 
     // Validate response structure
-    await apiHelper.validateEntityResponse('suppliers', { json: () => response });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await apiHelper.validateEntityResponse('suppliers', { json: () => Promise.resolve(response) } as any);
 
     // Validate supplier-specific fields
-    if (response['hydra:member']?.length > 0) {
-      const firstSupplier = response['hydra:member'][0];
+    if ((response['hydra:member']?.length ?? 0) > 0) {
+      const firstSupplier = response['hydra:member']![0];
       expect(firstSupplier).toHaveProperty('id');
       expect(firstSupplier).toHaveProperty('name');
       expect(firstSupplier).toHaveProperty('email');
@@ -149,22 +150,22 @@ test.describe('Suppliers Entity Management', () => {
     }
   });
 
-  test('should validate supplier data integrity', async ({ page }) => {
+  test('should validate supplier data integrity', async ({ page: _page }) => {
     await authHelper.waitForPageLoad();
 
-    const response = await apiHelper.waitForApiResponse('/suppliers');
+    const response = await apiHelper.waitForApiResponse('/suppliers') as { 'hydra:member'?: Record<string, unknown>[] };
 
     // Validate response structure
     expect(response).toHaveProperty('hydra:member');
     expect(Array.isArray(response['hydra:member'])).toBe(true);
 
     // Validate each supplier has required fields
-    response['hydra:member'].forEach((supplier: any, index: number) => {
+    (response['hydra:member'] ?? []).forEach((supplier: Record<string, unknown>, index: number) => {
       expect(supplier).toHaveProperty('id', `Supplier ${index} should have id`);
       expect(supplier).toHaveProperty('name', `Supplier ${index} should have name`);
 
       // Email should be valid format if present
-      if (supplier.email) {
+      if (typeof supplier.email === 'string') {
         expect(supplier.email).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
       }
     });

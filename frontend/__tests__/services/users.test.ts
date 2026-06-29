@@ -124,7 +124,7 @@ describe('Users Service', () => {
         firstName: 'New',
         lastName: 'User',
         role: UserRole.USER,
-      } as any;
+      };
 
       const mockResponse = {
         Entities: [{
@@ -161,7 +161,7 @@ describe('Users Service', () => {
         firstName: 'New',
         lastName: 'User',
         role: UserRole.USER,
-      } as any;
+      };
 
       mockFetch.mockResolvedValue({
         ok: false,
@@ -181,7 +181,7 @@ describe('Users Service', () => {
         firstName: 'New',
         lastName: 'User',
         role: UserRole.USER,
-      } as any;
+      };
 
       const mockResponse = {
         Errors: [{ ErrorMessage: 'Username already exists' }],
@@ -341,7 +341,7 @@ describe('Users Service', () => {
           firstName: 'Test',
           lastName: 'User',
           role,
-        } as any;
+        };
 
         mockFetch.mockResolvedValue({
           ok: true,
@@ -371,7 +371,7 @@ describe('Users Service', () => {
         json: async () => ({ Entities: [{ id: userId }] }),
       });
 
-      await updateUser(userId, { firstName: 'Updated' } as any);
+      await updateUser(userId, { firstName: 'Updated' });
       expect(mockFetch).toHaveBeenCalled();
     });
   });

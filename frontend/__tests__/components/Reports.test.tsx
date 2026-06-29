@@ -1,7 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Reports from '@/components/Reports';
+import * as enrichedOrdersModule from '@/services/enrichedOrders';
+import * as exportXlsxModule from '@/utils/exportXlsx';
 import { AuthTestProvider } from '../utils/AuthTestProvider';
 
 // Mock URL.createObjectURL / revokeObjectURL (not available in jsdom)
@@ -48,20 +50,31 @@ jest.mock('@/utils/exportXlsx', () => ({
   exportToXlsx: jest.fn(),
 }));
 
+interface MockOrdersTableProps {
+  searchTerm: string;
+  onSearch: (val: string) => void;
+  headerFilters?: Record<string, string>;
+  dateFrom?: string;
+  dateTo?: string;
+  orders?: unknown[];
+  pagination?: { totalItems?: number; itemsPerPage?: number; totalPages?: number };
+  loading?: boolean;
+  error?: string;
+}
+
 // Mock OrdersTable component
 jest.mock('@/components/shared/OrdersTable', () => ({
   OrdersTable: ({
     searchTerm,
     onSearch,
     headerFilters,
-    onFilterChange,
     dateFrom,
     dateTo,
     orders,
     pagination,
     loading,
     error,
-  }: any) => (
+  }: MockOrdersTableProps) => (
     <div data-testid="orders-table">
       <input
         data-testid="search-input"
@@ -114,9 +127,16 @@ jest.mock('@/components/shared/OrdersTable', () => ({
   ),
 }));
 
+interface MockMultiSelectProps {
+  label: string;
+  options?: Array<{ value: string; label: string }>;
+  selected?: string[];
+  onChangeSelected: (val: string[]) => void;
+}
+
 // Mock MultiSelectFilter component
 jest.mock('@/components/shared/MultiSelectFilter', () => ({
-  MultiSelectFilter: ({ label, options, selected, onChangeSelected }: any) => (
+  MultiSelectFilter: ({ label, options, selected, onChangeSelected }: MockMultiSelectProps) => (
     <div data-testid={`multi-select-${label.toLowerCase().replace(/\s+/g, '-')}`}>
       <label>{label}</label>
       <div data-testid={`multi-select-options-count-${label.toLowerCase().replace(/\s+/g, '-')}`}>
@@ -128,8 +148,8 @@ jest.mock('@/components/shared/MultiSelectFilter', () => ({
       <button
         data-testid={`multi-select-add-${label.toLowerCase().replace(/\s+/g, '-')}`}
         onClick={() => {
-          if (options?.length > 0) {
-            onChangeSelected([...selected, options[0].value]);
+          if (options && options.length > 0) {
+            onChangeSelected([...(selected ?? []), options[0].value]);
           }
         }}
       >
@@ -145,9 +165,19 @@ jest.mock('@/components/shared/MultiSelectFilter', () => ({
   ),
 }));
 
+interface MockSelectProps {
+  children?: React.ReactNode;
+  onValueChange: (val: string) => void;
+  value?: string;
+}
+interface MockChildrenProps { children?: React.ReactNode; }
+interface MockSelectItemProps { children?: React.ReactNode; value: string; }
+interface MockSelectValueProps { placeholder?: string; }
+interface MockCalendarProps { onSelect: (date: Date) => void; selected?: Date; }
+
 // Mock dropdown components with comprehensive options
 jest.mock('@/components/ui/select', () => ({
-  Select: ({ children, onValueChange, value }: any) => {
+  Select: ({ children, onValueChange, value }: MockSelectProps) => {
     return (
       <div data-testid="select-component">
         <select
@@ -160,15 +190,15 @@ jest.mock('@/components/ui/select', () => ({
       </div>
     );
   },
-  SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children, value }: any) => <option value={value}>{children}</option>,
-  SelectTrigger: ({ children }: any) => <div>{children}</div>,
-  SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: MockChildrenProps) => <div>{children}</div>,
+  SelectItem: ({ children, value }: MockSelectItemProps) => <option value={value}>{children}</option>,
+  SelectTrigger: ({ children }: MockChildrenProps) => <div>{children}</div>,
+  SelectValue: ({ placeholder }: MockSelectValueProps) => <span>{placeholder}</span>,
 }));
 
 // Mock calendar component
 jest.mock('@/components/ui/calendar', () => ({
-  Calendar: ({ onSelect, selected }: any) => (
+  Calendar: ({ onSelect, selected }: MockCalendarProps) => (
     <div data-testid="calendar">
       <button onClick={() => onSelect(new Date('2024-01-15'))}>
         Select Date
@@ -180,9 +210,9 @@ jest.mock('@/components/ui/calendar', () => ({
 
 // Mock popover for date picker
 jest.mock('@/components/ui/popover', () => ({
-  Popover: ({ children }: any) => <div data-testid="popover">{children}</div>,
-  PopoverContent: ({ children }: any) => <div data-testid="popover-content">{children}</div>,
-  PopoverTrigger: ({ children }: any) => <div data-testid="popover-trigger">{children}</div>,
+  Popover: ({ children }: MockChildrenProps) => <div data-testid="popover">{children}</div>,
+  PopoverContent: ({ children }: MockChildrenProps) => <div data-testid="popover-content">{children}</div>,
+  PopoverTrigger: ({ children }: MockChildrenProps) => <div data-testid="popover-trigger">{children}</div>,
 }));
 
 const mockOrders = [
@@ -236,8 +266,8 @@ const mockOrders = [
   },
 ];
 
-const mockGetEnrichedOrders = require('@/services/enrichedOrders').getEnrichedOrders;
-const mockGetFilterOptions = require('@/services/enrichedOrders').getFilterOptions;
+const mockGetEnrichedOrders = enrichedOrdersModule.getEnrichedOrders as jest.Mock;
+const mockGetFilterOptions = enrichedOrdersModule.getFilterOptions as jest.Mock;
 
 const renderWithAuth = (ui: React.ReactElement, userRole = 'admin') => {
   return render(
@@ -653,7 +683,7 @@ describe('Reports Component', () => {
 
     it('triggers export when button is clicked', async () => {
       const user = userEvent.setup();
-      const { exportToXlsx } = require('@/utils/exportXlsx');
+      const exportToXlsx = exportXlsxModule.exportToXlsx as jest.Mock;
       renderWithAuth(<Reports />);
 
       await waitFor(() => {

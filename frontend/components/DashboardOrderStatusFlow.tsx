@@ -67,6 +67,8 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // TODO(react-hooks): async fetch drives setLoading/setStatuses — standard data-loading effect, not a cascading-render bug
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchOrderStatusStats()
       .then(data => {

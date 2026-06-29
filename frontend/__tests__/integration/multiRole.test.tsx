@@ -24,33 +24,67 @@ jest.mock('@/services/enrichedOrders');
 const mockGetEnrichedOrders = getEnrichedOrders as jest.MockedFunction<typeof getEnrichedOrders>;
 const mockGetCurrentUser = getCurrentUser as jest.Mock;
 
+interface TestUser {
+  id: number;
+  username: string;
+  role: UserRole;
+}
+
+interface TestOrder {
+  id: number;
+  orderNumber: string;
+  fitter: { username: string };
+  customer: { name: string };
+}
+
+interface TestPermissions {
+  canViewReports: boolean;
+  canEditOrders: boolean;
+  canDeleteOrders: boolean;
+  canViewCustomers: boolean;
+  canManageSuppliers: boolean;
+}
+
 // Test component to demonstrate multi-role behavior
 const MultiRoleTestComponent = () => {
-  const [user, setUser] = React.useState<any>(null);
-  const [orders, setOrders] = React.useState<any[]>([]);
-  const [permissions, setPermissions] = React.useState<any>({});
+  const [user, setUser] = React.useState<TestUser | null>(null);
+  const [orders, setOrders] = React.useState<TestOrder[]>([]);
+  const [permissions, setPermissions] = React.useState<TestPermissions>({
+    canViewReports: false,
+    canEditOrders: false,
+    canDeleteOrders: false,
+    canViewCustomers: false,
+    canManageSuppliers: false,
+  });
 
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // TODO(react-hooks): test component intentionally calls multiple setters inside useEffect to
+  // simulate one-shot initialization from mocked deps; all setState calls here are intentional.
   React.useEffect(() => {
-    const currentUser = getCurrentUser();
+    const currentUser = getCurrentUser() as TestUser | null;
     setUser(currentUser);
 
     if (currentUser) {
       // Test permissions
-      const testPermissions: any = {
-        canViewReports: hasScreenPermission(currentUser.role as any, Screen.REPORTS),
-        canEditOrders: canPerformAction(currentUser.role as any, Screen.ORDERS, Permission.EDIT),
-        canDeleteOrders: canPerformAction(currentUser.role as any, Screen.ORDERS, Permission.DELETE),
-        canViewCustomers: hasScreenPermission(currentUser.role as any, Screen.CUSTOMERS),
-        canManageSuppliers: hasScreenPermission(currentUser.role as any, Screen.SUPPLIERS),
+      const testPermissions: TestPermissions = {
+        canViewReports: hasScreenPermission(currentUser.role as UserRole, Screen.REPORTS),
+        canEditOrders: canPerformAction(currentUser.role as UserRole, Screen.ORDERS, Permission.EDIT),
+        canDeleteOrders: canPerformAction(currentUser.role as UserRole, Screen.ORDERS, Permission.DELETE),
+        canViewCustomers: hasScreenPermission(currentUser.role as UserRole, Screen.CUSTOMERS),
+        canManageSuppliers: hasScreenPermission(currentUser.role as UserRole, Screen.SUPPLIERS),
       };
       setPermissions(testPermissions);
 
       // Fetch orders (will be filtered based on role)
-      getEnrichedOrders({ page: 1, filters: {} } as any)
-        .then(result => setOrders((result as any)['hydra:member'] || []))
+      getEnrichedOrders({ page: 1, filters: {} })
+        .then(result => {
+          const member = (result as Record<string, unknown>)['hydra:member'];
+          setOrders(Array.isArray(member) ? (member as TestOrder[]) : []);
+        })
         .catch(console.error);
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div data-testid="multi-role-component">
@@ -68,7 +102,7 @@ const MultiRoleTestComponent = () => {
       </div>
       <div data-testid="orders-info">
         <div data-testid="orders-count">{orders.length}</div>
-        {orders.map((order: any) => (
+        {orders.map((order: TestOrder) => (
           <div key={order.id} data-testid={`order-${order.id}-fitter`}>
             {order.fitter?.username}
           </div>
@@ -79,7 +113,7 @@ const MultiRoleTestComponent = () => {
 };
 
 // Mock order data
-const createMockOrders = () => [
+const createMockOrders = (): TestOrder[] => [
   {
     id: 1,
     orderNumber: 'ORD-001',
@@ -122,13 +156,13 @@ describe('Multi-Role Scenario Tests', () => {
         mockGetCurrentUser.mockReturnValue({
           id: 1,
           username: 'supervisor.admin',
-          role: 'ROLE_SUPERVISOR' as any,
-        });
+          role: UserRole.SUPERVISOR,
+        } satisfies TestUser);
 
         mockGetEnrichedOrders.mockResolvedValue({
           'hydra:member': createMockOrders(),
           'hydra:totalItems': 3,
-        } as any);
+        } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
         render(
           <AuthProvider>
@@ -161,13 +195,13 @@ describe('Multi-Role Scenario Tests', () => {
         mockGetCurrentUser.mockReturnValue({
           id: 2,
           username: 'admin.fitter',
-          role: 'ROLE_ADMIN' as any, // Primary role after mapping
-        });
+          role: UserRole.ADMIN, // Primary role after mapping
+        } satisfies TestUser);
 
         mockGetEnrichedOrders.mockResolvedValue({
           'hydra:member': createMockOrders(),
           'hydra:totalItems': 3,
-        } as any);
+        } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
         render(
           <AuthProvider>
@@ -205,18 +239,18 @@ describe('Multi-Role Scenario Tests', () => {
         mockGetCurrentUser.mockReturnValue({
           id: 3,
           username: 'fitter.supplier',
-          role: 'ROLE_FITTER' as any,
-        });
+          role: UserRole.FITTER,
+        } satisfies TestUser);
 
         // Mock filtered orders for this fitter
-        const filteredOrders = createMockOrders().filter(order => 
+        const filteredOrders = createMockOrders().filter(order =>
           order.fitter.username === 'fitter.supplier'
         );
 
         mockGetEnrichedOrders.mockResolvedValue({
           'hydra:member': filteredOrders,
           'hydra:totalItems': filteredOrders.length,
-        } as any);
+        } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
         render(<MultiRoleTestComponent />);
 
@@ -244,13 +278,13 @@ describe('Multi-Role Scenario Tests', () => {
         mockGetCurrentUser.mockReturnValue({
           id: 4,
           username: 'supplier.user',
-          role: 'ROLE_SUPPLIER' as any,
-        });
+          role: UserRole.SUPPLIER,
+        } satisfies TestUser);
 
         mockGetEnrichedOrders.mockResolvedValue({
           'hydra:member': createMockOrders(),
           'hydra:totalItems': 3,
-        } as any);
+        } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
         render(<MultiRoleTestComponent />);
 
@@ -281,13 +315,13 @@ describe('Multi-Role Scenario Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 5,
         username: 'all.roles',
-        role: 'ROLE_SUPERVISOR' as any,
-      });
+        role: UserRole.SUPERVISOR,
+      } satisfies TestUser);
 
       mockGetEnrichedOrders.mockResolvedValue({
         'hydra:member': createMockOrders(),
         'hydra:totalItems': 3,
-      } as any);
+      } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
       render(<MultiRoleTestComponent />);
 
@@ -305,20 +339,20 @@ describe('Multi-Role Scenario Tests', () => {
     });
 
     it('handles malformed role arrays', async () => {
-      const malformedRoles = ['ROLE_ADMIN', 'INVALID_ROLE', 'ROLE_FITTER', '', null as any, undefined as any];
+      const malformedRoles = ['ROLE_ADMIN', 'INVALID_ROLE', 'ROLE_FITTER', '', null as unknown as string, undefined as unknown as string];
       const primaryRole = mapRolesToPrimary(malformedRoles.filter(Boolean) as string[]);
       expect(primaryRole).toBe('ROLE_ADMIN'); // Should pick highest valid role
 
       mockGetCurrentUser.mockReturnValue({
         id: 6,
         username: 'malformed.roles',
-        role: 'ROLE_ADMIN' as any,
-      });
+        role: UserRole.ADMIN,
+      } satisfies TestUser);
 
       mockGetEnrichedOrders.mockResolvedValue({
         'hydra:member': createMockOrders(),
         'hydra:totalItems': 3,
-      } as any);
+      } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
       render(<MultiRoleTestComponent />);
 
@@ -335,8 +369,8 @@ describe('Multi-Role Scenario Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 7,
         username: 'transition.user',
-        role: 'ROLE_FITTER' as any,
-      });
+        role: UserRole.FITTER,
+      } satisfies TestUser);
 
       const fitterOrders = createMockOrders().filter(order =>
         order.fitter.username === 'transition.user'
@@ -345,7 +379,7 @@ describe('Multi-Role Scenario Tests', () => {
       mockGetEnrichedOrders.mockResolvedValue({
         'hydra:member': fitterOrders,
         'hydra:totalItems': fitterOrders.length,
-      } as any);
+      } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
       const { unmount } = render(<MultiRoleTestComponent />);
 
@@ -361,14 +395,14 @@ describe('Multi-Role Scenario Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 7,
         username: 'transition.user',
-        role: 'ROLE_ADMIN' as any,
-      });
+        role: UserRole.ADMIN,
+      } satisfies TestUser);
 
       mockGetEnrichedOrders.mockClear();
       mockGetEnrichedOrders.mockResolvedValue({
         'hydra:member': createMockOrders(),
         'hydra:totalItems': 3,
-      } as any);
+      } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
       render(<MultiRoleTestComponent />);
 
@@ -386,10 +420,10 @@ describe('Multi-Role Scenario Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 8,
         username: 'malicious.fitter',
-        role: 'ROLE_FITTER' as any,
-      });
+        role: UserRole.FITTER,
+      } satisfies TestUser);
 
-      const fitterOrders = createMockOrders().filter(order => 
+      const fitterOrders = createMockOrders().filter(order =>
         order.fitter.username === 'malicious.fitter'
       );
 
@@ -399,13 +433,13 @@ describe('Multi-Role Scenario Tests', () => {
         totalPages: 1,
         currentPage: 1,
         itemsPerPage: 10,
-      });
+      } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
       render(<MultiRoleTestComponent />);
 
       await waitFor(() => {
         expect(screen.getByTestId('user-role')).toHaveTextContent('ROLE_FITTER');
-        
+
         // Should not have admin privileges
         expect(screen.getByTestId('can-view-reports')).toHaveTextContent('no');
         expect(screen.getByTestId('can-delete-orders')).toHaveTextContent('no');
@@ -447,13 +481,13 @@ describe('Multi-Role Scenario Tests', () => {
         mockGetCurrentUser.mockReturnValue({
           id: 9,
           username: 'hierarchy.test',
-          role: primaryRole as any,
-        });
+          role: primaryRole as UserRole,
+        } satisfies TestUser);
 
         mockGetEnrichedOrders.mockResolvedValue({
           'hydra:member': createMockOrders(),
           'hydra:totalItems': 3,
-        } as any);
+        } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
         const { unmount } = render(<MultiRoleTestComponent />);
 
@@ -477,13 +511,13 @@ describe('Multi-Role Scenario Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 10,
         username: 'empty.roles',
-        role: 'ROLE_USER' as any,
-      });
+        role: UserRole.USER,
+      } satisfies TestUser);
 
       mockGetEnrichedOrders.mockResolvedValue({
         'hydra:member': createMockOrders(),
         'hydra:totalItems': 3,
-      } as any);
+      } as ReturnType<typeof mockGetEnrichedOrders> extends Promise<infer R> ? R : never);
 
       render(<MultiRoleTestComponent />);
 
@@ -495,10 +529,10 @@ describe('Multi-Role Scenario Tests', () => {
     });
 
     it('handles null/undefined roles', async () => {
-      const primaryRole = mapRolesToPrimary(null as any);
+      const primaryRole = mapRolesToPrimary(null as unknown as string[]);
       expect(primaryRole).toBe('ROLE_USER');
 
-      const primaryRole2 = mapRolesToPrimary(undefined as any);
+      const primaryRole2 = mapRolesToPrimary(undefined as unknown as string[]);
       expect(primaryRole2).toBe('ROLE_USER');
     });
 

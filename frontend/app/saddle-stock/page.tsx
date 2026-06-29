@@ -135,9 +135,12 @@ export default function AllSaddleStockPage() {
     }
   }, [pagination.currentPage, searchTerm, setTotalItems]);
 
+  // TODO(react-hooks): loadSaddleStock is a useCallback-wrapped async fetch — standard data-loading trigger, not a cascading-render issue
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     loadSaddleStock();
   }, [loadSaddleStock]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleFilterChange = (key: string, value: string) => {
     updateFilter(key, value);

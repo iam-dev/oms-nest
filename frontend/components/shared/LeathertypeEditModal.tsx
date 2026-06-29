@@ -25,6 +25,7 @@ export function LeathertypeEditModal({ leathertype, isOpen, onClose, onSave }: L
   // Set initial leathertype data
   useEffect(() => {
     if (leathertype) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): syncing prop->state on prop change is intentional controlled-form initialization
       setEditedLeathertype({
         ...leathertype,
         name: leathertype.name || '',

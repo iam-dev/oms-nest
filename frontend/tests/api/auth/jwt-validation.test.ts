@@ -3,9 +3,12 @@
  * Tests JWT token structure and validation as used by the UI
  */
 
-import { ApiClient } from '../shared/api-client';
-import { TEST_USERS } from '../shared/test-data';
+import { ApiClient, ApiError } from '../shared/api-client';
 import { HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
+
+function isApiError(e: unknown): e is ApiError {
+  return typeof e === 'object' && e !== null && 'status' in e && 'message' in e;
+}
 
 describe('JWT Token Validation', () => {
   let apiClient: ApiClient;
@@ -27,14 +30,16 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Invalid token format should have been rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([
-          0,
-          HTTP_STATUS.UNAUTHORIZED,
-          HTTP_STATUS.FORBIDDEN,
-          HTTP_STATUS.BAD_REQUEST,
-          HTTP_STATUS.INTERNAL_SERVER_ERROR
-        ]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([
+            0,
+            HTTP_STATUS.UNAUTHORIZED,
+            HTTP_STATUS.FORBIDDEN,
+            HTTP_STATUS.BAD_REQUEST,
+            HTTP_STATUS.INTERNAL_SERVER_ERROR
+          ]);
+        }
       }
     }, TEST_TIMEOUTS.FAST);
 
@@ -46,8 +51,10 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Invalid JWT header should be rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -62,8 +69,10 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Invalid JWT payload should be rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -87,8 +96,10 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Expired token should be rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -111,11 +122,13 @@ describe('JWT Token Validation', () => {
         await apiClient.get('/users');
         // This will still fail due to invalid signature, but should not be rejected for expiration
         fail('Expected signature validation error');
-      } catch (error: any) {
-        // Should fail for signature reasons, not expiration
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
-        // The error message should not mention expiration
-        expect(error.message.toLowerCase()).not.toMatch(/expired|exp/);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          // Should fail for signature reasons, not expiration
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+          // The error message should not mention expiration
+          expect(error.message.toLowerCase()).not.toMatch(/expired|exp/);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -134,9 +147,11 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Expected token validation error');
-      } catch (error: any) {
-        // Should fail for other validation reasons
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          // Should fail for other validation reasons
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -153,8 +168,10 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Token with missing subject should be rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+        }
       }
     }, TEST_TIMEOUTS.FAST);
 
@@ -170,14 +187,16 @@ describe('JWT Token Validation', () => {
         await apiClient.get('/users');
         // Note: Some systems might allow access with missing roles,
         // depending on the endpoint and security configuration
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([
-          0,
-          HTTP_STATUS.UNAUTHORIZED,
-          HTTP_STATUS.FORBIDDEN,
-          HTTP_STATUS.BAD_REQUEST,
-          HTTP_STATUS.INTERNAL_SERVER_ERROR
-        ]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([
+            0,
+            HTTP_STATUS.UNAUTHORIZED,
+            HTTP_STATUS.FORBIDDEN,
+            HTTP_STATUS.BAD_REQUEST,
+            HTTP_STATUS.INTERNAL_SERVER_ERROR
+          ]);
+        }
       }
     }, TEST_TIMEOUTS.FAST);
   });
@@ -198,7 +217,7 @@ describe('JWT Token Validation', () => {
 
       try {
         await apiClient.get('/users');
-      } catch (error) {
+      } catch {
         // Expected to fail
       }
 
@@ -222,7 +241,7 @@ describe('JWT Token Validation', () => {
 
       try {
         await apiClient.get('/users');
-      } catch (error) {
+      } catch {
         // Expected to fail
       }
 
@@ -240,9 +259,11 @@ describe('JWT Token Validation', () => {
       try {
         await apiClient.get('/users');
         fail('Expected token validation error');
-      } catch (error: any) {
-        // Should handle special characters gracefully
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          // Should handle special characters gracefully
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.INTERNAL_SERVER_ERROR]);
+        }
       }
     }, TEST_TIMEOUTS.FAST);
   });
@@ -262,7 +283,7 @@ describe('JWT Token Validation', () => {
 
       try {
         await apiClient.get('/users');
-      } catch (error) {
+      } catch {
         // Expected to fail
       }
 
@@ -303,18 +324,12 @@ describe('JWT Token Validation', () => {
 });
 
 // Extend Jest matchers for this test file
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeOneOf(expected: Array<any>): R;
-    }
-  }
-}
+// Type augmentation lives in tests/api/setup/jest.d.ts
 
 if (!expect.extend) {
   // Add custom matcher if not already added
   expect.extend({
-    toBeOneOf(received: any, expected: Array<any>) {
+    toBeOneOf(received: unknown, expected: Array<unknown>) {
       const pass = expected.includes(received);
       if (pass) {
         return {

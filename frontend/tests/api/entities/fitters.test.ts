@@ -4,6 +4,7 @@
  */
 
 import { ApiClient } from '../shared/api-client';
+import type { ApiError } from '../shared/api-client';
 import { ENTITY_CONFIGS, generateTestData } from '../shared/test-data';
 import { ApiValidators, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
 
@@ -26,8 +27,8 @@ describe('Fitters API', () => {
       try {
         await apiClient.get(config.endpoint);
         fail('GET /fitters should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -35,8 +36,8 @@ describe('Fitters API', () => {
       try {
         await apiClient.post(config.endpoint, generateTestData('fitter'));
         fail('POST /fitters should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -44,8 +45,8 @@ describe('Fitters API', () => {
       try {
         await apiClient.get(`${config.endpoint}/1`);
         fail('GET /fitters/{id} should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -65,8 +66,8 @@ describe('Fitters API', () => {
             $filter: `substringof('${term}',name) eq true`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -86,8 +87,8 @@ describe('Fitters API', () => {
             $filter: `substringof('${location}',location) eq true`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -107,8 +108,8 @@ describe('Fitters API', () => {
             $filter: `specialization eq '${specialization}'`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -119,8 +120,8 @@ describe('Fitters API', () => {
           $filter: `available eq true`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -136,8 +137,8 @@ describe('Fitters API', () => {
           $filter: complexFilter
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -157,8 +158,8 @@ describe('Fitters API', () => {
             $filter: `geo.distance(location, geography'POINT(${query.lng} ${query.lat})') le ${query.radius}`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -178,8 +179,8 @@ describe('Fitters API', () => {
             $filter: `substringof('${postcode}',postcode) eq true`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -202,8 +203,8 @@ describe('Fitters API', () => {
             $orderby: `${field} ${direction}`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -214,8 +215,8 @@ describe('Fitters API', () => {
           $orderby: 'geo.distance(location, geography\'POINT(-0.1278 51.5074)\') asc'
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -234,8 +235,8 @@ describe('Fitters API', () => {
         try {
           await apiClient.get(config.endpoint, params);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -253,8 +254,8 @@ describe('Fitters API', () => {
         try {
           await apiClient.post(config.endpoint, data);
           fail('Incomplete fitter data should be rejected');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -280,8 +281,8 @@ describe('Fitters API', () => {
         try {
           await apiClient.post(config.endpoint, fitterData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -305,8 +306,8 @@ describe('Fitters API', () => {
         try {
           await apiClient.post(config.endpoint, fitterData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -331,8 +332,8 @@ describe('Fitters API', () => {
         try {
           await apiClient.post(config.endpoint, maliciousData);
           fail('SQL injection attempt should be handled');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -355,8 +356,8 @@ describe('Fitters API', () => {
         try {
           await apiClient.post(config.endpoint, maliciousData);
           fail('XSS attempt should be handled');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -366,7 +367,7 @@ describe('Fitters API', () => {
 // Add custom matcher if needed
 if (!expect.extend) {
   expect.extend({
-    toBeOneOf(received: any, expected: Array<any>) {
+    toBeOneOf(received: unknown, expected: unknown[]) {
       const pass = expected.includes(received);
       return {
         message: () => pass

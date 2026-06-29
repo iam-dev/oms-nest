@@ -42,6 +42,10 @@ export function TableHeaderFilter({
   useEffect(() => {
     // Always sync, even when value is empty string
     const newValue = value ?? '';
+    // TODO(react-hooks): syncs multiple local filter states from a controlled `value` prop;
+    // the filter is intentionally semi-controlled (popover-local state + parent notification)
+    // — a full refactor to fully-controlled would require parent to own dateFrom/dateTo too.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilterValue(newValue);
     setBooleanValue(newValue);
     if (type === 'date-range' && value) {

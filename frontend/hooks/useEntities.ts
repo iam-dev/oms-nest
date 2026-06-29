@@ -10,13 +10,17 @@ interface UseEntitiesParams {
   extraParams?: Record<string, string | number | boolean>;
 }
 
-export function useEntities<T = any>({ entity, page = 1, partial = true, orderBy = '', filter = '', extraParams = {} }: UseEntitiesParams) {
+export function useEntities<T = unknown>({ entity, page = 1, partial = true, orderBy = '', filter = '', extraParams = {} }: UseEntitiesParams) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
+    // TODO(react-hooks): setLoading/setError are synchronous guards before an async
+    // chain; all data-updating setState calls happen in .then()/.catch() callbacks —
+    // standard loading-state pattern for promise-based fetching.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     fetchEntities({ entity, page, partial, orderBy, filter, extraParams })

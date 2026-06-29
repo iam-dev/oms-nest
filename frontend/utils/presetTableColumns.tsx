@@ -1,5 +1,8 @@
 import React from 'react';
 import { TableHeaderFilter } from '../components/shared/TableHeaderFilter';
+import type { Preset } from '@/types/ComprehensiveOrder';
+
+type PresetRow = Preset & { model?: { name?: string } | null };
 
 export type PresetHeaderFilters = Record<string, string>;
 export type SetPresetHeaderFilters = (key: string, value: string) => void;
@@ -17,7 +20,7 @@ export function getPresetTableColumns(headerFilters: PresetHeaderFilters, setHea
           entityType="preset"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '200px',
     },
     {
@@ -31,7 +34,7 @@ export function getPresetTableColumns(headerFilters: PresetHeaderFilters, setHea
           entityType="preset"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '200px',
     },
     {
@@ -45,7 +48,7 @@ export function getPresetTableColumns(headerFilters: PresetHeaderFilters, setHea
           entityType="preset"
         />
       ),
-      render: (v: any, row: any) => {
+      render: (_v: unknown, row: PresetRow) => {
         if (!row || !row.model) return '';
         return row.model.name || '';
       },
@@ -62,7 +65,7 @@ export function getPresetTableColumns(headerFilters: PresetHeaderFilters, setHea
           entityType="preset"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '250px',
     },
     {
@@ -76,7 +79,7 @@ export function getPresetTableColumns(headerFilters: PresetHeaderFilters, setHea
           entityType="preset"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '120px',
     },
     {
@@ -94,7 +97,7 @@ export function getPresetTableColumns(headerFilters: PresetHeaderFilters, setHea
           entityType="preset"
         />
       ),
-      render: (v: any) => v ? 'Yes' : 'No',
+      render: (v: unknown) => v ? 'Yes' : 'No',
       maxWidth: '100px',
     },
   ];

@@ -4,7 +4,7 @@
  */
 
 import { ApiClient } from '../shared/api-client';
-import { TEST_USERS, ENTITY_CONFIGS, generateTestData } from '../shared/test-data';
+import { ENTITY_CONFIGS, generateTestData } from '../shared/test-data';
 import { ApiValidators, ApiTestUtils, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
 
 describe('Customers API', () => {
@@ -33,8 +33,8 @@ describe('Customers API', () => {
       try {
         await apiClient.get('/v1/customers');
         fail('GET /v1/customers should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as import('../shared/api-client').ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -42,9 +42,9 @@ describe('Customers API', () => {
       try {
         await apiClient.post('/v1/customers', generateTestData('customer'));
         fail('POST /v1/customers should require authentication');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // NestJS API allows customer creation but requires authentication
-        expect(error.status).toBeOneOf([HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+        expect((error as { status?: number }).status).toBeOneOf([HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -52,8 +52,8 @@ describe('Customers API', () => {
       try {
         await apiClient.get('/v1/customers/1');
         fail('GET /v1/customers/{id} should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as import('../shared/api-client').ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -77,43 +77,32 @@ describe('Customers API', () => {
     }, TEST_TIMEOUTS.FAST);
 
     it('should validate customer entity structure', async () => {
-      // Test the expected customer entity structure
-      const expectedCustomer = {
-        id: expect.any(String),
-        name: expect.any(String),
-        email: expect.any(String),
-        phone: expect.stringMatching(/^[\+]?[\d\s\-\(\)]+$/), // Phone format
-        // Additional fields that might be present
-        createdAt: expect.any(String),
-        updatedAt: expect.any(String)
-      };
-
       // Validate our test data matches expected structure
-      const testCustomer = generateTestData('customer') as any;
+      const testCustomer = generateTestData('customer') as Record<string, unknown>;
       expect(testCustomer).toHaveProperty('name');
       expect(testCustomer).toHaveProperty('email');
-      expect(testCustomer.email).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+      expect(testCustomer['email']).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
     }, TEST_TIMEOUTS.FAST);
   });
 
   describe('Data Validation (Structure Tests)', () => {
     it('should validate required fields for customer creation', async () => {
       const requiredFields = config.requiredFields || [];
-      const testData = generateTestData('customer') as any;
+      const testData = generateTestData('customer') as Record<string, unknown>;
 
       // Ensure our test data includes required fields
       requiredFields.forEach((field: string) => {
         expect(testData).toHaveProperty(field);
-        expect((testData as any)[field]).toBeDefined();
-        expect((testData as any)[field]).not.toBe('');
+        expect(testData[field]).toBeDefined();
+        expect(testData[field]).not.toBe('');
       });
     }, TEST_TIMEOUTS.FAST);
 
     it('should generate valid email format for customers', async () => {
-      const testData = generateTestData('customer') as any;
+      const testData = generateTestData('customer') as Record<string, unknown>;
 
-      expect(testData.email).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
-      expect(testData.email).toContain('test-api.example.com'); // Our test domain
+      expect(testData['email']).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+      expect(testData['email']).toContain('test-api.example.com'); // Our test domain
     }, TEST_TIMEOUTS.FAST);
 
     it('should handle customer name validation', async () => {
@@ -184,23 +173,15 @@ describe('Customers API', () => {
 
   describe('Error Response Validation', () => {
     it('should return proper error format for invalid data', async () => {
-      // Test that error responses follow expected format
-      const expectedErrorStructure = {
-        message: expect.any(String),
-        status: expect.any(Number),
-        statusText: expect.any(String),
-        data: expect.anything()
-      };
-
       try {
         await apiClient.post('/v1/customers', { invalid: 'data' });
         fail('Should fail with authentication error');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Validate error structure
         expect(error).toHaveProperty('message');
         expect(error).toHaveProperty('status');
-        expect(typeof error.message).toBe('string');
-        expect(typeof error.status).toBe('number');
+        expect(typeof (error as { message?: unknown }).message).toBe('string');
+        expect(typeof (error as { status?: unknown }).status).toBe('number');
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -215,8 +196,8 @@ describe('Customers API', () => {
       try {
         await apiClient.post('/v1/customers', invalidData);
         fail('Should fail with validation or auth error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([
+      } catch (error: unknown) {
+        expect((error as { status?: number }).status).toBeOneOf([
           HTTP_STATUS.UNAUTHORIZED,
           HTTP_STATUS.FORBIDDEN,
           HTTP_STATUS.BAD_REQUEST,
@@ -231,21 +212,21 @@ describe('Customers API', () => {
       try {
         await apiClient.get('/v1/customers');
         fail('Expected authentication error');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Even authentication errors should have proper content type
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
     it('should include proper headers in POST responses', async () => {
       // Test that POST requests are properly formatted
-      const testData = generateTestData('customer') as any;
+      const testData = generateTestData('customer');
 
       try {
         await apiClient.post('/v1/customers', testData);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+      } catch (error: unknown) {
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
         // The request was properly formatted, just unauthorized
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -267,9 +248,9 @@ describe('Customers API', () => {
         try {
           await apiClient.get(`/v1/customers/${id}`);
           fail(`Invalid ID ${id} should be rejected`);
-        } catch (error: any) {
+        } catch (error: unknown) {
           // Should fail with authentication or validation error
-          expect(error.status).toBeOneOf([
+          expect((error as { status?: number }).status).toBeOneOf([
             HTTP_STATUS.UNAUTHORIZED,
             HTTP_STATUS.BAD_REQUEST,
             HTTP_STATUS.NOT_FOUND
@@ -282,14 +263,14 @@ describe('Customers API', () => {
   describe('Concurrency and Performance', () => {
     it('should handle multiple concurrent requests', async () => {
       // Test that the API can handle concurrent requests
-      const concurrentRequests = Array(5).fill(null).map((_, index) =>
+      const concurrentRequests = Array(5).fill(null).map(() =>
         apiClient.get('/v1/customers').catch(error => error)
       );
 
       const results = await Promise.all(concurrentRequests);
 
       // All should fail with authentication error (consistent behavior)
-      results.forEach((result, index) => {
+      results.forEach((result) => {
         expect(result.status).toBe(HTTP_STATUS.UNAUTHORIZED);
       });
     }, TEST_TIMEOUTS.NORMAL);
@@ -300,12 +281,12 @@ describe('Customers API', () => {
       try {
         await apiClient.get('/v1/customers');
         fail('Expected authentication error');
-      } catch (error: any) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         // Even error responses should be fast
         expect(duration).toBeLessThan(5000); // 5 seconds max
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -322,9 +303,9 @@ describe('Customers API', () => {
       try {
         await apiClient.post('/v1/customers', maliciousData);
         fail('SQL injection attempt should be rejected');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Should fail due to authentication or validation
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.BAD_REQUEST]);
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.BAD_REQUEST]);
       }
     }, TEST_TIMEOUTS.FAST);
 
@@ -339,9 +320,9 @@ describe('Customers API', () => {
       try {
         await apiClient.post('/v1/customers', maliciousData);
         fail('XSS attempt should be rejected');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Should fail due to authentication or validation
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.BAD_REQUEST]);
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN, HTTP_STATUS.BAD_REQUEST]);
       }
     }, TEST_TIMEOUTS.FAST);
   });

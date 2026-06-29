@@ -1,19 +1,22 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { UserRole } from '@/types/Role';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
+import * as accountManagementSidebarSectionModule from '@/components/AccountManagementSidebarSection';
 
 // Mock the AccountManagementSidebarSection component
 const mockReact = React;
 jest.mock('@/components/AccountManagementSidebarSection', () => {
   const AccountManagementSidebarSection = ({ isCollapsed, initiallyCollapsed = true }: { isCollapsed: boolean; initiallyCollapsed?: boolean }) => {
     const [open, setOpen] = mockReact.useState(!initiallyCollapsed);
-    
+
     // Mock permission check - only show for SUPERVISOR
-    const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
-    const { role } = mockUseUserRole();
-    
+    const mockUseUserRoleFn = jest.requireMock('@/hooks/useUserRole').useUserRole;
+    const { role } = mockUseUserRoleFn();
+
     // Mock permission function
-    const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
+    const mockHasScreenPermissionFn = jest.requireMock('@/utils/rolePermissions').hasScreenPermission;
     
     // Account management items
     const accountItems = [
@@ -24,8 +27,8 @@ jest.mock('@/components/AccountManagementSidebarSection', () => {
     ];
 
     // Filter items based on user role
-    const visibleAccountItems = accountItems.filter(item => 
-      mockHasScreenPermission(role, item.permission)
+    const visibleAccountItems = accountItems.filter(item =>
+      mockHasScreenPermissionFn(role, item.permission)
     );
 
     // Don't render if no items are visible
@@ -82,9 +85,9 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/dashboard'
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
-const { AccountManagementSidebarSection } = require('@/components/AccountManagementSidebarSection');
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
+const mockHasScreenPermission = rolePermissionsModule.hasScreenPermission as jest.Mock;
+const { AccountManagementSidebarSection } = accountManagementSidebarSectionModule;
 
 describe('Account Management Sidebar Section', () => {
   beforeEach(() => {

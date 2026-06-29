@@ -4,8 +4,13 @@
  */
 
 import { ApiClient } from '../shared/api-client';
+import type { ApiError } from '../shared/api-client';
 import { TEST_USERS } from '../shared/test-data';
 import { ApiValidators, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
+
+function isApiError(err: unknown): err is ApiError {
+  return typeof err === 'object' && err !== null && 'status' in err && typeof (err as Record<string, unknown>).status === 'number';
+}
 
 describe('Authentication API', () => {
   let apiClient: ApiClient;
@@ -103,8 +108,10 @@ describe('Authentication API', () => {
       try {
         await apiClient.get('/v1/users');
         fail('Expected request to be rejected');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        if (isApiError(error)) {
+          ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -114,9 +121,11 @@ describe('Authentication API', () => {
       try {
         await apiClient.get('/v1/users');
         fail('Expected request to be rejected');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Accept network errors (status 0) and HTTP auth errors
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -126,9 +135,11 @@ describe('Authentication API', () => {
       try {
         await apiClient.get('/v1/users');
         fail('Expected request to be rejected');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Accept network errors (status 0) and HTTP auth errors
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -140,14 +151,16 @@ describe('Authentication API', () => {
       try {
         await apiClient.get('/v1/users');
         fail('Expected request to be rejected');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Accept network errors and various auth/server errors
-        expect(error.status).toBeOneOf([
-          0, // Network error
-          HTTP_STATUS.UNAUTHORIZED,
-          HTTP_STATUS.FORBIDDEN,
-          HTTP_STATUS.INTERNAL_SERVER_ERROR // Accept 500 for malformed JWT tokens
-        ]);
+        if (isApiError(error)) {
+          expect(error.status).toBeOneOf([
+            0, // Network error
+            HTTP_STATUS.UNAUTHORIZED,
+            HTTP_STATUS.FORBIDDEN,
+            HTTP_STATUS.INTERNAL_SERVER_ERROR // Accept 500 for malformed JWT tokens
+          ]);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -172,8 +185,10 @@ describe('Authentication API', () => {
         try {
           await apiClient.get(endpoint);
           fail(`Expected ${endpoint} to require authentication`);
-        } catch (error: any) {
-          ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+        } catch (error: unknown) {
+          if (isApiError(error)) {
+            ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+          }
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -206,10 +221,14 @@ describe('Authentication API', () => {
       try {
         await offlineClient.health();
         fail('Expected network error');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Accept various network error messages or property access errors during testing
-        expect(error.message).toMatch(/(network|fetch|ENOTFOUND|ECONNREFUSED|Cannot read properties)/i);
-        expect(error.status).toBe(0);
+        if (isApiError(error)) {
+          expect(error.message).toMatch(/(network|fetch|ENOTFOUND|ECONNREFUSED|Cannot read properties)/i);
+          expect(error.status).toBe(0);
+        } else if (error instanceof Error) {
+          expect(error.message).toMatch(/(network|fetch|ENOTFOUND|ECONNREFUSED|Cannot read properties)/i);
+        }
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -227,7 +246,7 @@ describe('Authentication API', () => {
 
       try {
         await apiClient.get('/v1/users');
-      } catch (error) {
+      } catch {
         // We expect this to fail, but we want to ensure headers are sent correctly
       }
 
@@ -238,7 +257,7 @@ describe('Authentication API', () => {
     it('should include Accept header for JSON', async () => {
       try {
         await apiClient.health();
-      } catch (error) {
+      } catch {
         // Response should indicate JSON acceptance
       }
 
@@ -249,17 +268,11 @@ describe('Authentication API', () => {
 });
 
 // Extend Jest matchers
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeOneOf(expected: Array<any>): R;
-    }
-  }
-}
+// Type augmentation lives in tests/api/setup/jest.d.ts
 
 // Add custom matcher
 expect.extend({
-  toBeOneOf(received: any, expected: Array<any>) {
+  toBeOneOf(received: unknown, expected: Array<unknown>) {
     const pass = expected.includes(received);
     if (pass) {
       return {

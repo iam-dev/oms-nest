@@ -36,6 +36,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) {
+      // TODO(react-hooks): syncing form state from auth context user object on change is standard controlled-form hydration; refactoring would require restructuring AuthContext
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         firstName: user.firstName || "",
         lastName: user.lastName || "",

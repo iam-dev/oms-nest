@@ -4,6 +4,9 @@ import userEvent from "@testing-library/user-event";
 import Dashboard from "@/components/Dashboard";
 import { AuthTestProvider } from "@/utils/AuthTestProvider";
 import { UserRole } from "@/types/Role";
+import * as enrichedOrdersModule from "@/services/enrichedOrders";
+import * as dashboardModule from "@/services/dashboard";
+import * as useDebounceModule from "@/hooks/useDebounce";
 
 // Mock the API services
 jest.mock("@/services/enrichedOrders", () => ({
@@ -20,7 +23,6 @@ jest.mock("@/components/shared/OrdersTable", () => {
     searchTerm,
     onSearch,
     headerFilters,
-    onFilterChange,
     dateFrom,
     dateTo,
     onViewOrder,
@@ -28,7 +30,18 @@ jest.mock("@/components/shared/OrdersTable", () => {
     onApproveOrder,
     orders,
     pagination,
-  }: any) => (
+  }: {
+    searchTerm?: string;
+    onSearch: (v: string) => void;
+    headerFilters?: Record<string, string>;
+    dateFrom?: string;
+    dateTo?: string;
+    onViewOrder: (order: { orderNumber?: string } | undefined) => void;
+    onEditOrder: (order: { orderNumber?: string } | undefined) => void;
+    onApproveOrder: (order: { orderNumber?: string } | undefined) => void;
+    orders?: { orderNumber?: string }[];
+    pagination?: { currentPage?: number };
+  }) => (
     <div data-testid="orders-table">
       <input
         data-testid="search-input"
@@ -61,7 +74,7 @@ jest.mock("@/components/shared/OrdersTable", () => {
 
 // Mock modal components
 jest.mock("@/components/shared/OrderDetailModal", () => {
-  const MockOrderDetailModal = ({ isOpen, onClose, order }: any) =>
+  const MockOrderDetailModal = ({ isOpen, onClose, order }: { isOpen?: boolean; onClose: () => void; order?: { orderNumber?: string } }) =>
     isOpen ? (
       <div data-testid="order-detail-modal">
         <div>Order Detail: {order?.orderNumber}</div>
@@ -75,7 +88,7 @@ jest.mock("@/components/shared/OrderDetailModal", () => {
 });
 
 jest.mock("@/components/shared/OrderEditModal", () => {
-  const MockOrderEditModal = ({ isOpen, onClose, order }: any) =>
+  const MockOrderEditModal = ({ isOpen, onClose, order }: { isOpen?: boolean; onClose: () => void; order?: { orderNumber?: string } }) =>
     isOpen ? (
       <div data-testid="order-edit-modal">
         <div>Edit Order: {order?.orderNumber}</div>
@@ -89,7 +102,7 @@ jest.mock("@/components/shared/OrderEditModal", () => {
 });
 
 jest.mock("@/components/shared/OrderApprovalModal", () => {
-  const MockOrderApprovalModal = ({ isOpen, onClose, order }: any) =>
+  const MockOrderApprovalModal = ({ isOpen, onClose, order }: { isOpen?: boolean; onClose: () => void; order?: { orderNumber?: string } }) =>
     isOpen ? (
       <div data-testid="order-approval-modal">
         <div>Approve Order: {order?.orderNumber}</div>
@@ -104,19 +117,19 @@ jest.mock("@/components/shared/OrderApprovalModal", () => {
 
 // Mock OrderDetails component
 jest.mock("@/components/OrderDetails", () => ({
-  OrderDetails: ({ order }: any) =>
+  OrderDetails: ({ order }: { order?: unknown }) =>
     order ? <div data-testid="order-details">Order Details</div> : null,
 }));
 
 // Mock EditOrder component
 jest.mock("@/components/EditOrder", () => ({
-  EditOrder: ({ order }: any) =>
+  EditOrder: ({ order }: { order?: unknown }) =>
     order ? <div data-testid="edit-order">Edit Order</div> : null,
 }));
 
 // Mock ComprehensiveEditOrder component
 jest.mock("@/components/ComprehensiveEditOrder", () => ({
-  ComprehensiveEditOrder: ({ order }: any) =>
+  ComprehensiveEditOrder: ({ order }: { order?: unknown }) =>
     order ? (
       <div data-testid="comprehensive-edit-order">Comprehensive Edit</div>
     ) : null,
@@ -124,11 +137,11 @@ jest.mock("@/components/ComprehensiveEditOrder", () => ({
 
 // Mock Dialog component
 jest.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children, open }: any) =>
+  Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
     open ? <div data-testid="dialog">{children}</div> : null,
-  DialogContent: ({ children }: any) => <div>{children}</div>,
-  DialogHeader: ({ children }: any) => <div>{children}</div>,
-  DialogTitle: ({ children }: any) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 // Mock logger
@@ -144,7 +157,7 @@ jest.mock("@/services/api", () => ({
 
 // Mock status cards component
 jest.mock("@/components/DashboardOrderStatusFlow", () => {
-  const MockDashboardOrderStatusFlow = ({ onStatusClick }: any) => (
+  const MockDashboardOrderStatusFlow = ({ onStatusClick }: { onStatusClick: (status: string) => void }) => (
     <div data-testid="status-cards">
       <button onClick={() => onStatusClick("pending")}>Pending</button>
       <button onClick={() => onStatusClick("approved")}>Approved</button>
@@ -254,17 +267,15 @@ const mockOrders = [
   },
 ];
 
-const mockFetchEnrichedOrders =
-  require("@/services/enrichedOrders").fetchEnrichedOrders;
 const mockGetEnrichedOrders =
-  require("@/services/enrichedOrders").getEnrichedOrders;
+  enrichedOrdersModule.getEnrichedOrders as jest.Mock;
 const mockGetAllStatusValues =
-  require("@/services/enrichedOrders").getAllStatusValues;
+  enrichedOrdersModule.getAllStatusValues as jest.Mock;
 const mockUniversalSearch =
-  require("@/services/enrichedOrders").universalSearch;
+  enrichedOrdersModule.universalSearch as jest.Mock;
 const mockGetOrderStatusStats =
-  require("@/services/dashboard").getOrderStatusStats;
-const mockUseDebounce = require("@/hooks/useDebounce").useDebounce;
+  dashboardModule.getOrderStatusStats as jest.Mock;
+const mockUseDebounce = useDebounceModule.useDebounce as jest.Mock;
 
 const renderWithAuth = (
   ui: React.ReactElement,
@@ -306,7 +317,7 @@ describe("Dashboard Component", () => {
     });
 
     // Set up useDebounce mock to return the value immediately for testing
-    mockUseDebounce.mockImplementation((value: any) => value);
+    mockUseDebounce.mockImplementation((value: unknown) => value);
   });
 
   describe("Initial Rendering", () => {
@@ -487,7 +498,7 @@ describe("Dashboard Component", () => {
 
       // Simulate filter change by directly calling the onFilterChange
       // This would normally come from TableHeaderFilter interactions
-      const ordersTable = screen.getByTestId("orders-table");
+      screen.getByTestId("orders-table");
 
       // The actual filter change would be tested in OrdersTable tests
       // Here we're testing the Dashboard's response to filter changes

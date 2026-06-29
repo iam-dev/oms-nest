@@ -1,5 +1,5 @@
-import { createCustomer, updateCustomer, deleteCustomer, fetchCustomers } from '@/services/customers';
-import { createFitter, updateFitter, deleteFitter, fetchFitters } from '@/services/fitters';
+import { createCustomer, updateCustomer, deleteCustomer } from '@/services/customers';
+import { createFitter, updateFitter, deleteFitter } from '@/services/fitters';
 
 // Mock fetch for testing
 global.fetch = jest.fn();

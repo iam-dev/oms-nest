@@ -1,20 +1,20 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TableHeaderFilter } from '@/components/shared/TableHeaderFilter';
 
 // Mock the Popover component from Radix UI
 jest.mock('@/components/ui/popover', () => ({
-  Popover: ({ children }: any) => <div data-testid="popover">{children}</div>,
-  PopoverTrigger: ({ children }: any) => <div data-testid="popover-trigger">{children}</div>,
-  PopoverContent: ({ children }: any) => <div data-testid="popover-content">{children}</div>,
+  Popover: ({ children }: { children: React.ReactNode }) => <div data-testid="popover">{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div data-testid="popover-trigger">{children}</div>,
+  PopoverContent: ({ children }: { children: React.ReactNode }) => <div data-testid="popover-content">{children}</div>,
 }));
 
 // Mock the sub-components
 jest.mock('@/components/shared/TableHeaderFilterBase', () => ({
-  TableHeaderFilterBase: ({ children, title, value, onFilter }: any) => (
+  TableHeaderFilterBase: ({ title, value, onFilter }: { title: string; value: string; onFilter: (v: string) => void }) => (
     <div data-testid="filter-base">
-      <input 
+      <input
         data-testid="text-filter"
         placeholder={`Filter by ${title}`}
         value={value}
@@ -26,10 +26,10 @@ jest.mock('@/components/shared/TableHeaderFilterBase', () => ({
 }));
 
 jest.mock('@/components/shared/filters/BooleanFilter', () => ({
-  BooleanFilter: ({ value, onChange }: any) => (
-    <select 
-      data-testid="boolean-filter" 
-      value={value} 
+  BooleanFilter: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <select
+      data-testid="boolean-filter"
+      value={value}
       onChange={(e) => onChange(e.target.value)}
     >
       <option value="">All</option>
@@ -40,14 +40,14 @@ jest.mock('@/components/shared/filters/BooleanFilter', () => ({
 }));
 
 jest.mock('@/components/shared/filters/EnumFilter', () => ({
-  EnumFilter: ({ options, value, onChange }: any) => (
-    <select 
-      data-testid="enum-filter" 
-      value={value} 
+  EnumFilter: ({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) => (
+    <select
+      data-testid="enum-filter"
+      value={value}
       onChange={(e) => onChange(e.target.value)}
     >
       <option value="">All</option>
-      {options.map((opt: any) => (
+      {options.map((opt) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
     </select>
@@ -55,17 +55,17 @@ jest.mock('@/components/shared/filters/EnumFilter', () => ({
 }));
 
 jest.mock('@/components/shared/filters/DateRangeFilter', () => ({
-  DateRangeFilter: ({ from, to, onChange }: any) => (
+  DateRangeFilter: ({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) => (
     <div data-testid="date-range-filter">
-      <input 
-        data-testid="date-from" 
-        value={from} 
-        onChange={(e) => onChange(e.target.value, to)} 
+      <input
+        data-testid="date-from"
+        value={from}
+        onChange={(e) => onChange(e.target.value, to)}
       />
-      <input 
-        data-testid="date-to" 
-        value={to} 
-        onChange={(e) => onChange(from, e.target.value)} 
+      <input
+        data-testid="date-to"
+        value={to}
+        onChange={(e) => onChange(from, e.target.value)}
       />
     </div>
   ),
@@ -555,7 +555,7 @@ describe('TableHeaderFilter Component', () => {
             type="enum"
             value=""
             onFilter={mockOnFilter}
-            data={null as any}
+            data={null as unknown as { value: string; label: string }[]}
           />
         );
       }).toThrow();

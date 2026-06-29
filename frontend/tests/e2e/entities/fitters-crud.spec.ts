@@ -5,7 +5,6 @@ import { ApiHelper } from '../shared/api-helpers';
 test.describe('Fitters CRUD Operations', () => {
   let authHelper: AuthHelper;
   let apiHelper: ApiHelper;
-  const uniqueId = Date.now();
 
   test.beforeEach(async ({ page }) => {
     authHelper = new AuthHelper(page);
@@ -25,7 +24,7 @@ test.describe('Fitters CRUD Operations', () => {
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
 
     // Wait for the /fitters API response to arrive and validate hydra collection structure
-    const response = await apiHelper.waitForApiResponse('/fitters');
+    const response = (await apiHelper.waitForApiResponse('/fitters')) as Record<string, unknown>;
     expect(response).toHaveProperty('hydra:member');
     expect(Array.isArray(response['hydra:member'])).toBe(true);
 
@@ -309,15 +308,15 @@ test.describe('Fitters CRUD Operations', () => {
   });
 
   test('should validate fitter data integrity from API', async () => {
-    const response = await apiHelper.waitForApiResponse('/fitters');
+    const response = (await apiHelper.waitForApiResponse('/fitters')) as Record<string, unknown>;
 
     expect(response).toHaveProperty('hydra:member');
     expect(Array.isArray(response['hydra:member'])).toBe(true);
     expect(response).toHaveProperty('hydra:totalItems');
     expect(typeof response['hydra:totalItems']).toBe('number');
 
-    response['hydra:member'].forEach(
-      (fitter: Record<string, unknown>, index: number) => {
+    (response['hydra:member'] as Record<string, unknown>[]).forEach(
+      (fitter: Record<string, unknown>, _index: number) => {
         // Every fitter record must carry an id with a numeric or string type
         expect(fitter).toHaveProperty('id');
         const idType = typeof fitter['id'];

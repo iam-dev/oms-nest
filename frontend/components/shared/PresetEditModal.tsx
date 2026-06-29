@@ -25,28 +25,6 @@ export function PresetEditModal({ preset, isOpen, onClose, onSave }: PresetEditM
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Load models when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadModels();
-    }
-  }, [isOpen]);
-
-  // Set initial preset data
-  useEffect(() => {
-    if (preset) {
-      setEditedPreset({
-        ...preset,
-        name: preset.name || '',
-        sequence: preset.sequence ?? 0,
-        active: preset.active ?? true,
-        description: preset.description || '',
-        modelId: preset.modelId || '',
-      });
-      setError('');
-    }
-  }, [preset]);
-
   const loadModels = async () => {
     setLoadingModels(true);
     try {
@@ -63,6 +41,30 @@ export function PresetEditModal({ preset, isOpen, onClose, onSave }: PresetEditM
       setLoadingModels(false);
     }
   };
+
+  // Load models when modal opens.
+  // Declared after loadModels so React Compiler can see the reference as stable.
+  useEffect(() => {
+    if (isOpen) {
+      loadModels(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
+    }
+  }, [isOpen]);
+
+  // Sync form state when the preset prop changes.
+  useEffect(() => {
+    if (preset) {
+      // TODO(react-hooks): setEditedPreset initialises derived state from the `preset` prop — intentional controlled reset.
+      setEditedPreset({ // eslint-disable-line react-hooks/set-state-in-effect -- driven by preset prop change
+        ...preset,
+        name: preset.name || '',
+        sequence: preset.sequence ?? 0,
+        active: preset.active ?? true,
+        description: preset.description || '',
+        modelId: preset.modelId || '',
+      });
+      setError('');
+    }
+  }, [preset]);
 
   const handleSave = async () => {
     if (!editedPreset || !preset) return;

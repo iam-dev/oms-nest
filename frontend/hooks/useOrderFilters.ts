@@ -10,6 +10,7 @@ import { MIN_ORDER_ID } from '@/utils/orderConstants';
 import { getEnrichedOrders } from '@/services/enrichedOrders';
 import { logger } from '@/utils/logger';
 import type { Order } from '@/components/Orders';
+import type { Order as ProcessingOrder } from '@/types/Order';
 
 export function useOrderFilters(options?: { baseFilters?: Record<string, string> }) {
   const baseFilters = options?.baseFilters ?? {};
@@ -107,10 +108,17 @@ export function useOrderFilters(options?: { baseFilters?: Record<string, string>
     setLoading(true);
     setError('');
     try {
-      const filters = { ...baseFilters, ...buildOrderFilters(headerFilters) };
-      const isSearchingForOrderId = filters.orderId && /^\d+$/.test(filters.orderId);
+      const rawFilters = { ...baseFilters, ...buildOrderFilters(headerFilters) };
+      const filters: Record<string, string> = Object.fromEntries(
+        Object.entries(rawFilters).filter(([, v]) => typeof v === 'string').map(([k, v]) => [k, v as string])
+      );
+      // Preserve boolean filters as strings for the API
+      Object.entries(rawFilters).forEach(([k, v]) => {
+        if (typeof v === 'boolean') filters[k] = String(v);
+      });
+      const isSearchingForOrderId = typeof filters.orderId === 'string' && /^\d+$/.test(filters.orderId);
       const isSearchingForOrderIds = !!filters.orderIds;
-      const isSearchingWithSearchTerm = filters.searchTerm && filters.searchTerm.length > 0;
+      const isSearchingWithSearchTerm = typeof filters.searchTerm === 'string' && filters.searchTerm.length > 0;
 
       const data = await getEnrichedOrders({
         page,
@@ -179,10 +187,17 @@ export function useOrderFilters(options?: { baseFilters?: Record<string, string>
       setLoading(false);
       setIsSearching(false);
     }
+  // TODO(react-hooks): baseFilters is intentionally omitted — it is derived inline from
+  // options?.baseFilters and creates a new object reference each render, so including it
+  // would cause an infinite fetch loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, headerFilters, setTotalItems]);
 
   // Fetch on mount and filter/page change
   useEffect(() => {
+    // TODO(react-hooks): fetchAndSetOrders is async; setState calls happen in promise
+    // callbacks / finally block — standard data-fetching-in-effect pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAndSetOrders();
   }, [fetchAndSetOrders]);
 
@@ -195,14 +210,16 @@ export function useOrderFilters(options?: { baseFilters?: Record<string, string>
   }, [fetchAndSetOrders]);
 
   // Process orders for the table
-  const processedOrders = processOrdersTableData(orders || []);
+  // Cast is safe: both Order types share the same [key: string]: unknown index signature
+  const processingOrders = orders as unknown as ProcessingOrder[];
+  const processedOrders = processOrdersTableData(processingOrders);
 
   const dynamicSeatSizes = useMemo(() => {
-    return extractDynamicSeatSizes(orders);
+    return extractDynamicSeatSizes(orders as unknown as ProcessingOrder[]);
   }, [orders]);
 
   const dynamicFactories = useMemo(() => {
-    return extractDynamicFactories(orders);
+    return extractDynamicFactories(orders as unknown as ProcessingOrder[]);
   }, [orders]);
 
   const handleFilterChange = (key: string, value: string) => {

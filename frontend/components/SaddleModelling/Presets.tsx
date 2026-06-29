@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import type { Column } from '@/components/shared/DataTable';
 import { useTableFilters, usePagination } from '@/hooks';
 import { getPresetTableColumns } from '@/utils/presetTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -59,6 +60,9 @@ export default function Presets() {
 
   // Fetch presets when dependencies change
   useEffect(() => {
+    // TODO(react-hooks): fetchPresetsData is a useCallback that calls setState internally;
+    // this is the standard async fetch-on-mount/dep-change pattern and is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPresetsData();
   }, [fetchPresetsData]);
   
@@ -170,7 +174,7 @@ export default function Presets() {
 
       <EntityTable
         entities={presets}
-        columns={getPresetTableColumns(filters, handleFilterChange)}
+        columns={getPresetTableColumns(filters, handleFilterChange) as unknown as Column<Preset>[]}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

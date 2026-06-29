@@ -18,7 +18,7 @@ export function getProductStockTableColumns(headerFilters: ProductStockHeaderFil
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: string | null | undefined) => v ?? '',
     },
     {
       key: 'sku',
@@ -31,7 +31,7 @@ export function getProductStockTableColumns(headerFilters: ProductStockHeaderFil
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: string | null | undefined) => v ?? '',
     },
     {
       key: 'stock',
@@ -44,7 +44,7 @@ export function getProductStockTableColumns(headerFilters: ProductStockHeaderFil
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? 0,
+      render: (v: number | null | undefined) => v ?? 0,
     },
     {
       key: 'status',
@@ -62,7 +62,7 @@ export function getProductStockTableColumns(headerFilters: ProductStockHeaderFil
           entityType="product"
         />
       ),
-      render: (v: any) => v ? <StatusBadge status={v} type="product" /> : '',
+      render: (v: string | null | undefined) => v ? <StatusBadge status={v} type="product" /> : '',
     },
   ];
 }

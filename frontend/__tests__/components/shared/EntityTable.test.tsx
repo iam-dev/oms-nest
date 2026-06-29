@@ -1,11 +1,16 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { EntityTable } from '@/components/shared/EntityTable';
 
 // Mock the DataTable component
 jest.mock('@/components/shared/DataTable', () => ({
-  DataTable: ({ data, columns, renderRowActions, loading, error }: any) => (
+  DataTable: ({ data, columns, renderRowActions, loading, error }: {
+    data: Record<string, unknown>[];
+    columns: { key: string; title: React.ReactNode; render?: (v: unknown) => React.ReactNode | undefined }[];
+    renderRowActions?: (item: Record<string, unknown>) => React.ReactNode;
+    loading?: boolean;
+    error?: string;
+  }) => (
     <div data-testid="data-table">
       {loading && <div data-testid="loading-indicator">Loading...</div>}
       {error && <div data-testid="error-message">{error}</div>}
@@ -14,17 +19,17 @@ jest.mock('@/components/shared/DataTable', () => ({
         <table>
           <thead>
             <tr>
-              {columns.map((col: any, i: number) => (
+              {columns.map((col, i) => (
                 <th key={i}>{col.title}</th>
               ))}
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {data.map((item: any, i: number) => (
+            {data.map((item, i) => (
               <tr key={i}>
-                {columns.map((col: any, j: number) => (
-                  <td key={j}>{col.render ? col.render(item[col.key]) : item[col.key]}</td>
+                {columns.map((col, j) => (
+                  <td key={j}>{col.render ? col.render(item[col.key]) : (item[col.key] as React.ReactNode)}</td>
                 ))}
                 <td>{renderRowActions && renderRowActions(item)}</td>
               </tr>

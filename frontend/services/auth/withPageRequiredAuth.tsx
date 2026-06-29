@@ -9,7 +9,7 @@ interface Options {
   roles?: UserRole[];
 }
 
-export function withPageRequiredAuth<P>(Component: React.ComponentType<P>, options?: Options) {
+export function withPageRequiredAuth<P extends object>(Component: React.ComponentType<P>, options?: Options) {
   const allowedRoles = options?.roles || Object.values(UserRole);
   return function WithPageRequiredAuth(props: P) {
     const { user, isLoaded } = useAuth();
@@ -73,7 +73,11 @@ export function withPageRequiredAuth<P>(Component: React.ComponentType<P>, optio
       }, 100); // Small delay to prevent navigation conflicts
 
       return () => clearTimeout(timeoutId);
-    }, [user, isLoaded, router, allowedRoles]);
+    // `allowedRoles` is computed once outside the inner component from `options` which
+    // is stable for the lifetime of the HOC — it is not a reactive value and does not
+    // need to be in the dep array (adding it would cause eslint to warn about outer-scope
+    // non-reactive values; removing it is the correct fix per react-hooks/exhaustive-deps).
+    }, [user, isLoaded, router]);
 
     // Show loading while auth state is being determined
     if (!isLoaded) {
@@ -101,6 +105,6 @@ export function withPageRequiredAuth<P>(Component: React.ComponentType<P>, optio
     }
 
     logger.log('🔒 withPageRequiredAuth: rendering component');
-    return <Component {...(props as any)} />;
+    return <Component {...props} />;
   };
 }

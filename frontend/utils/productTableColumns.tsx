@@ -18,7 +18,7 @@ export function getProductTableColumns(headerFilters: ProductHeaderFilters, setH
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'name',
@@ -31,7 +31,7 @@ export function getProductTableColumns(headerFilters: ProductHeaderFilters, setH
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'category',
@@ -44,7 +44,7 @@ export function getProductTableColumns(headerFilters: ProductHeaderFilters, setH
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'price',
@@ -57,7 +57,7 @@ export function getProductTableColumns(headerFilters: ProductHeaderFilters, setH
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'stock',
@@ -70,7 +70,7 @@ export function getProductTableColumns(headerFilters: ProductHeaderFilters, setH
           entityType="product"
         />
       ),
-      render: (v: any) => v ?? 0,
+      render: (v: unknown) => v ?? 0,
     },
     {
       key: 'status',
@@ -88,7 +88,7 @@ export function getProductTableColumns(headerFilters: ProductHeaderFilters, setH
           entityType="product"
         />
       ),
-      render: (v: any) => v ? <StatusBadge status={v} type="product" /> : '',
+      render: (v: unknown) => (typeof v === 'string' && v) ? <StatusBadge status={v} type="product" /> : '',
     },
   ];
 }

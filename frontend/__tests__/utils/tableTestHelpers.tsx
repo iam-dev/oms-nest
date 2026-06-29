@@ -1,5 +1,4 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { RenderResult } from '@testing-library/react';
 
@@ -190,22 +189,24 @@ export const createFilterTestSuite = (filterTitle: string, filterType: 'text' | 
   const helper = new TableTestHelper();
 
   return {
-    async applyFilter(value: any) {
+    async applyFilter(value: unknown) {
       switch (filterType) {
         case 'text':
-          return helper.applyTextFilter(filterTitle, value);
+          return helper.applyTextFilter(filterTitle, value as string);
         case 'boolean':
-          return helper.applyBooleanFilter(filterTitle, value);
+          return helper.applyBooleanFilter(filterTitle, value as '' | 'true' | 'false');
         case 'enum':
-          return helper.applyEnumFilter(filterTitle, value);
-        case 'date-range':
-          return helper.applyDateRangeFilter(filterTitle, value.from, value.to);
+          return helper.applyEnumFilter(filterTitle, value as string);
+        case 'date-range': {
+          const range = value as { from: string; to: string };
+          return helper.applyDateRangeFilter(filterTitle, range.from, range.to);
+        }
         default:
           throw new Error(`Unsupported filter type: ${filterType}`);
       }
     },
 
-    expectFilterApplied(mockFn: jest.Mock, expectedValue: any) {
+    expectFilterApplied(mockFn: jest.Mock, expectedValue: unknown) {
       expect(mockFn).toHaveBeenCalledWith(expectedValue);
     },
 
@@ -370,24 +371,24 @@ export const createIntegrationTestSuite = () => {
   const helper = new TableTestHelper();
 
   return {
-    async testFullFilterWorkflow(mockFetch: jest.Mock, filters: any[]) {
+    async testFullFilterWorkflow(mockFetch: jest.Mock, filters: { type: string; value?: string; placeholder?: string; title?: string; from?: string; to?: string }[]) {
       // Apply multiple filters in sequence
       for (const filter of filters) {
         switch (filter.type) {
           case 'search':
-            await helper.searchTable(filter.value, filter.placeholder);
+            await helper.searchTable(filter.value ?? '', filter.placeholder);
             break;
           case 'text':
-            await helper.applyTextFilter(filter.title, filter.value);
+            await helper.applyTextFilter(filter.title ?? '', filter.value ?? '');
             break;
           case 'boolean':
-            await helper.applyBooleanFilter(filter.title, filter.value);
+            await helper.applyBooleanFilter(filter.title ?? '', (filter.value ?? '') as '' | 'true' | 'false');
             break;
           case 'enum':
-            await helper.applyEnumFilter(filter.title, filter.value);
+            await helper.applyEnumFilter(filter.title ?? '', filter.value ?? '');
             break;
           case 'date-range':
-            await helper.applyDateRangeFilter(filter.title, filter.from, filter.to);
+            await helper.applyDateRangeFilter(filter.title ?? '', filter.from ?? '', filter.to ?? '');
             break;
         }
       }

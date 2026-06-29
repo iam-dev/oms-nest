@@ -1,9 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OrdersTable } from '@/components/shared/OrdersTable';
 import { AuthTestProvider } from '@/utils/AuthTestProvider';
-import type { OrdersTableColumn } from '@/components/shared/OrdersTable';
+import type { OrdersTableColumn, OrdersTableProps } from '@/components/shared/OrdersTable';
 import type { Order } from '@/types/Order';
 import { UserRole } from '@/types/Role';
 
@@ -27,8 +27,8 @@ const mockOrders: Order[] = [
     supplier: { id: 1, name: 'Acme Supplier' },
     status: 'pending',
     urgent: false,
-    createdAt: '2024-01-15T10:00:00Z' as any,
-    updatedAt: '2024-01-15T10:00:00Z' as any,
+    createdAt: new Date('2024-01-15T10:00:00Z'),
+    updatedAt: new Date('2024-01-15T10:00:00Z'),
     seatSize: 'M',
     reference: 'REF-001',
   },
@@ -40,19 +40,19 @@ const mockOrders: Order[] = [
     supplier: { id: 2, name: 'Beta Supplier' },
     status: 'approved',
     urgent: true,
-    createdAt: '2024-01-16T11:00:00Z' as any,
-    updatedAt: '2024-01-16T11:00:00Z' as any,
+    createdAt: new Date('2024-01-16T11:00:00Z'),
+    updatedAt: new Date('2024-01-16T11:00:00Z'),
     seatSize: 'L',
     reference: 'REF-002',
   },
-] as any;
+] as unknown as Order[];
 
 const mockColumns: OrdersTableColumn[] = [
   { key: 'orderNumber', title: 'Order Number' },
-  { key: 'customer', title: 'Customer', render: (value: any) => value?.name || '' },
+  { key: 'customer', title: 'Customer', render: (value: unknown) => (value as { name?: string } | null)?.name || '' },
   { key: 'status', title: 'Status' },
-  { key: 'urgent', title: 'Urgent', render: (value: any) => (value ? 'Yes' : 'No') },
-  { key: 'createdAt', title: 'Created', render: (value: any) => value ? new Date(value).toLocaleDateString() : '' },
+  { key: 'urgent', title: 'Urgent', render: (value: unknown) => (value ? 'Yes' : 'No') },
+  { key: 'createdAt', title: 'Created', render: (value: unknown) => value ? new Date(value as string).toLocaleDateString() : '' },
 ];
 
 const mockPagination = {
@@ -82,11 +82,11 @@ const defaultProps = {
   seatSizes: mockSeatSizes,
   statuses: mockStatuses,
   fitters: mockFitters,
-  dateFrom: undefined as any,
+  dateFrom: undefined,
   setDateFrom: jest.fn(),
-  dateTo: undefined as any,
+  dateTo: undefined,
   setDateTo: jest.fn(),
-} as any;
+} satisfies Partial<OrdersTableProps>;
 
 /**
  * Helper: configure the mock useUserRole to return a given role.
@@ -376,7 +376,7 @@ describe('OrdersTable', () => {
             orderStatus: 'In Production P1',
             status: 'In Production P1',
           },
-        ] as any;
+        ] as unknown as Order[];
 
         renderTable({ orders: restrictedOrders });
 
@@ -404,7 +404,7 @@ describe('OrdersTable', () => {
             orderStatus: 'Ordered',
             status: 'Ordered',
           },
-        ] as any;
+        ] as unknown as Order[];
 
         renderTable({ orders: editableOrders });
 
@@ -431,7 +431,7 @@ describe('OrdersTable', () => {
             orderStatus: 'Approved',
             status: 'Approved',
           },
-        ] as any;
+        ] as unknown as Order[];
 
         renderTable({ orders: mixedOrders });
 
@@ -586,11 +586,11 @@ describe('OrdersTable', () => {
       const ordersWithMissingData = [
         {
           ...mockOrders[0],
-          customer: null as any,
+          customer: null,
         },
-      ];
+      ] as unknown as Order[];
 
-      renderTable({ orders: ordersWithMissingData as any });
+      renderTable({ orders: ordersWithMissingData });
 
       // Should not crash and should handle null customer gracefully
       expect(screen.getByText('ORD-001')).toBeInTheDocument();

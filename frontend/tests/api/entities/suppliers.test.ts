@@ -4,6 +4,7 @@
  */
 
 import { ApiClient } from '../shared/api-client';
+import type { ApiError } from '../shared/api-client';
 import { ENTITY_CONFIGS, generateTestData } from '../shared/test-data';
 import { ApiValidators, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
 
@@ -26,8 +27,8 @@ describe('Suppliers API', () => {
       try {
         await apiClient.get(config.endpoint);
         fail('GET /suppliers should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -35,8 +36,8 @@ describe('Suppliers API', () => {
       try {
         await apiClient.post(config.endpoint, generateTestData('supplier'));
         fail('POST /suppliers should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -44,8 +45,8 @@ describe('Suppliers API', () => {
       try {
         await apiClient.get(`${config.endpoint}/1`);
         fail('GET /suppliers/{id} should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -65,8 +66,8 @@ describe('Suppliers API', () => {
             $filter: `substringof('${term}',name) eq true`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -80,8 +81,8 @@ describe('Suppliers API', () => {
             $filter: `status eq '${status}'`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -95,8 +96,8 @@ describe('Suppliers API', () => {
             $filter: `country eq '${country}'`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -113,8 +114,8 @@ describe('Suppliers API', () => {
           $filter: complexFilter
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -135,8 +136,8 @@ describe('Suppliers API', () => {
             $orderby: `${field} ${direction}`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -147,8 +148,8 @@ describe('Suppliers API', () => {
           $orderby: 'country asc, name asc'
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -167,8 +168,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.get(config.endpoint, params);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -187,8 +188,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.get(config.endpoint, params);
           fail(`Invalid pagination parameters ${JSON.stringify(params)} should be rejected`);
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([
             HTTP_STATUS.UNAUTHORIZED,
             HTTP_STATUS.BAD_REQUEST
           ]);
@@ -209,8 +210,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.post(config.endpoint, data);
           fail('Incomplete supplier data should be rejected');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -236,8 +237,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.post(config.endpoint, supplierData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -261,8 +262,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.post(config.endpoint, supplierData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -287,8 +288,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.post(config.endpoint, maliciousData);
           fail('SQL injection attempt should be handled');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -311,8 +312,8 @@ describe('Suppliers API', () => {
         try {
           await apiClient.post(config.endpoint, maliciousData);
           fail('XSS attempt should be handled');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as { status?: number }).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -322,7 +323,7 @@ describe('Suppliers API', () => {
 // Add custom matcher if needed
 if (!expect.extend) {
   expect.extend({
-    toBeOneOf(received: any, expected: Array<any>) {
+    toBeOneOf(received: unknown, expected: unknown[]) {
       const pass = expected.includes(received);
       return {
         message: () => pass

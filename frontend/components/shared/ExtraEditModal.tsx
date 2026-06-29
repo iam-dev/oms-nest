@@ -33,6 +33,8 @@ export function ExtraEditModal({ extra, isOpen, onClose, onSave }: ExtraEditModa
 
   useEffect(() => {
     if (extra) {
+      // TODO(react-hooks): syncing extra prop to local edit state; derived-state-from-props pattern, safe here
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedExtra({
         ...extra,
         name: extra.name || '',

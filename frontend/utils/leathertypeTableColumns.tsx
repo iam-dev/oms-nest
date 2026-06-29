@@ -23,7 +23,7 @@ export function getLeathertypeTableColumns(headerFilters: LeathertypeHeaderFilte
           entityType="leathertype"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'sequence',
@@ -36,7 +36,7 @@ export function getLeathertypeTableColumns(headerFilters: LeathertypeHeaderFilte
           entityType="leathertype"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'name',
@@ -49,7 +49,7 @@ export function getLeathertypeTableColumns(headerFilters: LeathertypeHeaderFilte
           entityType="leathertype"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'active',
@@ -67,7 +67,7 @@ export function getLeathertypeTableColumns(headerFilters: LeathertypeHeaderFilte
           ]}
         />
       ),
-      render: (v: any) => v ? 'Yes' : 'No',
+      render: (v: unknown) => v ? 'Yes' : 'No',
     },
     {
       key: 'description',
@@ -80,7 +80,7 @@ export function getLeathertypeTableColumns(headerFilters: LeathertypeHeaderFilte
           entityType="leathertype"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
   ];
 }

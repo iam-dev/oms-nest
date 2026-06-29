@@ -222,7 +222,7 @@ describe('useEntityData Hook', () => {
     
     // Mock fetch that will replace initial data
     // We need to wait for the useEffect to run and then resolve the promise
-    let resolvePromise: (value: any) => void;
+    let resolvePromise: (value: unknown) => void;
     const promise = new Promise((resolve) => {
       resolvePromise = resolve;
     });

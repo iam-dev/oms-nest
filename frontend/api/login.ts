@@ -5,7 +5,7 @@ export interface LoginResponse {
   success: boolean;
   userId?: string | number;
   message?: string;
-  user?: any;
+  user?: Record<string, unknown>;
 }
 
 export async function login(username: string, password: string): Promise<LoginResponse> {

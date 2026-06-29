@@ -1,5 +1,7 @@
 // Script to check if all Next.js pages in /app use withPageRequiredAuth
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require('fs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require('path');
 
 const PAGES_DIR = path.join(__dirname, '../app');

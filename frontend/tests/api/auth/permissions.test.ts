@@ -3,8 +3,8 @@
  * Tests authorization and role-based permissions as implemented in the API
  */
 
-import { ApiClient } from '../shared/api-client';
-import { TEST_USERS, ENTITY_CONFIGS } from '../shared/test-data';
+import { ApiClient, type ApiError } from '../shared/api-client';
+import { ENTITY_CONFIGS } from '../shared/test-data';
 import { ApiValidators, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
 
 describe('API Permissions and Authorization', () => {
@@ -51,8 +51,8 @@ describe('API Permissions and Authorization', () => {
         try {
           await apiClient.get(endpoint);
           fail(`${endpoint} should require authentication`);
-        } catch (error: any) {
-          ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+        } catch (error: unknown) {
+          ApiValidators.validateErrorResponse(error as unknown as ApiError, HTTP_STATUS.UNAUTHORIZED);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -65,8 +65,9 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.get(testEndpoint);
         fail('GET should require authentication');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
+        expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -74,8 +75,9 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.post(testEndpoint, { name: 'Test' });
         fail('POST should require authentication');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
+        expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -83,8 +85,9 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.put(`${testEndpoint}/1`, { name: 'Test' });
         fail('PUT should require authentication');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
+        expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -92,8 +95,9 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.patch(`${testEndpoint}/1`, { name: 'Test' });
         fail('PATCH should require authentication');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
+        expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -101,8 +105,9 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.delete(`${testEndpoint}/1`);
         fail('DELETE should require authentication');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
+        expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -111,40 +116,6 @@ describe('API Permissions and Authorization', () => {
     // Since we don't have valid credentials, we test the authorization infrastructure
 
     it('should validate role claims in JWT tokens', async () => {
-      // Create tokens with different role configurations
-      const roleTestCases = [
-        {
-          name: 'admin role',
-          roles: ['ROLE_ADMIN'],
-          expectedAccess: true
-        },
-        {
-          name: 'user role',
-          roles: ['ROLE_USER'],
-          expectedAccess: false // Users typically have limited access
-        },
-        {
-          name: 'fitter role',
-          roles: ['ROLE_FITTER'],
-          expectedAccess: false
-        },
-        {
-          name: 'supplier role',
-          roles: ['ROLE_SUPPLIER'],
-          expectedAccess: false
-        },
-        {
-          name: 'multiple roles',
-          roles: ['ROLE_USER', 'ROLE_ADMIN'],
-          expectedAccess: true // Admin role should grant access
-        },
-        {
-          name: 'unknown role',
-          roles: ['ROLE_UNKNOWN'],
-          expectedAccess: false
-        }
-      ];
-
       // Test only one case to avoid timeout issues with fake JWT tokens
       const testCase = {
         name: 'invalid JWT signature',
@@ -167,9 +138,10 @@ describe('API Permissions and Authorization', () => {
         await apiClient.get('/users');
         // If successful with fake token, that would be a security issue
         fail('Fake JWT token should not grant access');
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const apiError = error as { status: number };
         // Malformed JWT should be rejected with 401, 403, or 500
-        expect(error.status).toBeOneOf([
+        expect(apiError.status).toBeOneOf([
           HTTP_STATUS.UNAUTHORIZED,
           HTTP_STATUS.FORBIDDEN,
           HTTP_STATUS.INTERNAL_SERVER_ERROR // 500 - Accept for malformed JWT
@@ -184,8 +156,9 @@ describe('API Permissions and Authorization', () => {
         try {
           await apiClient.get(config.endpoint);
           fail(`${config.endpoint} should require authentication`);
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          const apiError = error as { status: number };
+          expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       });
     }, TEST_TIMEOUTS.NORMAL);
@@ -202,8 +175,9 @@ describe('API Permissions and Authorization', () => {
         try {
           await apiClient.get(endpoint);
           fail(`${endpoint} should require authentication`);
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          const apiError = error as { status: number };
+          expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       });
     }, TEST_TIMEOUTS.NORMAL);
@@ -250,10 +224,11 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.get('/users');
         fail('Expected unauthorized error');
-      } catch (error: any) {
-        expect(error.message).toBeDefined();
-        expect(typeof error.message).toBe('string');
-        expect(error.message.length).toBeGreaterThan(0);
+      } catch (error: unknown) {
+        const apiError = error as { message: string; status: number };
+        expect(apiError.message).toBeDefined();
+        expect(typeof apiError.message).toBe('string');
+        expect(apiError.message.length).toBeGreaterThan(0);
 
         // Common authorization error message patterns
         const expectedPatterns = [
@@ -266,11 +241,11 @@ describe('API Permissions and Authorization', () => {
         ];
 
         const hasExpectedPattern = expectedPatterns.some(pattern =>
-          pattern.test(error.message)
+          pattern.test(apiError.message)
         );
 
         if (!hasExpectedPattern) {
-          console.warn('Authorization error message might not be user-friendly:', error.message);
+          console.warn('Authorization error message might not be user-friendly:', apiError.message);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -282,10 +257,11 @@ describe('API Permissions and Authorization', () => {
       try {
         await apiClient.get('/users');
         fail('Expected forbidden or unauthorized error');
-      } catch (error: any) {
-        expect(error.message).toBeDefined();
-        expect(typeof error.message).toBe('string');
-        expect(error.status).toBeOneOf([HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
+      } catch (error: unknown) {
+        const apiError = error as { message: string; status: number };
+        expect(apiError.message).toBeDefined();
+        expect(typeof apiError.message).toBe('string');
+        expect(apiError.status).toBeOneOf([HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.FORBIDDEN]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -345,11 +321,11 @@ describe('API Permissions and Authorization', () => {
             success: !!result.token,
             message: result.message
           });
-        } catch (error: any) {
+        } catch (error: unknown) {
           failedAttempts.push({
             attempt: i + 1,
             success: false,
-            error: error.message
+            error: error instanceof Error ? error.message : String(error)
           });
         }
       }
@@ -366,7 +342,7 @@ describe('API Permissions and Authorization', () => {
 // Add custom matcher
 if (!expect.extend) {
   expect.extend({
-    toBeOneOf(received: any, expected: Array<any>) {
+    toBeOneOf(received: unknown, expected: unknown[]) {
       const pass = expected.includes(received);
       return {
         message: () => pass

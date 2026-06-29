@@ -23,6 +23,8 @@ export function CustomersTableHeaderFilter({ title, type = 'text', value = '', o
   const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
+    // TODO(react-hooks): syncing value prop to local filter state; derived-state-from-props pattern, safe here
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilterValue(value || '');
     setBooleanValue(value || '');
     if (type === 'date-range' && value) {

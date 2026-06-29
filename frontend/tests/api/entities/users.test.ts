@@ -4,7 +4,8 @@
  */
 
 import { ApiClient } from '../shared/api-client';
-import { TEST_USERS, ENTITY_CONFIGS } from '../shared/test-data';
+import type { ApiError } from '../shared/api-client';
+import { ENTITY_CONFIGS } from '../shared/test-data';
 import { ApiValidators, HTTP_STATUS, TEST_TIMEOUTS } from '../shared/helpers';
 
 describe('Users API', () => {
@@ -26,8 +27,8 @@ describe('Users API', () => {
       try {
         await apiClient.get(config.endpoint);
         fail('/users should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -35,8 +36,8 @@ describe('Users API', () => {
       try {
         await apiClient.get(`${config.endpoint}/1`);
         fail('Individual user access should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -51,8 +52,8 @@ describe('Users API', () => {
       try {
         await apiClient.post(config.endpoint, newUser);
         fail('User creation should require authentication');
-      } catch (error: any) {
-        ApiValidators.validateErrorResponse(error, HTTP_STATUS.UNAUTHORIZED);
+      } catch (error: unknown) {
+        ApiValidators.validateErrorResponse(error as ApiError, HTTP_STATUS.UNAUTHORIZED);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -78,8 +79,8 @@ describe('Users API', () => {
         try {
           await apiClient.post(config.endpoint, userData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -95,8 +96,8 @@ describe('Users API', () => {
       try {
         await apiClient.post(config.endpoint, userData);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -119,8 +120,8 @@ describe('Users API', () => {
         try {
           await apiClient.post(config.endpoint, userData);
           fail(`Invalid role ${role} should be rejected`);
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -152,8 +153,8 @@ describe('Users API', () => {
         try {
           await apiClient.post(config.endpoint, userData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -183,8 +184,8 @@ describe('Users API', () => {
         try {
           await apiClient.post(config.endpoint, userData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }
     }, TEST_TIMEOUTS.NORMAL);
@@ -201,8 +202,8 @@ describe('Users API', () => {
       try {
         await apiClient.post(config.endpoint, userData);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -213,8 +214,8 @@ describe('Users API', () => {
       try {
         await apiClient.get(config.endpoint, { role: 'ROLE_ADMIN' });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -223,8 +224,8 @@ describe('Users API', () => {
       try {
         await apiClient.get(config.endpoint, { search: 'John' });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -234,8 +235,8 @@ describe('Users API', () => {
           $filter: `substringof('admin',email) eq true`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -245,8 +246,8 @@ describe('Users API', () => {
           $filter: `substringof('admin',username) eq true`
         });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -267,8 +268,8 @@ describe('Users API', () => {
             $orderby: `${field} ${direction}`
           });
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         }
       }, TEST_TIMEOUTS.NORMAL);
     });
@@ -280,8 +281,8 @@ describe('Users API', () => {
       try {
         await apiClient.get(config.endpoint, { $top: 10, $skip: 0 });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -290,8 +291,8 @@ describe('Users API', () => {
       try {
         await apiClient.get(config.endpoint, { $top: -1 });
         fail('Invalid pagination parameters should be rejected');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([
           0, // Network error
           HTTP_STATUS.UNAUTHORIZED,
           HTTP_STATUS.BAD_REQUEST
@@ -310,8 +311,8 @@ describe('Users API', () => {
       try {
         await apiClient.patch(`${config.endpoint}/1`, updateData);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -325,8 +326,8 @@ describe('Users API', () => {
       try {
         await apiClient.patch(`${config.endpoint}/1/password`, passwordData);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.NOT_FOUND]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.NOT_FOUND]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -350,8 +351,8 @@ describe('Users API', () => {
         try {
           await apiClient.patch(`${config.endpoint}/1/password`, passwordData);
           fail('Expected authentication error');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.NOT_FOUND]);
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.NOT_FOUND]);
         }
       }
     }, TEST_TIMEOUTS.SLOW);
@@ -362,8 +363,8 @@ describe('Users API', () => {
       try {
         await apiClient.patch(`${config.endpoint}/1`, { enabled: false });
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED, HTTP_STATUS.METHOD_NOT_ALLOWED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -371,8 +372,8 @@ describe('Users API', () => {
       try {
         await apiClient.delete(`${config.endpoint}/1`);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -382,8 +383,8 @@ describe('Users API', () => {
       try {
         await apiClient.delete(`${config.endpoint}/me`);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -401,8 +402,8 @@ describe('Users API', () => {
       try {
         await apiClient.post(config.endpoint, privilegedUser);
         fail('Privilege escalation should be prevented');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        expect((error as ApiError).status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
       }
     }, TEST_TIMEOUTS.NORMAL);
 
@@ -414,8 +415,8 @@ describe('Users API', () => {
         try {
           await apiClient.get(`${config.endpoint}/${id}`);
           fail('Invalid user ID should be protected');
-        } catch (error: any) {
-          expect(error.status).toBeOneOf([
+        } catch (error: unknown) {
+          expect((error as ApiError).status).toBeOneOf([
             HTTP_STATUS.UNAUTHORIZED,
             HTTP_STATUS.FORBIDDEN,
             HTTP_STATUS.NOT_FOUND
@@ -429,12 +430,14 @@ describe('Users API', () => {
       try {
         await apiClient.get(config.endpoint);
         fail('Expected authentication error');
-      } catch (error: any) {
-        expect(error.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
+      } catch (error: unknown) {
+        const apiError = error as ApiError;
+        expect(apiError.status).toBeOneOf([0, HTTP_STATUS.UNAUTHORIZED]);
         // Even error responses shouldn't contain sensitive data
-        expect(error.data?.password).toBeUndefined();
-        expect(error.data?.hash).toBeUndefined();
-        expect(error.data?.salt).toBeUndefined();
+        const data = apiError.data as Record<string, unknown> | undefined;
+        expect(data?.password).toBeUndefined();
+        expect(data?.hash).toBeUndefined();
+        expect(data?.salt).toBeUndefined();
       }
     }, TEST_TIMEOUTS.NORMAL);
   });
@@ -443,12 +446,12 @@ describe('Users API', () => {
 // Add custom matcher
 if (!expect.extend) {
   expect.extend({
-    toBeOneOf(received: any, expected: Array<any>) {
+    toBeOneOf(received: unknown, expected: Array<unknown>) {
       const pass = expected.includes(received);
       return {
         message: () => pass
-          ? `expected ${received} not to be one of ${expected.join(', ')}`
-          : `expected ${received} to be one of ${expected.join(', ')}`,
+          ? `expected ${String(received)} not to be one of ${expected.join(', ')}`
+          : `expected ${String(received)} to be one of ${expected.join(', ')}`,
         pass,
       };
     },

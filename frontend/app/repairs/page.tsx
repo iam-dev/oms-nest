@@ -11,6 +11,7 @@ import { EntityTable } from '@/components/shared/EntityTable';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { OrderSearchMessage } from '@/components/OrderSearchMessage';
 import { getOrderTableColumns } from '@/utils/orderTableColumns';
+import type { OrderTableRow } from '@/utils/orderProcessing';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
 import { useUserRole } from '@/hooks/useUserRole';
 import { logger } from '@/utils/logger';
@@ -53,6 +54,8 @@ export default function RepairsPage() {
 
   // Clear selection when page or filters change
   useEffect(() => {
+    // TODO(react-hooks): resetting selection to an empty Set when pagination/filters change is intentional derived-state reset; refactoring into every change-handler risks missing edge cases
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedOrderIds(new Set());
   }, [page, headerFilters]);
 
@@ -192,7 +195,7 @@ export default function RepairsPage() {
           columns={(() => {
             const orderCols = getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes, { hideFitter: isFitter });
             // Insert "ORIG. ORDER" column after the ID column (index 0)
-            return [checkboxColumn, orderCols[0], origOrderColumn, ...orderCols.slice(1)];
+            return [checkboxColumn, orderCols[0], origOrderColumn, ...orderCols.slice(1)] as unknown as Column<OrderTableRow>[];
           })()}
           onView={(order) => handleViewDetails(order as unknown as Order)}
           onEdit={(order) => handleEditOrder(order as unknown as Order)}

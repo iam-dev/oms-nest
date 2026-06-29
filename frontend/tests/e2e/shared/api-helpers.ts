@@ -1,4 +1,4 @@
-import { Page, expect, Request } from '@playwright/test';
+import { Page, expect, Request, Response } from '@playwright/test';
 
 export interface ApiValidation {
   status?: number;
@@ -144,7 +144,7 @@ export class ApiHelper {
     });
   }
 
-  async validateApiResponse(response: any, validation: ApiValidation): Promise<void> {
+  async validateApiResponse(response: Response, validation: ApiValidation): Promise<void> {
     if (validation.status) {
       expect(response.status).toBe(validation.status);
     }
@@ -170,7 +170,7 @@ export class ApiHelper {
     }
   }
 
-  async validateEntityResponse(entityType: string, response: any): Promise<void> {
+  async validateEntityResponse(entityType: string, response: Response): Promise<void> {
     const config = ENTITY_CONFIGS[entityType];
     if (!config) {
       throw new Error(`No configuration found for entity type: ${entityType}`);
@@ -231,7 +231,7 @@ export class ApiHelper {
     });
   }
 
-  validateODataParams(url: string, expectedParams: Record<string, any>): void {
+  validateODataParams(url: string, expectedParams: Record<string, unknown>): void {
     const urlObj = new URL(url);
 
     for (const [param, expectedValue] of Object.entries(expectedParams)) {
@@ -293,7 +293,7 @@ export class ApiHelper {
     expect(pageParam).toBe(String(page));
   }
 
-  async mockApiResponse(endpoint: string, responseData: any, status = 200): Promise<void> {
+  async mockApiResponse(endpoint: string, responseData: unknown, status = 200): Promise<void> {
     await this.page.route(`**/api/**${endpoint}*`, (route) => {
       route.fulfill({
         status,
@@ -310,7 +310,7 @@ export class ApiHelper {
     );
   }
 
-  async waitForApiResponse(endpoint: string, timeout = 10000): Promise<any> {
+  async waitForApiResponse(endpoint: string, timeout = 10000): Promise<unknown> {
     const response = await this.page.waitForResponse(
       response => response.url().includes(endpoint),
       { timeout }

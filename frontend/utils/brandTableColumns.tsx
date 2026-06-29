@@ -17,7 +17,7 @@ export function getBrandTableColumns(headerFilters: BrandHeaderFilters, setHeade
           entityType="brand"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: string | number | null | undefined) => v ?? '',
       maxWidth: '200px',
     },
     {
@@ -31,7 +31,7 @@ export function getBrandTableColumns(headerFilters: BrandHeaderFilters, setHeade
           entityType="brand"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: string | null | undefined) => v ?? '',
       maxWidth: '200px',
     },
     {
@@ -45,7 +45,7 @@ export function getBrandTableColumns(headerFilters: BrandHeaderFilters, setHeade
           entityType="brand"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: number | null | undefined) => v ?? '',
       maxWidth: '120px',
     },
     {
@@ -63,7 +63,7 @@ export function getBrandTableColumns(headerFilters: BrandHeaderFilters, setHeade
           entityType="brand"
         />
       ),
-      render: (v: any) => v ? 'Yes' : 'No',
+      render: (v: boolean | null | undefined) => v ? 'Yes' : 'No',
       maxWidth: '100px',
     },
   ];

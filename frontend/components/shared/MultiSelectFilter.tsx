@@ -31,6 +31,7 @@ export function MultiSelectFilter({
       const t = setTimeout(() => inputRef.current?.focus(), 50);
       return () => clearTimeout(t);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): clearing search on close is intentional UI reset, not external sync
       setSearch('');
     }
   }, [open]);

@@ -109,7 +109,7 @@ export class AuthHelper {
         // If no logout button found, navigate to login
         await this.page.goto('/login');
       }
-    } catch (error) {
+    } catch {
       // If anything fails, just navigate to login
       await this.page.goto('/login');
     }

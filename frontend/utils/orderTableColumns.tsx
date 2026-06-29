@@ -1,7 +1,6 @@
 import React from 'react';
 import { TableHeaderFilter } from '../components/shared/TableHeaderFilter';
 import { orderStatuses } from './orderConstants';
-import { StatusBadge } from '../components/shared/StatusBadge';
 
 export type HeaderFilters = Record<string, string>;
 export type SetHeaderFilters = (key: string, value: string) => void;
@@ -31,7 +30,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => row?.id || '-',
+      render: (_: unknown, row: Record<string, unknown>) => (row?.id as string | number) || '-',
     },
     {
       key: 'icons',
@@ -82,7 +81,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => {
+      render: (_: unknown, row: Record<string, unknown>) => {
         if (!row) return '-';
         // For enriched orders, use brand_name and model_name directly
         const brandName = row.brandName || row.brand_name;
@@ -95,7 +94,7 @@ export function getOrderTableColumns(
         }
         // Fallback to saddleSpecifications
         if (row.saddleSpecifications) {
-          const specs = row.saddleSpecifications;
+          const specs = row.saddleSpecifications as Record<string, unknown>;
           const parts = [];
           if (specs.brand) parts.push(specs.brand);
           if (specs.model) parts.push(specs.model);
@@ -121,7 +120,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => {
+      render: (_: unknown, row: Record<string, unknown>) => {
         if (!row) return '-';
         let seatSizes: string[] = [];
 
@@ -154,32 +153,35 @@ export function getOrderTableColumns(
 
         // First check seat_sizes from backend (snake_case JSONB array)
         if (Array.isArray(row.seat_sizes) && row.seat_sizes.length > 0) {
-          seatSizes = row.seat_sizes.map((s: any) => normalize(String(s)));
+          seatSizes = row.seat_sizes.map((s: unknown) => normalize(String(s)));
         }
         // Check saddleSpecifications.seatSize
-        else if (row.saddleSpecifications?.seatSize) {
-          if (Array.isArray(row.saddleSpecifications.seatSize)) {
-            seatSizes = row.saddleSpecifications.seatSize.map((s: any) => normalize(String(s)));
-          } else {
-            seatSizes = [normalize(String(row.saddleSpecifications.seatSize))];
+        else if (row.saddleSpecifications && typeof row.saddleSpecifications === 'object') {
+          const specs = row.saddleSpecifications as Record<string, unknown>;
+          if (specs.seatSize) {
+            if (Array.isArray(specs.seatSize)) {
+              seatSizes = specs.seatSize.map((s: unknown) => normalize(String(s)));
+            } else {
+              seatSizes = [normalize(String(specs.seatSize))];
+            }
           }
         }
         // Fallback to seatSizes (camelCase)
         else if (Array.isArray(row.seatSizes) && row.seatSizes.length > 0) {
-          seatSizes = row.seatSizes.map((s: any) => normalize(String(s)));
+          seatSizes = row.seatSizes.map((s: unknown) => normalize(String(s)));
         } else if (row.seatSize) {
           if (Array.isArray(row.seatSize)) {
-            seatSizes = row.seatSize.map((s: any) => normalize(String(s)));
+            seatSizes = row.seatSize.map((s: unknown) => normalize(String(s)));
           } else {
             seatSizes = [normalize(String(row.seatSize))];
           }
         }
         // Extract from special_notes or comments field
         else if (row.special_notes || row.comments) {
-          seatSizes = extractFromText(row.special_notes || row.comments);
+          seatSizes = extractFromText(String(row.special_notes || row.comments));
         }
         // Fallback to reference field
-        else if (row.reference) {
+        else if (typeof row.reference === 'string') {
           const match = row.reference.match(/(\d{2}(?:[.,]5)?)/g);
           if (match && match.length > 0) seatSizes = match.map(normalize);
         }
@@ -199,7 +201,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => {
+      render: (_: unknown, row: Record<string, unknown>) => {
         if (!row) return '-';
         // For enriched orders, use the direct customerName field first (camelCase or snake_case)
         const customerName = row.customerName || row.customer_name;
@@ -208,9 +210,10 @@ export function getOrderTableColumns(
         }
         // Fallback to customer object or computed field
         if (row.customer) {
-          if (typeof row.customer === 'object') {
-            if (row.customer.name) return row.customer.name;
-            if (row.customer['@id'] && row.name) return row.name;
+          if (typeof row.customer === 'object' && row.customer !== null) {
+            const cust = row.customer as Record<string, unknown>;
+            if (cust.name) return cust.name;
+            if (cust['@id'] && row.name) return row.name;
             return JSON.stringify(row.customer);
           }
           return String(row.customer);
@@ -222,9 +225,9 @@ export function getOrderTableColumns(
     {
       key: 'date',
       title: 'DATE',
-      render: (_: any, row: any) => {
+      render: (_: unknown, row: Record<string, unknown>) => {
         // Backend sends created_at (snake_case) or createdAt (camelCase)
-        const dateStr = row?.created_at || row?.createdAt || row?.orderTime || row?.date || '';
+        const dateStr = String(row?.created_at || row?.createdAt || row?.orderTime || row?.date || '');
         if (!dateStr) return '-';
         try {
           const date = new Date(dateStr);
@@ -247,7 +250,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => row?.status || row?.orderStatus || '-',
+      render: (_: unknown, row: Record<string, unknown>) => (row?.status || row?.orderStatus || '-') as string,
     },
     {
       key: 'urgent',
@@ -260,7 +263,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (val: any, row: any) => {
+      render: (val: unknown, row: Record<string, unknown>) => {
         // Backend uses urgency (0/1) or isUrgent (boolean)
         const urgentValue = row?.urgency ?? row?.isUrgent ?? val ?? row?.urgent;
         if (urgentValue === null || urgentValue === undefined || urgentValue === '') return 'No';
@@ -280,7 +283,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => {
+      render: (_: unknown, row: Record<string, unknown>) => {
         if (!row) return '-';
         // For enriched orders, use the direct fitterName field first (camelCase or snake_case)
         const fitterName = row.fitterName || row.fitter_name;
@@ -289,8 +292,9 @@ export function getOrderTableColumns(
         }
         // Fallback to fitter object or computed field
         if (row.fitter) {
-          if (typeof row.fitter === 'object') {
-            if (row.fitter.name) return row.fitter.name;
+          if (typeof row.fitter === 'object' && row.fitter !== null) {
+            const fitter = row.fitter as Record<string, unknown>;
+            if (fitter.name) return fitter.name;
             return JSON.stringify(row.fitter);
           }
           return String(row.fitter);
@@ -329,7 +333,7 @@ export function getOrderTableColumns(
           entityType="order"
         />
       ),
-      render: (_: any, row: any) => {
+      render: (_: unknown, row: Record<string, unknown>) => {
         if (!row) return '-';
         // For enriched orders, use the direct factoryName field first (camelCase or snake_case)
         const factoryName = row.factoryName || row.factory_name;
@@ -342,15 +346,17 @@ export function getOrderTableColumns(
         }
         // Fallback to factory/supplier object or computed field
         if (row.factory) {
-          if (typeof row.factory === 'object') {
-            if (row.factory.name) return row.factory.name;
+          if (typeof row.factory === 'object' && row.factory !== null) {
+            const factory = row.factory as Record<string, unknown>;
+            if (factory.name) return factory.name;
             return JSON.stringify(row.factory);
           }
           return String(row.factory);
         }
         if (row.supplier) {
-          if (typeof row.supplier === 'object') {
-            if (row.supplier.name) return row.supplier.name;
+          if (typeof row.supplier === 'object' && row.supplier !== null) {
+            const supplier = row.supplier as Record<string, unknown>;
+            if (supplier.name) return supplier.name;
             return JSON.stringify(row.supplier);
           }
           return String(row.supplier);

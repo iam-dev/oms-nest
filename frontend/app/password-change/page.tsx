@@ -16,7 +16,8 @@ function PasswordChangeForm() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const isExpired = expires ? Date.now() > Number(expires) : false;
+  // Compute once on mount — comparing against a static URL param never needs re-evaluation.
+  const [isExpired] = useState(() => (expires ? Date.now() > Number(expires) : false));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
