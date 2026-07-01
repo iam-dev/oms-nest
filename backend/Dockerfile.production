@@ -3,8 +3,11 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
-# Install ALL dependencies (dev deps needed for build/TypeScript compilation)
-RUN npm install
+# Install ALL dependencies (dev deps needed for build/TypeScript compilation).
+# Use `npm ci` — it installs from the lock exactly, skips peer re-resolution
+# (which is what breaks under the stricter npm in node:22-alpine when the tree
+# has pre-existing ELSPROBLEMS-level drift), and is faster.
+RUN npm ci
 COPY . .
 RUN npm run build
 
