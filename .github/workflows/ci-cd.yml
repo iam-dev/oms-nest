@@ -92,8 +92,12 @@ jobs:
             echo "::error::Found $critical critical and $high high severity production vulnerabilities"
             exit 1
           fi
-          # Generate dependency report
-          npm list --all --json > dependency-report.json
+          # Generate dependency report — `npm list` exits non-zero on any
+          # peer/version mismatch anywhere in the tree, even when the audit
+          # gate above passed. Match the soft-fail pattern used for
+          # `npm audit`: still write the JSON (which will include a
+          # `problems` field), but don't fail CI on it.
+          npm list --all --json > dependency-report.json || true
 
       - name: 📦 Frontend Dependency Audit
         working-directory: frontend
