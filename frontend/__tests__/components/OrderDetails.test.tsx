@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { OrderDetails } from '@/components/OrderDetails';
+import * as enrichedOrdersModule from '@/services/enrichedOrders';
 
 // ---------------------------------------------------------------------------
 // External service mocks
@@ -23,18 +24,18 @@ jest.mock('@/services/api-config', () => ({
 
 // Dialog: only render children when open
 jest.mock('@/components/ui/dialog', () => ({
-  Dialog: ({ children, open }: any) =>
+  Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
     open ? <div data-testid="dialog">{children}</div> : null,
-  DialogContent: ({ children }: any) => (
+  DialogContent: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="dialog-content">{children}</div>
   ),
-  DialogHeader: ({ children }: any) => <div>{children}</div>,
-  DialogTitle: ({ children }: any) => <h2>{children}</h2>,
-  DialogDescription: ({ children }: any) => <p>{children}</p>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
 }));
 
 jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, disabled }: any) => (
+  Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button onClick={onClick} disabled={disabled}>
       {children}
     </button>
@@ -42,7 +43,7 @@ jest.mock('@/components/ui/button', () => ({
 }));
 
 jest.mock('@/components/ui/select', () => ({
-  Select: ({ children, onValueChange, value }: any) => (
+  Select: ({ children, onValueChange, value }: { children: React.ReactNode; onValueChange?: (v: string) => void; value?: string }) => (
     <div data-testid="select-wrapper">
       <select
         value={value}
@@ -53,16 +54,16 @@ jest.mock('@/components/ui/select', () => ({
       </select>
     </div>
   ),
-  SelectContent: ({ children }: any) => <>{children}</>,
-  SelectItem: ({ children, value }: any) => (
+  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
     <option value={value}>{children}</option>
   ),
-  SelectTrigger: ({ children }: any) => <>{children}</>,
-  SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
 }));
 
 jest.mock('@/components/ui/textarea', () => ({
-  Textarea: ({ placeholder, value, onChange }: any) => (
+  Textarea: ({ placeholder, value, onChange }: { placeholder?: string; value?: string; onChange?: React.ChangeEventHandler<HTMLTextAreaElement> }) => (
     <textarea placeholder={placeholder} value={value} onChange={onChange} />
   ),
 }));
@@ -76,7 +77,7 @@ jest.mock('@/lib/generate-pdf', () => ({
 // ComprehensiveEditOrder — render a stub that is identifiable.
 // Mirror the real component's default: isDuplicate defaults to false when not supplied.
 jest.mock('@/components/ComprehensiveEditOrder', () => ({
-  ComprehensiveEditOrder: ({ isDuplicate = false, onClose }: any) => (
+  ComprehensiveEditOrder: ({ isDuplicate = false, onClose }: { isDuplicate?: boolean; onClose: () => void }) => (
     <div data-testid="comprehensive-edit-order">
       <span data-testid="is-duplicate">{String(isDuplicate)}</span>
       <button onClick={onClose} data-testid="close-edit">
@@ -94,7 +95,8 @@ jest.mock('@/utils/logger', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const { fetchOrderDetail, createDraftOrder } = require('@/services/enrichedOrders');
+const fetchOrderDetail = enrichedOrdersModule.fetchOrderDetail as jest.Mock;
+const createDraftOrder = enrichedOrdersModule.createDraftOrder as jest.Mock;
 
 const mockOrderDetail = {
   id: 42,

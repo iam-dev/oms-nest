@@ -30,6 +30,7 @@ export function OptionAddModal({ isOpen, onClose, onSave }: OptionAddModalProps)
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): form reset on open is intentional UI initialization, not external sync
       setNewOption({
         name: '',
         sequence: 0,

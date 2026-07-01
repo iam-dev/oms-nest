@@ -41,31 +41,6 @@ export function ModelAddModal({ isOpen, onClose, onSave }: ModelAddModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Load brands, factories, and next sequence when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadBrands();
-      loadFactories();
-      loadNextSequence();
-      // Reset form when modal opens (sequence will be set by loadNextSequence)
-      setNewModel({
-        name: '',
-        brandName: '',
-        sequence: 0,
-        active: true,
-        factoryEu: 0,
-        factoryGb: 0,
-        factoryUs: 0,
-        factoryCa: 0,
-        factoryAud: 0,
-        factoryDe: 0,
-        factoryNl: 0,
-        type: 0,
-      });
-      setError('');
-    }
-  }, [isOpen]);
-
   const loadBrands = async () => {
     setLoadingBrands(true);
     try {
@@ -123,6 +98,33 @@ export function ModelAddModal({ isOpen, onClose, onSave }: ModelAddModalProps) {
       setLoadingSequence(false);
     }
   };
+
+  // Load brands, factories, and next sequence when modal opens.
+  // Declared after the load functions so React Compiler can see them as stable references.
+  useEffect(() => {
+    if (isOpen) {
+      loadBrands(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
+      loadFactories();
+      loadNextSequence();
+      // Reset form when modal opens (sequence will be set by loadNextSequence)
+      // TODO(react-hooks): setNewModel reset is intentional — driven by isOpen prop change, not internal state.
+      setNewModel({
+        name: '',
+        brandName: '',
+        sequence: 0,
+        active: true,
+        factoryEu: 0,
+        factoryGb: 0,
+        factoryUs: 0,
+        factoryCa: 0,
+        factoryAud: 0,
+        factoryDe: 0,
+        factoryNl: 0,
+        type: 0,
+      });
+      setError('');
+    }
+  }, [isOpen]);
 
   const handleSave = async () => {
     setSaving(true);

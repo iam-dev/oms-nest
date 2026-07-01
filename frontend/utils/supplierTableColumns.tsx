@@ -23,7 +23,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'username',
@@ -36,7 +36,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'city',
@@ -49,7 +49,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'country',
@@ -62,7 +62,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
     },
     {
       key: 'enabled',
@@ -79,7 +79,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: any) => {
+      render: (v: unknown) => {
         const status = v ? 'ACTIVE' : 'INACTIVE';
         return <StatusBadge status={status} type="supplier" />;
       },
@@ -95,7 +95,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: any) => v ?? 'Never',
+      render: (v: unknown) => (v != null ? String(v) : 'Never'),
     },
   ];
 }

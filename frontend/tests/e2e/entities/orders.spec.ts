@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Response } from '@playwright/test';
 import { AuthHelper, TEST_USERS } from '../shared/auth-helpers';
 import { ApiHelper, ENTITY_CONFIGS } from '../shared/api-helpers';
 
@@ -29,8 +29,8 @@ test.describe('Orders Entity Management', () => {
     expect(apiCall).toBeTruthy();
 
     // Verify API response structure
-    const response = await apiHelper.waitForApiResponse('/enriched_orders');
-    await apiHelper.validateEntityResponse('orders', { json: () => response });
+    const responseData = await apiHelper.waitForApiResponse('/enriched_orders');
+    await apiHelper.validateEntityResponse('orders', { json: async () => responseData } as unknown as Response);
   });
 
   test('should display orders in table format', async ({ page }) => {
@@ -306,21 +306,23 @@ test.describe('Orders Entity Management', () => {
     }
   });
 
-  test('should validate API response structure', async ({ page }) => {
+  test('should validate API response structure', async ({ page: _page }) => {
     await authHelper.waitForPageLoad();
 
     // Get the API response
-    const response = await apiHelper.waitForApiResponse('/enriched_orders');
+    const responseData = await apiHelper.waitForApiResponse('/enriched_orders');
+    const response = responseData as Record<string, unknown>;
 
     // Validate using our helper
-    await apiHelper.validateEntityResponse('orders', { json: () => response });
+    await apiHelper.validateEntityResponse('orders', { json: async () => response } as unknown as Response);
 
     // Additional specific validations for orders
     expect(response).toHaveProperty('hydra:member');
     expect(Array.isArray(response['hydra:member'])).toBe(true);
 
-    if (response['hydra:member'].length > 0) {
-      const firstOrder = response['hydra:member'][0];
+    const members = response['hydra:member'] as unknown[];
+    if (members.length > 0) {
+      const firstOrder = members[0] as Record<string, unknown>;
 
       // Check for required order fields
       expect(firstOrder).toHaveProperty('id');
@@ -328,12 +330,12 @@ test.describe('Orders Entity Management', () => {
       expect(firstOrder).toHaveProperty('orderStatus');
 
       // Check for relationship fields
-      if (firstOrder.customer) {
-        expect(firstOrder.customer).toHaveProperty('name');
+      if (firstOrder['customer']) {
+        expect(firstOrder['customer']).toHaveProperty('name');
       }
 
-      if (firstOrder.fitter) {
-        expect(firstOrder.fitter).toHaveProperty('name');
+      if (firstOrder['fitter']) {
+        expect(firstOrder['fitter']).toHaveProperty('name');
       }
     }
   });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { DataTable } from '@/components/shared/DataTable';
+import { DataTable, Column } from '@/components/shared/DataTable';
 import { getCustomerTableColumns, CustomerHeaderFilters, CustomerFilterChangeHandler } from '@/utils/customerTableColumns';
 
 interface Customer {
@@ -37,7 +37,10 @@ export function CustomersTable({
   error,
 }: CustomersTableProps) {
   // Prepare columns using the new utility
-  const columns = getCustomerTableColumns(filterValues, onFilterChange);
+  // Cast required: customerTableColumns renders use `row: CustomerRow` (required) but
+  // DataTable.Column<T>.render declares `row?: T` (optional). Both shapes are structurally
+  // compatible at runtime; the cast narrows the type without widening to any.
+  const columns = getCustomerTableColumns(filterValues, onFilterChange) as unknown as Column<Customer>[];
 
   return (
     <div className="space-y-4">

@@ -13,15 +13,17 @@ export class ApiValidators {
    */
   static validateHydraCollection(response: ApiResponse, expectedEntityType?: string): void {
     expect(response.status).toBe(200);
-    expect(response.data).toHaveProperty('hydra:member');
-    expect(Array.isArray(response.data['hydra:member'])).toBe(true);
+    const data = response.data as Record<string, unknown>;
+    expect(data).toHaveProperty('hydra:member');
+    expect(Array.isArray(data['hydra:member'])).toBe(true);
 
     // Check for pagination metadata
-    expect(response.data).toHaveProperty('hydra:totalItems');
-    expect(typeof response.data['hydra:totalItems']).toBe('number');
+    expect(data).toHaveProperty('hydra:totalItems');
+    expect(typeof data['hydra:totalItems']).toBe('number');
 
-    if (response.data['hydra:member'].length > 0) {
-      const firstEntity = response.data['hydra:member'][0];
+    const members = data['hydra:member'] as unknown[];
+    if (members.length > 0) {
+      const firstEntity = members[0];
 
       // All entities should have an ID
       expect(firstEntity).toHaveProperty('id');
@@ -29,7 +31,8 @@ export class ApiValidators {
       // Check for @type if specified
       if (expectedEntityType) {
         expect(firstEntity).toHaveProperty('@type');
-        expect(firstEntity['@type']).toContain(expectedEntityType);
+        const firstEntityRecord = firstEntity as Record<string, unknown>;
+        expect(firstEntityRecord['@type']).toContain(expectedEntityType);
       }
     }
   }
@@ -37,7 +40,7 @@ export class ApiValidators {
   /**
    * Validate individual entity structure
    */
-  static validateEntity(entity: any, requiredFields: string[]): void {
+  static validateEntity(entity: Record<string, unknown>, requiredFields: string[]): void {
     expect(entity).toBeDefined();
     expect(typeof entity).toBe('object');
     expect(entity).toHaveProperty('id');
@@ -51,18 +54,19 @@ export class ApiValidators {
    * Validate pagination parameters in response
    */
   static validatePagination(response: ApiResponse, expectedMinItems = 0): void {
-    expect(response.data).toHaveProperty('hydra:totalItems');
-    expect(response.data['hydra:totalItems']).toBeGreaterThanOrEqual(expectedMinItems);
+    const data = response.data as Record<string, unknown>;
+    expect(data).toHaveProperty('hydra:totalItems');
+    expect(data['hydra:totalItems']).toBeGreaterThanOrEqual(expectedMinItems);
 
-    if (response.data['hydra:view']) {
-      expect(response.data['hydra:view']).toHaveProperty('@type', 'hydra:PartialCollectionView');
+    if (data['hydra:view']) {
+      expect(data['hydra:view']).toHaveProperty('@type', 'hydra:PartialCollectionView');
     }
   }
 
   /**
    * Validate REST query parameters in URL
    */
-  static validateQueryParams(url: string, expectedParams: Record<string, any>): void {
+  static validateQueryParams(url: string, expectedParams: Record<string, string | number | boolean | null>): void {
     const urlObj = new URL(url);
 
     Object.entries(expectedParams).forEach(([param, expectedValue]) => {
@@ -159,14 +163,14 @@ export class ApiTestUtils {
   static async createTestEntity(
     apiClient: ApiClient,
     endpoint: string,
-    data: any,
-    cleanupRegistry?: any[]
-  ): Promise<any> {
+    data: Record<string, unknown>,
+    cleanupRegistry?: Array<{ endpoint: string; id: string | number }>
+  ): Promise<Record<string, unknown>> {
     const response = await apiClient.post(endpoint, data);
-    const entity = response.data;
+    const entity = response.data as Record<string, unknown>;
 
     if (cleanupRegistry && entity.id) {
-      cleanupRegistry.push({ endpoint, id: entity.id });
+      cleanupRegistry.push({ endpoint, id: entity.id as string | number });
     }
 
     return entity;
@@ -195,19 +199,19 @@ export class ApiTestUtils {
   /**
    * Generate unique test data
    */
-  static generateUniqueData(baseData: Record<string, any>): Record<string, any> {
+  static generateUniqueData(baseData: Record<string, unknown>): Record<string, unknown> {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 10000);
     const suffix = `_${timestamp}_${random}`;
 
-    const result = { ...baseData };
+    const result: Record<string, unknown> = { ...baseData };
 
     // Add suffix to common string fields
     ['name', 'username', 'email', 'title'].forEach(field => {
       if (typeof result[field] === 'string') {
         if (field === 'email') {
           // Handle email format specially
-          const [localPart, domain] = result[field].split('@');
+          const [localPart, domain] = (result[field] as string).split('@');
           result[field] = `${localPart}${suffix}@${domain}`;
         } else {
           result[field] = `${result[field]}${suffix}`;
@@ -221,20 +225,20 @@ export class ApiTestUtils {
   /**
    * Extract entity ID from various response formats
    */
-  static extractEntityId(entity: any): string | number | null {
+  static extractEntityId(entity: Record<string, unknown>): string | number | null {
     // Try common ID field names (legacy entities use integer IDs)
     const idFields = ['id', '@id', 'entityId'];
 
     for (const field of idFields) {
       if (entity[field] !== undefined && entity[field] !== null) {
         // Extract ID from IRI format (e.g., "/api/entities/123")
-        if (typeof entity[field] === 'string' && entity[field].includes('/')) {
-          const matches = entity[field].match(/\/(\d+)$/);
+        if (typeof entity[field] === 'string' && (entity[field] as string).includes('/')) {
+          const matches = (entity[field] as string).match(/\/(\d+)$/);
           if (matches) {
             return matches[1];
           }
         }
-        return entity[field];
+        return entity[field] as string | number;
       }
     }
 
@@ -244,7 +248,7 @@ export class ApiTestUtils {
   /**
    * Compare entities while ignoring metadata fields
    */
-  static compareEntities(entity1: any, entity2: any, ignoreFields: string[] = []): boolean {
+  static compareEntities(entity1: Record<string, unknown>, entity2: Record<string, unknown>, ignoreFields: string[] = []): boolean {
     const defaultIgnoreFields = [
       'id', '@id', '@type', '@context',
       'createdAt', 'updatedAt', 'deletedAt',

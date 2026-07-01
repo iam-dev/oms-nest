@@ -1,9 +1,33 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { getSupplierTableColumns, type SupplierHeaderFilters, type SetSupplierHeaderFilters } from '@/utils/supplierTableColumns';
-import type { Supplier } from '@/types/Supplier';
 
-const mockSupplier: any = {
+interface MockSupplierRow {
+  id: number;
+  name: string;
+  username: string;
+  email: string;
+  city: string;
+  country: string;
+  phone: string;
+  address: string;
+  enabled: boolean;
+  lastLogin: string | null;
+  region: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
+}
+
+/** Local column shape with a 2-arg render — matches actual Ant-style column contracts */
+interface ColumnDef {
+  key: string;
+  title: React.ReactNode;
+  render: (value: unknown, row: unknown) => React.ReactNode;
+}
+
+const mockSupplier: MockSupplierRow = {
   id: 1,
   name: 'Premium Saddle Co.',
   username: 'premiumsaddle',
@@ -24,10 +48,15 @@ const mockSupplier: any = {
 const mockHeaderFilters: SupplierHeaderFilters = {};
 const mockSetHeaderFilters: SetSupplierHeaderFilters = jest.fn();
 
+/** Cast the raw columns to the typed ColumnDef shape used by tests. */
+function getColumns(): ColumnDef[] {
+  return getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters) as unknown as ColumnDef[];
+}
+
 describe('Supplier Table Columns', () => {
   describe('Column Generation', () => {
     it('generates all expected columns', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
 
       expect(columns).toHaveLength(7);
 
@@ -42,7 +71,7 @@ describe('Supplier Table Columns', () => {
     });
 
     it('sets correct column titles', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
 
       const nameCol = columns.find(col => col.key === 'name');
       expect(nameCol?.title).toBeDefined();
@@ -64,7 +93,7 @@ describe('Supplier Table Columns', () => {
     });
 
     it('configures columns with TableHeaderFilter titles', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
 
       columns.forEach(column => {
         expect(column.title).toBeDefined();
@@ -75,13 +104,13 @@ describe('Supplier Table Columns', () => {
 
   describe('Text Column Rendering', () => {
     it('renders name column correctly', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const nameCol = columns.find(col => col.key === 'name');
 
       expect(nameCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (nameCol?.render as any)?.(mockSupplier.name, mockSupplier);
+        const renderedValue = nameCol?.render(mockSupplier.name, mockSupplier);
         return <div data-testid="supplier-name">{renderedValue}</div>;
       };
 
@@ -90,13 +119,13 @@ describe('Supplier Table Columns', () => {
     });
 
     it('renders username column correctly', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const usernameCol = columns.find(col => col.key === 'username');
 
       expect(usernameCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (usernameCol?.render as any)?.(mockSupplier.username, mockSupplier);
+        const renderedValue = usernameCol?.render(mockSupplier.username, mockSupplier);
         return <div data-testid="supplier-username">{renderedValue}</div>;
       };
 
@@ -105,13 +134,13 @@ describe('Supplier Table Columns', () => {
     });
 
     it('renders city column correctly', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const cityCol = columns.find(col => col.key === 'city');
 
       expect(cityCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (cityCol?.render as any)?.(mockSupplier.city, mockSupplier);
+        const renderedValue = cityCol?.render(mockSupplier.city, mockSupplier);
         return <div data-testid="supplier-city">{renderedValue}</div>;
       };
 
@@ -120,13 +149,13 @@ describe('Supplier Table Columns', () => {
     });
 
     it('renders country column correctly', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const countryCol = columns.find(col => col.key === 'country');
 
       expect(countryCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (countryCol?.render as any)?.(mockSupplier.country, mockSupplier);
+        const renderedValue = countryCol?.render(mockSupplier.country, mockSupplier);
         return <div data-testid="supplier-country">{renderedValue}</div>;
       };
 
@@ -137,13 +166,13 @@ describe('Supplier Table Columns', () => {
 
   describe('Status Column Rendering', () => {
     it('renders enabled status for active supplier', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const enabledCol = columns.find(col => col.key === 'enabled');
 
       expect(enabledCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (enabledCol?.render as any)?.(true, mockSupplier);
+        const renderedValue = enabledCol?.render(true, mockSupplier);
         return <div data-testid="supplier-status">{renderedValue}</div>;
       };
 
@@ -153,11 +182,11 @@ describe('Supplier Table Columns', () => {
 
     it('renders enabled status for inactive supplier', () => {
       const inactiveSupplier = { ...mockSupplier, enabled: false };
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const enabledCol = columns.find(col => col.key === 'enabled');
 
       const TestComponent = () => {
-        const renderedValue = (enabledCol?.render as any)?.(false, inactiveSupplier);
+        const renderedValue = enabledCol?.render(false, inactiveSupplier);
         return <div data-testid="supplier-status">{renderedValue}</div>;
       };
 
@@ -168,13 +197,13 @@ describe('Supplier Table Columns', () => {
 
   describe('Date Formatting', () => {
     it('formats last login date correctly', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const lastLoginCol = columns.find(col => col.key === 'lastLogin');
 
       expect(lastLoginCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (lastLoginCol?.render as any)?.(mockSupplier.lastLogin, mockSupplier);
+        const renderedValue = lastLoginCol?.render(mockSupplier.lastLogin, mockSupplier);
         return <div data-testid="last-login">{renderedValue}</div>;
       };
 
@@ -184,11 +213,11 @@ describe('Supplier Table Columns', () => {
 
     it('handles null last login date', () => {
       const supplierWithoutDate = { ...mockSupplier, lastLogin: null };
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const lastLoginCol = columns.find(col => col.key === 'lastLogin');
 
       const TestComponent = () => {
-        const renderedValue = (lastLoginCol?.render as any)?.(null, supplierWithoutDate);
+        const renderedValue = lastLoginCol?.render(null, supplierWithoutDate);
         return <div data-testid="last-login">{renderedValue}</div>;
       };
 
@@ -199,11 +228,11 @@ describe('Supplier Table Columns', () => {
 
   describe('Error Handling', () => {
     it('handles missing supplier data gracefully', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const nameCol = columns.find(col => col.key === 'name');
 
       const TestComponent = () => {
-        const renderedValue = (nameCol?.render as any)?.(null, null);
+        const renderedValue = nameCol?.render(null, null);
         return <div data-testid="supplier-name">{renderedValue || 'No name'}</div>;
       };
 
@@ -212,11 +241,11 @@ describe('Supplier Table Columns', () => {
     });
 
     it('handles missing username gracefully', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const usernameCol = columns.find(col => col.key === 'username');
 
       const TestComponent = () => {
-        const renderedValue = (usernameCol?.render as any)?.(null, mockSupplier);
+        const renderedValue = usernameCol?.render(null, mockSupplier);
         return <div data-testid="supplier-username">{renderedValue || 'No username'}</div>;
       };
 
@@ -225,11 +254,11 @@ describe('Supplier Table Columns', () => {
     });
 
     it('handles missing city gracefully', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const cityCol = columns.find(col => col.key === 'city');
 
       const TestComponent = () => {
-        const renderedValue = (cityCol?.render as any)?.(null, mockSupplier);
+        const renderedValue = cityCol?.render(null, mockSupplier);
         return <div data-testid="supplier-city">{renderedValue || 'No city'}</div>;
       };
 
@@ -238,11 +267,11 @@ describe('Supplier Table Columns', () => {
     });
 
     it('handles missing country gracefully', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const countryCol = columns.find(col => col.key === 'country');
 
       const TestComponent = () => {
-        const renderedValue = (countryCol?.render as any)?.(null, mockSupplier);
+        const renderedValue = countryCol?.render(null, mockSupplier);
         return <div data-testid="supplier-country">{renderedValue || 'No country'}</div>;
       };
 
@@ -254,11 +283,11 @@ describe('Supplier Table Columns', () => {
   describe('Special Character Handling', () => {
     it('handles special characters in name', () => {
       const supplierWithSpecialChars = { ...mockSupplier, name: 'Müller & Söhne GmbH' };
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const nameCol = columns.find(col => col.key === 'name');
 
       const TestComponent = () => {
-        const renderedValue = (nameCol?.render as any)?.(supplierWithSpecialChars.name, supplierWithSpecialChars);
+        const renderedValue = nameCol?.render(supplierWithSpecialChars.name, supplierWithSpecialChars);
         return <div data-testid="supplier-name">{renderedValue}</div>;
       };
 
@@ -268,11 +297,11 @@ describe('Supplier Table Columns', () => {
 
     it('handles international cities', () => {
       const supplierWithInternationalCity = { ...mockSupplier, city: 'München' };
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const cityCol = columns.find(col => col.key === 'city');
 
       const TestComponent = () => {
-        const renderedValue = (cityCol?.render as any)?.(supplierWithInternationalCity.city, supplierWithInternationalCity);
+        const renderedValue = cityCol?.render(supplierWithInternationalCity.city, supplierWithInternationalCity);
         return <div data-testid="supplier-city">{renderedValue}</div>;
       };
 
@@ -283,7 +312,7 @@ describe('Supplier Table Columns', () => {
 
   describe('Column Order', () => {
     it('maintains expected column order', () => {
-      const columns = getSupplierTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const columnKeys = columns.map(col => col.key);
 
       expect(columnKeys).toEqual([

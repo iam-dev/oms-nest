@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "test": "jest",
     "test:api": "jest --config jest.config.api.js",
@@ -60,7 +60,7 @@
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^4.2.0",
     "lucide-react": "^0.488.0",
-    "next": "^15.5.11",
+    "next": "^16.2.9",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-day-picker": "^9.13.0",
@@ -90,7 +90,7 @@
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
-    "eslint-config-next": "15.3.0",
+    "eslint-config-next": "^16.2.9",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "node-fetch": "^2.7.0",
@@ -103,6 +103,7 @@
   },
   "overrides": {
     "cross-spawn": ">=7.0.5",
-    "tar": ">=7.5.7"
+    "tar": ">=7.5.7",
+    "tmp": ">=0.2.6"
   }
 }

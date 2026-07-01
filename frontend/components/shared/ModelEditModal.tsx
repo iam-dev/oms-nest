@@ -28,36 +28,6 @@ export function ModelEditModal({ model, isOpen, onClose, onSave }: ModelEditModa
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Load brands and factories when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadBrands();
-      loadFactories();
-    }
-  }, [isOpen]);
-
-  // Set initial model data
-  useEffect(() => {
-    if (model) {
-      setEditedModel({
-        ...model,
-        name: model.name || '',
-        brandName: model.brandName || '',
-        sequence: model.sequence || 0,
-        active: model.active ?? true,
-        factoryEu: model.factoryEu ?? 0,
-        factoryGb: model.factoryGb ?? 0,
-        factoryUs: model.factoryUs ?? 0,
-        factoryCa: model.factoryCa ?? 0,
-        factoryAud: model.factoryAud ?? 0,
-        factoryDe: model.factoryDe ?? 0,
-        factoryNl: model.factoryNl ?? 0,
-        type: model.type ?? 0,
-      });
-      setError('');
-    }
-  }, [model]);
-
   const loadBrands = async () => {
     setLoadingBrands(true);
     try {
@@ -91,6 +61,38 @@ export function ModelEditModal({ model, isOpen, onClose, onSave }: ModelEditModa
       setLoadingFactories(false);
     }
   };
+
+  // Load brands and factories when modal opens.
+  // Declared after the load functions so React Compiler can resolve them as stable references.
+  useEffect(() => {
+    if (isOpen) {
+      loadBrands(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
+      loadFactories();
+    }
+  }, [isOpen]);
+
+  // Sync form state when the model prop changes (e.g. user picks a different row to edit).
+  useEffect(() => {
+    if (model) {
+      // TODO(react-hooks): setEditedModel initialises derived state from the `model` prop — intentional controlled reset.
+      setEditedModel({ // eslint-disable-line react-hooks/set-state-in-effect -- driven by model prop change
+        ...model,
+        name: model.name || '',
+        brandName: model.brandName || '',
+        sequence: model.sequence || 0,
+        active: model.active ?? true,
+        factoryEu: model.factoryEu ?? 0,
+        factoryGb: model.factoryGb ?? 0,
+        factoryUs: model.factoryUs ?? 0,
+        factoryCa: model.factoryCa ?? 0,
+        factoryAud: model.factoryAud ?? 0,
+        factoryDe: model.factoryDe ?? 0,
+        factoryNl: model.factoryNl ?? 0,
+        type: model.type ?? 0,
+      });
+      setError('');
+    }
+  }, [model]);
 
   const handleSave = async () => {
     if (!editedModel || !model) return;

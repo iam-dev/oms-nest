@@ -1,7 +1,8 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { UserRole } from '@/types/Role';
-import { getAllRoles } from '../../utils/roleTestHelpers';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as userPermissionsModule from '@/components/UserPermissions';
 
 // Helper function for permission checking (outside of mock to avoid scope issues)
 function mockGetPermissionForRoleAndFeature(role: string, permission: string): boolean {
@@ -83,9 +84,9 @@ jest.mock('@/hooks/useUserRole', () => ({
   useUserRole: jest.fn()
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
+const mockUseUserRole = (useUserRoleModule as unknown as { useUserRole: jest.Mock }).useUserRole;
 
-const UserPermissions = require('@/components/UserPermissions').default;
+const UserPermissions = (userPermissionsModule as unknown as { default: React.ComponentType }).default;
 
 describe('UserPermissions Component', () => {
   beforeEach(() => {

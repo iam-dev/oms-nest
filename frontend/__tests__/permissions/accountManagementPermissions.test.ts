@@ -1,6 +1,5 @@
 import { hasScreenPermission, SCREEN_PERMISSIONS } from '@/utils/rolePermissions';
 import { UserRole } from '@/types/Role';
-import { getAllRoles } from '../utils/roleTestHelpers';
 
 describe('Account Management Permissions', () => {
   describe('SUPERVISOR-only Permissions', () => {

@@ -7,6 +7,6 @@ declare namespace jest {
     /**
      * Checks if received value is one of the expected values
      */
-    toBeOneOf(expected: Array<any>): R;
+    toBeOneOf(expected: Array<unknown>): R;
   }
 }

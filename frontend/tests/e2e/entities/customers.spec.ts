@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Response } from '@playwright/test';
 import { AuthHelper, TEST_USERS } from '../shared/auth-helpers';
 import { ApiHelper } from '../shared/api-helpers';
 
@@ -25,14 +25,16 @@ test.describe('Customers Entity Management', () => {
     await expect(page.locator('h1, [data-testid="page-title"]')).toBeVisible();
 
     // Wait for API call
-    const response = await apiHelper.waitForApiResponse('/customers');
+    const responseData = await apiHelper.waitForApiResponse('/customers');
+    const response = responseData as Record<string, unknown>;
 
     // Validate response structure
-    await apiHelper.validateEntityResponse('customers', { json: () => response });
+    await apiHelper.validateEntityResponse('customers', { json: async () => response } as unknown as Response);
 
     // Validate customer-specific fields
-    if (response['hydra:member']?.length > 0) {
-      const firstCustomer = response['hydra:member'][0];
+    const members = response['hydra:member'];
+    if (Array.isArray(members) && members.length > 0) {
+      const firstCustomer = members[0] as Record<string, unknown>;
       expect(firstCustomer).toHaveProperty('id');
       expect(firstCustomer).toHaveProperty('name');
       expect(firstCustomer).toHaveProperty('email');
@@ -233,14 +235,15 @@ test.describe('Customers Entity Management', () => {
   });
 
   test('should validate customer data integrity', async () => {
-    const response = await apiHelper.waitForApiResponse('/customers');
+    const responseData = await apiHelper.waitForApiResponse('/customers');
+    const response = responseData as Record<string, unknown>;
 
     // Validate response structure
     expect(response).toHaveProperty('hydra:member');
     expect(Array.isArray(response['hydra:member'])).toBe(true);
 
     // Validate each customer has required fields
-    response['hydra:member'].forEach((customer: Record<string, unknown>, index: number) => {
+    (response['hydra:member'] as Record<string, unknown>[]).forEach((customer: Record<string, unknown>, index: number) => {
       expect(customer).toHaveProperty('id', `Customer ${index} should have id`);
       expect(customer).toHaveProperty('name', `Customer ${index} should have name`);
 

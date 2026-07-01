@@ -3,16 +3,32 @@ import { render, screen } from '@testing-library/react';
 import { getOrderTableColumns } from '@/utils/orderTableColumns';
 import type { Order } from '@/types/Order';
 
-const mockOrder: any = {
+type RenderFn = (value: unknown, row?: unknown) => React.ReactNode;
+
+const mockOrder: Order = {
   id: 1,
+  customerId: 1,
   orderNumber: 'ORD-001',
+  status: 'pending',
+  priority: 'normal',
+  fitterId: 1,
+  factoryId: 1,
+  saddleSpecifications: {},
+  specialInstructions: null,
+  estimatedDeliveryDate: null,
+  actualDeliveryDate: null,
+  createdAt: new Date('2024-01-15T10:30:00Z'),
+  updatedAt: new Date('2024-01-16T14:30:00Z'),
+  totalAmount: 1299.99,
+  depositPaid: 0,
+  balanceOwing: 1299.99,
+  measurements: null,
+  isUrgent: false,
+  // Convenience/computed fields used by columns
   customer: { id: 1, name: 'John Customer' },
   fitter: { id: 1, name: 'Jane Fitter' },
-  supplier: { id: 1, name: 'Acme Supplier' },
-  status: 'pending',
+  factory: { id: 1, name: 'Acme Supplier' },
   urgent: false,
-  createdAt: '2024-01-15T10:30:00Z',
-  updatedAt: '2024-01-16T14:30:00Z',
   seatSize: 'M',
   reference: 'REF-SEAT-M-001',
   brand: { id: 1, name: 'Test Brand' },
@@ -93,7 +109,7 @@ describe('Order Table Columns', () => {
       
       // Test the render function
       const TestComponent = () => {
-        const renderedValue = (seatSizeCol?.render as any)?.(mockOrder.seatSize, mockOrder);
+        const renderedValue = (seatSizeCol?.render as RenderFn)?.(mockOrder.seatSize, mockOrder);
         return <div data-testid="seat-size">{renderedValue}</div>;
       };
 
@@ -112,7 +128,7 @@ describe('Order Table Columns', () => {
       const seatSizeCol = columns.find(col => col.key === 'seatSize');
 
       const TestComponent = () => {
-        const renderedValue = (seatSizeCol?.render as any)?.(orderWithComplexRef.seatSize, orderWithComplexRef);
+        const renderedValue = (seatSizeCol?.render as RenderFn)?.(orderWithComplexRef.seatSize, orderWithComplexRef);
         return <div data-testid="seat-size">{renderedValue}</div>;
       };
 
@@ -131,7 +147,7 @@ describe('Order Table Columns', () => {
       const seatSizeCol = columns.find(col => col.key === 'seatSize');
 
       const TestComponent = () => {
-        const renderedValue = (seatSizeCol?.render as any)?.(orderWithoutRef.seatSize, orderWithoutRef);
+        const renderedValue = (seatSizeCol?.render as RenderFn)?.(orderWithoutRef.seatSize, orderWithoutRef);
         return <div data-testid="seat-size">{renderedValue}</div>;
       };
 
@@ -150,7 +166,7 @@ describe('Order Table Columns', () => {
       const seatSizeCol = columns.find(col => col.key === 'seatSize');
 
       const TestComponent = () => {
-        const renderedValue = (seatSizeCol?.render as any)?.(orderWithInvalidRef.seatSize, orderWithInvalidRef);
+        const renderedValue = (seatSizeCol?.render as RenderFn)?.(orderWithInvalidRef.seatSize, orderWithInvalidRef);
         return <div data-testid="seat-size">{renderedValue}</div>;
       };
 
@@ -167,7 +183,7 @@ describe('Order Table Columns', () => {
       expect(statusCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (statusCol?.render as any)?.(mockOrder.status, mockOrder);
+        const renderedValue = (statusCol?.render as RenderFn)?.(mockOrder.status, mockOrder);
         return <div data-testid="status-badge">{renderedValue}</div>;
       };
 
@@ -184,10 +200,10 @@ describe('Order Table Columns', () => {
       const statuses = ['pending', 'approved', 'completed', 'cancelled'];
       
       statuses.forEach(status => {
-        const orderWithStatus = { ...mockOrder, status: status as any };
+        const orderWithStatus = { ...mockOrder, status };
         
         const TestComponent = () => {
-          const renderedValue = (statusCol?.render as any)?.(orderWithStatus.status, orderWithStatus);
+          const renderedValue = (statusCol?.render as RenderFn)?.(orderWithStatus.status, orderWithStatus);
           return <div data-testid={`status-${status}`}>{renderedValue}</div>;
         };
 
@@ -205,7 +221,7 @@ describe('Order Table Columns', () => {
       expect(dateCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (dateCol?.render as any)?.(mockOrder.createdAt, mockOrder);
+        const renderedValue = (dateCol?.render as RenderFn)?.(mockOrder.createdAt, mockOrder);
         return <div data-testid="order-date">{renderedValue}</div>;
       };
 
@@ -222,7 +238,7 @@ describe('Order Table Columns', () => {
       expect(dateCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (dateCol?.render as any)?.(mockOrder.createdAt, mockOrder);
+        const renderedValue = (dateCol?.render as RenderFn)?.(mockOrder.createdAt, mockOrder);
         return <div data-testid="order-date-2">{renderedValue}</div>;
       };
 
@@ -242,7 +258,7 @@ describe('Order Table Columns', () => {
       const completedAtCol = columns.find(col => col.key === 'completedAt');
 
       const TestComponent = () => {
-        const renderedValue = (completedAtCol?.render as any)?.(orderWithoutCompletedDate.completedAt, orderWithoutCompletedDate);
+        const renderedValue = (completedAtCol?.render as RenderFn)?.(orderWithoutCompletedDate.completedAt, orderWithoutCompletedDate);
         return <div data-testid="completed-date">{renderedValue || 'Not completed'}</div>;
       };
 
@@ -261,7 +277,7 @@ describe('Order Table Columns', () => {
       expect(customerCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (customerCol?.render as any)?.(mockOrder.customer, mockOrder);
+        const renderedValue = (customerCol?.render as RenderFn)?.(mockOrder.customer, mockOrder);
         return <div data-testid="customer-name">{renderedValue}</div>;
       };
 
@@ -274,7 +290,7 @@ describe('Order Table Columns', () => {
       const fitterCol = columns.find(col => col.key === 'fitter');
 
       const TestComponent = () => {
-        const renderedValue = (fitterCol?.render as any)?.(mockOrder.fitter, mockOrder);
+        const renderedValue = (fitterCol?.render as RenderFn)?.(mockOrder.fitter, mockOrder);
         return <div data-testid="fitter-name">{renderedValue}</div>;
       };
 
@@ -287,7 +303,7 @@ describe('Order Table Columns', () => {
       const factoryCol = columns.find(col => col.key === 'factory');
 
       const TestComponent = () => {
-        const renderedValue = (factoryCol?.render as any)?.(mockOrder.supplier, mockOrder);
+        const renderedValue = (factoryCol?.render as RenderFn)?.(mockOrder.supplier, mockOrder);
         return <div data-testid="factory-name">{renderedValue}</div>;
       };
 
@@ -301,7 +317,7 @@ describe('Order Table Columns', () => {
 
       const orderWithBrand = { ...mockOrder, brandName: 'Test Brand', modelName: 'Test Model' };
       const TestComponent = () => {
-        const renderedValue = (saddleCol?.render as any)?.(null, orderWithBrand);
+        const renderedValue = (saddleCol?.render as RenderFn)?.(null, orderWithBrand);
         return <div data-testid="brand-name">{renderedValue}</div>;
       };
 
@@ -318,7 +334,7 @@ describe('Order Table Columns', () => {
       expect(urgentCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (urgentCol?.render as any)?.(mockOrder.urgent, mockOrder);
+        const renderedValue = (urgentCol?.render as RenderFn)?.(mockOrder.urgent, mockOrder);
         return <div data-testid="urgent-status">{renderedValue}</div>;
       };
 
@@ -334,7 +350,7 @@ describe('Order Table Columns', () => {
       const urgentCol = columns.find(col => col.key === 'urgent');
 
       const TestComponent = () => {
-        const renderedValue = (urgentCol?.render as any)?.(urgentOrder.urgent, urgentOrder);
+        const renderedValue = (urgentCol?.render as RenderFn)?.(urgentOrder.urgent, urgentOrder);
         return <div data-testid="urgent-status">{renderedValue}</div>;
       };
 
@@ -356,7 +372,7 @@ describe('Order Table Columns', () => {
       const customerCol = columns.find(col => col.key === 'customer');
 
       const TestComponent = () => {
-        const renderedValue = (customerCol?.render as any)?.(orderWithoutCustomer.customer, orderWithoutCustomer);
+        const renderedValue = (customerCol?.render as RenderFn)?.(orderWithoutCustomer.customer, orderWithoutCustomer);
         return <div data-testid="customer-name">{renderedValue}</div>;
       };
 
@@ -374,7 +390,7 @@ describe('Order Table Columns', () => {
       const fitterCol = columns.find(col => col.key === 'fitter');
 
       const TestComponent = () => {
-        const renderedValue = (fitterCol?.render as any)?.(orderWithoutFitter.fitter, orderWithoutFitter);
+        const renderedValue = (fitterCol?.render as RenderFn)?.(orderWithoutFitter.fitter, orderWithoutFitter);
         return <div data-testid="fitter-name">{renderedValue}</div>;
       };
 
@@ -393,7 +409,7 @@ describe('Order Table Columns', () => {
       const factoryCol = columns.find(col => col.key === 'factory');
 
       const TestComponent = () => {
-        const renderedValue = (factoryCol?.render as any)?.(orderWithoutFactory.factory, orderWithoutFactory);
+        const renderedValue = (factoryCol?.render as RenderFn)?.(orderWithoutFactory.factory, orderWithoutFactory);
         return <div data-testid="factory-name">{renderedValue}</div>;
       };
 

@@ -59,6 +59,9 @@ export default function Extras() {
 
   // Fetch extras when dependencies change
   useEffect(() => {
+    // TODO(react-hooks): fetchExtrasData is a useCallback that calls setState internally;
+    // this is the standard async fetch-on-mount/dep-change pattern and is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchExtrasData();
   }, [fetchExtrasData]);
   

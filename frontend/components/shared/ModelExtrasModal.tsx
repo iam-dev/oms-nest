@@ -67,6 +67,7 @@ export function ModelExtrasModal({ model, isOpen, onClose }: ModelExtrasModalPro
 
   useEffect(() => {
     if (isOpen && model) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): loadData triggers async fetch+setState; standard data-on-open pattern
       loadData();
     }
   }, [isOpen, model, loadData]);

@@ -46,8 +46,8 @@ export interface OrderEditData {
   seatSizes: string[];
   
   // Related data
-  orderLines: any[];
-  comments: any[];
+  orderLines: unknown[];
+  comments: unknown[];
   
   // Flags
   isStock: boolean;
@@ -130,7 +130,7 @@ export async function fetchOrderEditData(orderId: number): Promise<OrderEditData
 /**
  * Simple search functions using existing endpoints
  */
-export async function searchCustomers(searchTerm: string): Promise<any[]> {
+export async function searchCustomers(searchTerm: string): Promise<Record<string, unknown>[]> {
   try {
     const response = await fetchEntities({
       entity: 'customers',
@@ -144,7 +144,7 @@ export async function searchCustomers(searchTerm: string): Promise<any[]> {
   }
 }
 
-export async function searchFitters(searchTerm: string): Promise<any[]> {
+export async function searchFitters(searchTerm: string): Promise<Record<string, unknown>[]> {
   try {
     const response = await fetchEntities({
       entity: 'fitters',
@@ -161,7 +161,7 @@ export async function searchFitters(searchTerm: string): Promise<any[]> {
 /**
  * Save order changes (use existing update order endpoint)
  */
-export async function saveOrderEditData(orderId: number, orderData: Partial<OrderEditData>): Promise<any> {
+export async function saveOrderEditData(orderId: number, orderData: Partial<OrderEditData>): Promise<unknown> {
   logger.log('Saving order edit data:', orderId, orderData);
   
   try {

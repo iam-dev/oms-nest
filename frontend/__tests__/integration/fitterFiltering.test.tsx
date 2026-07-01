@@ -1,9 +1,18 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
 import { AuthTestProvider } from '@/utils/AuthTestProvider';
 import { getEnrichedOrders } from '@/services/enrichedOrders';
 import { getCurrentUser } from '@/services/userStorage';
+import { UserRole } from '@/types/Role';
+import * as OrdersModule from '@/components/Orders';
+import * as DashboardModule from '@/components/Dashboard';
+
+type MockOrder = {
+  id: number;
+  orderNumber: string;
+  fitter: { id: number; name: string; username: string };
+  [key: string]: unknown;
+};
 
 // Mock the services
 jest.mock('@/services/enrichedOrders', () => ({
@@ -17,7 +26,7 @@ jest.mock('@/services/userStorage', () => ({
 // Mock components that use the services
 const mockReact = React;
 jest.mock('@/components/Orders', () => {
-  const { getEnrichedOrders } = require('@/services/enrichedOrders');
+  const { getEnrichedOrders } = jest.requireMock('@/services/enrichedOrders');
   return {
     Orders: () => {
       const [orders, setOrders] = mockReact.useState([]);
@@ -46,7 +55,7 @@ jest.mock('@/components/Orders', () => {
 
       return mockReact.createElement('div', { 'data-testid': 'orders-component' }, [
         mockReact.createElement('div', { 'data-testid': 'orders-count', key: 'count' }, orders.length),
-        ...orders.map((order: any) =>
+        ...orders.map((order: MockOrder) =>
           mockReact.createElement('div', { key: order.id, 'data-testid': `order-${order.id}` }, [
             mockReact.createElement('span', { 'data-testid': `order-${order.id}-number`, key: 'number' }, order.orderNumber),
             mockReact.createElement('span', { 'data-testid': `order-${order.id}-fitter`, key: 'fitter' }, order.fitter?.username)
@@ -58,7 +67,7 @@ jest.mock('@/components/Orders', () => {
 });
 
 jest.mock('@/components/Dashboard', () => {
-  const { getEnrichedOrders } = require('@/services/enrichedOrders');
+  const { getEnrichedOrders } = jest.requireMock('@/services/enrichedOrders');
   return {
     Dashboard: () => {
       const [orders, setOrders] = mockReact.useState([]);
@@ -89,7 +98,7 @@ jest.mock('@/components/Dashboard', () => {
         mockReact.createElement('h1', { key: 'title' }, 'Dashboard'),
         mockReact.createElement('div', { 'data-testid': 'dashboard-orders-count', key: 'count' }, orders.length),
         mockReact.createElement('div', { 'data-testid': 'dashboard-orders', key: 'orders' },
-          orders.map((order: any) =>
+          orders.map((order: MockOrder) =>
             mockReact.createElement('div', { key: order.id, 'data-testid': `dashboard-order-${order.id}` },
               `${order.orderNumber} - ${order.fitter?.username}`
             )
@@ -102,6 +111,10 @@ jest.mock('@/components/Dashboard', () => {
 
 const mockGetEnrichedOrders = getEnrichedOrders as jest.MockedFunction<typeof getEnrichedOrders>;
 const mockGetCurrentUser = getCurrentUser as jest.MockedFunction<typeof getCurrentUser>;
+
+// Typed module shapes as exposed by the jest.mock factory above
+type MockedOrdersModule = { Orders: React.ComponentType };
+type MockedDashboardModule = { Dashboard: React.ComponentType };
 
 // Mock order data
 const createMockOrder = (id: number, fitterUsername: string) => ({
@@ -134,7 +147,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       });
 
       // Mock API response with filtered orders
@@ -147,8 +160,8 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
-      
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
+
       render(
         <AuthTestProvider role="fitter">
           <Orders />
@@ -184,7 +197,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'admin.user',
-        role: 'ROLE_ADMIN' as any,
+        role: UserRole.ADMIN,
       });
 
       // Mock API response with all orders
@@ -196,7 +209,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       render(
         <AuthTestProvider role="admin">
@@ -222,7 +235,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'supervisor.user',
-        role: 'ROLE_SUPERVISOR' as any,
+        role: UserRole.SUPERVISOR,
       });
 
       mockGetEnrichedOrders.mockResolvedValue({
@@ -233,7 +246,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       render(
         <AuthTestProvider role="supervisor">
@@ -255,7 +268,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 2,
         username: 'bob.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       });
 
       const bobFitterOrders = allOrders.filter(order => order.fitter.username === 'bob.fitter');
@@ -267,7 +280,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 5,
       });
 
-      const Dashboard = require('@/components/Dashboard').Dashboard;
+      const { Dashboard } = (DashboardModule as unknown as MockedDashboardModule);
 
       render(
         <AuthTestProvider role="fitter">
@@ -288,7 +301,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'admin.user',
-        role: 'ROLE_ADMIN' as any,
+        role: UserRole.ADMIN,
       });
 
       mockGetEnrichedOrders.mockResolvedValue({
@@ -299,7 +312,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 5,
       });
 
-      const Dashboard = require('@/components/Dashboard').Dashboard;
+      const { Dashboard } = (DashboardModule as unknown as MockedDashboardModule);
 
       render(
         <AuthTestProvider role="admin">
@@ -321,7 +334,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'admin.fitter', // Username suggests they were a fitter
-        role: 'ROLE_ADMIN' as any, // But primary role is ADMIN after mapping
+        role: UserRole.ADMIN, // But primary role is ADMIN after mapping
       });
 
       mockGetEnrichedOrders.mockResolvedValue({
@@ -332,7 +345,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       render(
         <AuthTestProvider role="admin">
@@ -359,7 +372,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'supervisor.fitter',
-        role: 'ROLE_SUPERVISOR' as any, // Primary role after mapping
+        role: UserRole.SUPERVISOR, // Primary role after mapping
       });
 
       mockGetEnrichedOrders.mockResolvedValue({
@@ -370,7 +383,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       render(
         <AuthTestProvider role="supervisor">
@@ -392,7 +405,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       });
 
       const janeFitterOrders = allOrders.filter(order => order.fitter.username === 'jane.fitter');
@@ -404,8 +417,8 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
-      const Dashboard = require('@/components/Dashboard').Dashboard;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
+      const { Dashboard } = (DashboardModule as unknown as MockedDashboardModule);
 
       // Render Orders component
       const { unmount: unmountOrders } = render(
@@ -452,7 +465,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       });
 
       const janeFitterOrders = allOrders.filter(order => order.fitter.username === 'jane.fitter');
@@ -464,7 +477,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       const { unmount } = render(
         <AuthTestProvider role="fitter">
@@ -482,7 +495,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_USER' as any, // Role changed
+        role: UserRole.USER, // Role changed
       });
 
       // USER role shouldn't get automatic fitter filtering
@@ -513,12 +526,12 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       });
 
       mockGetEnrichedOrders.mockRejectedValue(new Error('Service unavailable'));
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       render(
         <AuthTestProvider role="fitter">
@@ -545,7 +558,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       render(
         <AuthTestProvider role="user">
@@ -567,7 +580,7 @@ describe('Fitter Filtering Integration Tests', () => {
       mockGetCurrentUser.mockReturnValue({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       });
 
       const janeFitterOrders = allOrders.filter(order => order.fitter.username === 'jane.fitter');
@@ -579,7 +592,7 @@ describe('Fitter Filtering Integration Tests', () => {
         itemsPerPage: 10,
       });
 
-      const Orders = require('@/components/Orders').Orders;
+      const { Orders } = (OrdersModule as unknown as MockedOrdersModule);
 
       const { unmount } = render(
         <AuthTestProvider role="fitter">

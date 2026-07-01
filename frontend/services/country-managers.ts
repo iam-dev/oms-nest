@@ -3,6 +3,15 @@ import { API_URL } from './api-config';
 import type { CountryManager, CountryManagersResponse } from '@/types/CountryManager';
 import { logger } from '@/utils/logger';
 
+interface SaveBundleError {
+  ErrorMessage?: string;
+  message?: string;
+  Message?: string;
+  error?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
 // Re-export types for component usage
 export type { CountryManager, CountryManagersResponse };
 
@@ -77,9 +86,10 @@ export async function createCountryManager(countryManagerData: Partial<CountryMa
   };
 
   // Remove undefined fields to keep payload clean
-  Object.keys(entity).forEach(key => {
-    if (key !== 'entityAspect' && (entity as any)[key] === undefined) {
-      delete (entity as any)[key];
+  const entityRecord = entity as Record<string, unknown>;
+  Object.keys(entityRecord).forEach(key => {
+    if (key !== 'entityAspect' && entityRecord[key] === undefined) {
+      delete entityRecord[key];
     }
   });
 
@@ -116,7 +126,7 @@ export async function createCountryManager(countryManagerData: Partial<CountryMa
   if (result.Errors && result.Errors.length > 0) {
     logger.error('SaveBundle errors:', result.Errors);
     logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: any) => {
+    const errorMessages = result.Errors.map((err: SaveBundleError) => {
       return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
     }).join(', ');
     throw new Error(`Country manager creation failed: ${errorMessages}`);
@@ -161,9 +171,10 @@ export async function updateCountryManager(id: string, countryManagerData: Parti
   };
 
   // Remove undefined fields to keep payload clean
-  Object.keys(entity).forEach(key => {
-    if (key !== 'entityAspect' && (entity as any)[key] === undefined) {
-      delete (entity as any)[key];
+  const updateEntityRecord = entity as Record<string, unknown>;
+  Object.keys(updateEntityRecord).forEach(key => {
+    if (key !== 'entityAspect' && updateEntityRecord[key] === undefined) {
+      delete updateEntityRecord[key];
     }
   });
 
@@ -200,7 +211,7 @@ export async function updateCountryManager(id: string, countryManagerData: Parti
   if (result.Errors && result.Errors.length > 0) {
     logger.error('SaveBundle errors:', result.Errors);
     logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: any) => {
+    const errorMessages = result.Errors.map((err: SaveBundleError) => {
       return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
     }).join(', ');
     throw new Error(`Country manager update failed: ${errorMessages}`);

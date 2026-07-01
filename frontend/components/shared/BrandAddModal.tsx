@@ -27,6 +27,8 @@ export function BrandAddModal({ isOpen, onClose, onSave }: BrandAddModalProps) {
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
+      // TODO(react-hooks): form reset on modal open; derived-state-from-props pattern, safe here
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNewBrand({
         name: '',
         sequence: 0,

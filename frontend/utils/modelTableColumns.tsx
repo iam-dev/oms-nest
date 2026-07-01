@@ -5,11 +5,20 @@ import { Button } from '@/components/ui/button';
 export type ModelHeaderFilters = Record<string, string>;
 export type SetModelHeaderFilters = (key: string, value: string) => void;
 
+export interface ModelRow {
+  id?: string | number;
+  name?: string;
+  brandName?: string;
+  sequence?: string | number;
+  active?: boolean;
+  [key: string]: unknown;
+}
+
 export interface ModelActionCallbacks {
-  onInfo?: (model: any) => void;
-  onExtras?: (model: any) => void;
-  onOptions?: (model: any) => void;
-  onPrices?: (model: any) => void;
+  onInfo?: (model: ModelRow) => void;
+  onExtras?: (model: ModelRow) => void;
+  onOptions?: (model: ModelRow) => void;
+  onPrices?: (model: ModelRow) => void;
 }
 
 export function getModelTableColumns(
@@ -17,7 +26,12 @@ export function getModelTableColumns(
   setHeaderFilters: SetModelHeaderFilters,
   actionCallbacks?: ModelActionCallbacks,
 ) {
-  const columns = [
+  const columns: Array<{
+    key: string;
+    title: React.ReactNode;
+    render: (v: unknown, row?: ModelRow) => React.ReactNode;
+    maxWidth: string;
+  }> = [
     {
       key: 'id',
       title: (
@@ -29,7 +43,7 @@ export function getModelTableColumns(
           entityType="saddle"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => (v != null ? String(v) : ''),
       maxWidth: '200px',
     },
     {
@@ -43,7 +57,7 @@ export function getModelTableColumns(
           entityType="saddle"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => (v != null ? String(v) : ''),
       maxWidth: '200px',
     },
     {
@@ -57,7 +71,7 @@ export function getModelTableColumns(
           entityType="saddle"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => (v != null ? String(v) : ''),
       maxWidth: '180px',
     },
     {
@@ -71,7 +85,7 @@ export function getModelTableColumns(
           entityType="saddle"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => (v != null ? String(v) : ''),
       maxWidth: '120px',
     },
     {
@@ -89,7 +103,7 @@ export function getModelTableColumns(
           entityType="saddle"
         />
       ),
-      render: (v: any) => v ? 'Yes' : 'No',
+      render: (v: unknown) => (v ? 'Yes' : 'No'),
       maxWidth: '100px',
     },
   ];
@@ -97,8 +111,8 @@ export function getModelTableColumns(
   if (actionCallbacks) {
     columns.push({
       key: '_actions',
-      title: (<span className="text-xs font-medium text-gray-500">ACTIONS</span>) as any,
-      render: (_v: any, row?: any) => {
+      title: (<span className="text-xs font-medium text-gray-500">ACTIONS</span>),
+      render: (_v: unknown, row?: ModelRow) => {
         if (!row) return null;
         return (
           <div className="flex gap-1 flex-wrap">

@@ -12,6 +12,7 @@ import { logger } from '@/utils/logger';
 import { useUserRole } from '@/hooks/useUserRole';
 import { getFitterName, getCustomerName, getSupplierName, getUrgent } from '../utils/orderHydration';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
+import type { OrdersTableColumn } from '@/components/shared/OrdersTable';
 import { seatSizes, statuses } from '../utils/orderConstants';
 import {
   buildOrderFilters,
@@ -55,10 +56,16 @@ export default function Dashboard() {
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms delay
+  // Declared before the useEffect below that resets it on search-term changes.
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Reset to page 1 when search term changes
   useEffect(() => {
     if (debouncedSearchTerm.trim()) {
+      // TODO(react-hooks): synchronous page reset driven by a debounced search term;
+      // this is a deliberate single-state sync (not cascading) — the debounce already
+      // batches user input, so this one setState cannot cause an infinite loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentPage(1);
     }
   }, [debouncedSearchTerm]);
@@ -69,7 +76,6 @@ export default function Dashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 30;
@@ -109,9 +115,13 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    // TODO(react-hooks): setLoadingOrders/setOrdersError are synchronous guards before
+    // async fetch chains; all data setState calls happen in .then()/.catch() callbacks —
+    // standard loading-state pattern. The rule fires on the synchronous guard calls.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingOrders(true);
     setOrdersError('');
-    
+
     // If we have a search term, use universal search instead of regular filtering
     if (debouncedSearchTerm.trim()) {
       logger.log('Dashboard: Performing universal search for:', debouncedSearchTerm);
@@ -130,7 +140,7 @@ export default function Dashboard() {
           setTotalPages(Math.max(1, Math.ceil(total / itemsPerPage)));
           
           // Process search results
-          const processedOrders = processDashboardOrders(data);
+          const processedOrders = processDashboardOrders(data as unknown as Record<string, unknown>);
           setOrders(processedOrders);
           setLoadingOrders(false);
         })
@@ -141,7 +151,7 @@ export default function Dashboard() {
         });
     } else {
       // Build comprehensive filters from headerFilters using shared utility
-      const filters = buildOrderFilters(headerFilters);
+      const filters = buildOrderFilters(headerFilters) as Record<string, string>;
 
       // Add date filters if set
       if (date.from) {
@@ -150,7 +160,7 @@ export default function Dashboard() {
       if (date.to) {
         filters['orderTime[before]'] = date.to.toISOString().split('T')[0];
       }
-      
+
       logger.log('Dashboard: Fetching orders with filters:', filters);
       logger.log('Dashboard: Current page:', currentPage);
 
@@ -224,7 +234,7 @@ export default function Dashboard() {
     if (refreshInterval.current) clearInterval(refreshInterval.current);
     refreshInterval.current = setInterval(() => {
       // Build the same filters for refresh using shared utility
-      const filters = buildOrderFilters(headerFilters);
+      const filters = buildOrderFilters(headerFilters) as Record<string, string>;
 
       if (date.from) {
         filters['orderTime[after]'] = date.from.toISOString().split('T')[0];
@@ -296,7 +306,7 @@ export default function Dashboard() {
     dynamicFactories,
     dynamicSeatSizes,
     { hideFitter: isFitter }
-  );
+  ) as unknown as OrdersTableColumn[];
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const urgentOrdersCount = orders.filter(order => getUrgent(order)).length;

@@ -7,20 +7,43 @@ const CUSTOMERS_FILE = path.join(dataDir, 'customersData.json');
 const FITTERS_FILE = path.join(dataDir, 'fittersData.json');
 const SUPPLIERS_FILE = path.join(dataDir, 'suppliersData.json');
 
+interface EntityRef {
+  id?: string | number;
+  '@id'?: string;
+  '$ref'?: string;
+}
+
+interface HydraDocument {
+  'hydra:member'?: unknown[];
+  [key: string]: unknown;
+}
+
+interface EntityMember {
+  id?: string | number;
+  [key: string]: unknown;
+}
+
+interface Order {
+  customer?: EntityRef | string;
+  fitter?: EntityRef | string;
+  supplier?: EntityRef | string;
+  [key: string]: unknown;
+}
+
 function extractIdFromRef(ref: string, type: 'customers' | 'fitters' | 'suppliers') {
   const match = ref.match(new RegExp(`/${type}/([\\w-]+)$`));
   return match ? match[1] : ref;
 }
 
-function collectReferencedIds(orders: any[]) {
+function collectReferencedIds(orders: Order[]) {
   const customerIds = new Set<string>();
   const fitterIds = new Set<string>();
   const supplierIds = new Set<string>();
 
-  function addFitterRefs(fitter: any) {
+  function addFitterRefs(fitter: EntityRef | string | undefined) {
     if (!fitter) return;
     if (typeof fitter === 'object') {
-      if (fitter.id) fitterIds.add(fitter.id);
+      if (fitter.id) fitterIds.add(String(fitter.id));
       if (fitter['@id']) fitterIds.add(extractIdFromRef(fitter['@id'], 'fitters'));
       if (fitter['$ref']) fitterIds.add(extractIdFromRef(fitter['$ref'], 'fitters'));
     } else if (typeof fitter === 'string') {
@@ -28,10 +51,10 @@ function collectReferencedIds(orders: any[]) {
     }
   }
 
-  function addCustomerRefs(customer: any) {
+  function addCustomerRefs(customer: EntityRef | string | undefined) {
     if (!customer) return;
     if (typeof customer === 'object') {
-      if (customer.id) customerIds.add(customer.id);
+      if (customer.id) customerIds.add(String(customer.id));
       if (customer['@id']) customerIds.add(extractIdFromRef(customer['@id'], 'customers'));
       if (customer['$ref']) customerIds.add(extractIdFromRef(customer['$ref'], 'customers'));
     } else if (typeof customer === 'string') {
@@ -39,10 +62,10 @@ function collectReferencedIds(orders: any[]) {
     }
   }
 
-  function addSupplierRefs(supplier: any) {
+  function addSupplierRefs(supplier: EntityRef | string | undefined) {
     if (!supplier) return;
     if (typeof supplier === 'object') {
-      if (supplier.id) supplierIds.add(supplier.id);
+      if (supplier.id) supplierIds.add(String(supplier.id));
       if (supplier['@id']) supplierIds.add(extractIdFromRef(supplier['@id'], 'suppliers'));
       if (supplier['$ref']) supplierIds.add(extractIdFromRef(supplier['$ref'], 'suppliers'));
     } else if (typeof supplier === 'string') {
@@ -58,13 +81,13 @@ function collectReferencedIds(orders: any[]) {
   return { customerIds, fitterIds, supplierIds };
 }
 
-function loadEntities(file: string): { hydra: { member: any[] }, raw: any } {
-  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const member = raw['hydra:member'] || [];
+function loadEntities(file: string): { hydra: { member: EntityMember[] }, raw: HydraDocument } {
+  const raw: HydraDocument = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const member = (raw['hydra:member'] || []) as EntityMember[];
   return { hydra: { member }, raw };
 }
 
-function saveEntities(file: string, entities: any[], raw: any) {
+function saveEntities(file: string, entities: EntityMember[], raw: HydraDocument) {
   raw['hydra:member'] = entities;
   fs.writeFileSync(file, JSON.stringify(raw, null, 2));
 }
@@ -151,17 +174,17 @@ function createSupplier(id: string) {
 }
 
 function main() {
-  const ordersRaw = JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8'));
-  const orders = ordersRaw['hydra:member'] || [];
+  const ordersRaw: HydraDocument = JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8'));
+  const orders = (ordersRaw['hydra:member'] || []) as Order[];
   const { customerIds, fitterIds, supplierIds } = collectReferencedIds(orders);
 
   // Customers
   const { hydra: customersHydra, raw: customersRaw } = loadEntities(CUSTOMERS_FILE);
-  const existingCustomerIds = new Set(customersHydra.member.map((c: any) => c.id));
+  const existingCustomerIds = new Set(customersHydra.member.map((c: EntityMember) => c.id));
 
   // Fitters
   const { hydra: fittersHydra, raw: fittersRaw } = loadEntities(FITTERS_FILE);
-  const existingFitterIds = new Set(fittersHydra.member.map((f: any) => f.id));
+  const existingFitterIds = new Set(fittersHydra.member.map((f: EntityMember) => f.id));
 
   // Print debug info
   console.log('--- Referenced Fitter IDs ---');
@@ -171,7 +194,7 @@ function main() {
 
   // Suppliers
   const { hydra: suppliersHydra, raw: suppliersRaw } = loadEntities(SUPPLIERS_FILE);
-  const existingSupplierIds = new Set(suppliersHydra.member.map((s: any) => s.id));
+  const existingSupplierIds = new Set(suppliersHydra.member.map((s: EntityMember) => s.id));
 
   let addedCustomers = 0;
   for (const id of customerIds) {

@@ -138,6 +138,9 @@ export default function AvailableSaddleStockPage() {
   }, [pagination.currentPage, setTotalItems]);
 
   useEffect(() => {
+    // TODO(react-hooks): loadSaddleStock is a useCallback-wrapped async fetch; calling it from
+    // useEffect is the standard data-fetching pattern — setState calls inside are intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSaddleStock();
   }, [loadSaddleStock]);
 

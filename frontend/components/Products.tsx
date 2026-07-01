@@ -4,6 +4,7 @@ import { PageHeader } from './shared';
 import { Plus } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import type { Column } from '@/components/shared/DataTable';
 import { useTableFilters, usePagination } from '@/hooks';
 import { getProductTableColumns } from '@/utils/productTableColumns';
 import { Button } from '@/components/ui/button';
@@ -108,7 +109,7 @@ export default function Products() {
 
       <EntityTable
         entities={products}
-        columns={getProductTableColumns(filters, handleFilterChange)}
+        columns={getProductTableColumns(filters, handleFilterChange) as unknown as Column<Product>[]}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

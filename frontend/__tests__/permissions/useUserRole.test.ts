@@ -1,15 +1,15 @@
 import { renderHook } from '@testing-library/react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { UserRole } from '@/types/Role';
-import { AuthTestProvider } from '../utils/AuthTestProvider';
 import { getAllRoles } from '../utils/roleTestHelpers';
+import * as AuthContextModule from '@/context/AuthContext';
 
 // Mock the AuthContext
 jest.mock('@/context/AuthContext', () => ({
   useAuth: jest.fn()
 }));
 
-const mockUseAuth = require('@/context/AuthContext').useAuth as jest.Mock;
+const mockUseAuth = AuthContextModule.useAuth as jest.Mock;
 
 describe('useUserRole Hook', () => {
   beforeEach(() => {

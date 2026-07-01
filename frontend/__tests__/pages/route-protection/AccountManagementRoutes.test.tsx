@@ -2,6 +2,8 @@ import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
 import { UserRole } from '@/types/Role';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
 
 // Mock the Next.js navigation hooks
 jest.mock('next/navigation', () => ({
@@ -33,12 +35,12 @@ jest.mock('@/middleware', () => ({
 
 // Mock page components to test route protection
 const MockUsersPage = () => {
-  const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
-  const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
-  const { role } = mockUseUserRole();
+  const useUserRoleFn = useUserRoleModule.useUserRole as jest.Mock;
+  const hasScreenPermissionFn = rolePermissionsModule.hasScreenPermission as jest.Mock;
+  const { role } = useUserRoleFn();
 
   // Simulate middleware check
-  if (!mockHasScreenPermission(role, 'USER_MANAGEMENT')) {
+  if (!hasScreenPermissionFn(role, 'USER_MANAGEMENT')) {
     return <div data-testid="unauthorized">Access Denied</div>;
   }
 
@@ -51,12 +53,12 @@ const MockUsersPage = () => {
 };
 
 const MockWarehousesPage = () => {
-  const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
-  const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
-  const { role } = mockUseUserRole();
+  const useUserRoleFn = useUserRoleModule.useUserRole as jest.Mock;
+  const hasScreenPermissionFn = rolePermissionsModule.hasScreenPermission as jest.Mock;
+  const { role } = useUserRoleFn();
 
   // Simulate middleware check
-  if (!mockHasScreenPermission(role, 'WAREHOUSE_MANAGEMENT')) {
+  if (!hasScreenPermissionFn(role, 'WAREHOUSE_MANAGEMENT')) {
     return <div data-testid="unauthorized">Access Denied</div>;
   }
 
@@ -69,12 +71,12 @@ const MockWarehousesPage = () => {
 };
 
 const MockUserPermissionsPage = () => {
-  const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
-  const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
-  const { role } = mockUseUserRole();
+  const useUserRoleFn = useUserRoleModule.useUserRole as jest.Mock;
+  const hasScreenPermissionFn = rolePermissionsModule.hasScreenPermission as jest.Mock;
+  const { role } = useUserRoleFn();
 
   // Simulate middleware check
-  if (!mockHasScreenPermission(role, 'USER_PERMISSIONS_VIEW')) {
+  if (!hasScreenPermissionFn(role, 'USER_PERMISSIONS_VIEW')) {
     return <div data-testid="unauthorized">Access Denied</div>;
   }
 
@@ -87,12 +89,12 @@ const MockUserPermissionsPage = () => {
 };
 
 const MockSuppliersPage = () => {
-  const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
-  const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
-  const { role } = mockUseUserRole();
+  const useUserRoleFn = useUserRoleModule.useUserRole as jest.Mock;
+  const hasScreenPermissionFn = rolePermissionsModule.hasScreenPermission as jest.Mock;
+  const { role } = useUserRoleFn();
 
   // Simulate middleware check
-  if (!mockHasScreenPermission(role, 'SUPPLIERS')) {
+  if (!hasScreenPermissionFn(role, 'SUPPLIERS')) {
     return <div data-testid="unauthorized">Access Denied</div>;
   }
 
@@ -104,8 +106,8 @@ const MockSuppliersPage = () => {
   );
 };
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
+const mockHasScreenPermission = rolePermissionsModule.hasScreenPermission as jest.Mock;
 const mockUseRouter = useRouter as jest.Mock;
 
 describe('Account Management Routes Protection', () => {
@@ -147,7 +149,7 @@ describe('Account Management Routes Protection', () => {
         hasRole: jest.fn()
       });
 
-      mockHasScreenPermission.mockImplementation((role, permission) => {
+      mockHasScreenPermission.mockImplementation(() => {
         return false; // ADMIN doesn't have USER_MANAGEMENT permission
       });
 
@@ -504,7 +506,7 @@ describe('Account Management Routes Protection', () => {
         hasRole: jest.fn()
       });
 
-      mockHasScreenPermission.mockImplementation((role, permission) => {
+      mockHasScreenPermission.mockImplementation((role) => {
         return role === UserRole.SUPERVISOR;
       });
 

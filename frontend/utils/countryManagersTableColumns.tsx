@@ -18,7 +18,7 @@ export function getCountryManagerTableColumns(headerFilters: CountryManagerHeade
           entityType="country-manager"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'managerName',
@@ -31,7 +31,7 @@ export function getCountryManagerTableColumns(headerFilters: CountryManagerHeade
           entityType="country-manager"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'email',
@@ -44,7 +44,7 @@ export function getCountryManagerTableColumns(headerFilters: CountryManagerHeade
           entityType="country-manager"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'region',
@@ -57,7 +57,7 @@ export function getCountryManagerTableColumns(headerFilters: CountryManagerHeade
           entityType="country-manager"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'enabled',
@@ -74,7 +74,7 @@ export function getCountryManagerTableColumns(headerFilters: CountryManagerHeade
           entityType="country-manager"
         />
       ),
-      render: (v: any) => {
+      render: (v: unknown) => {
         const status = v ? 'ACTIVE' : 'INACTIVE';
         return <StatusBadge status={status} type="country-manager" />;
       },

@@ -26,7 +26,7 @@ export function useTableFilters<T extends Record<string, string>>(initialFilters
   // Get filter string for API requests (useful for OData)
   const getFilterString = useCallback(() => {
     return Object.entries(filters)
-      .filter(([_, value]) => value && value.trim() !== '')
+      .filter(([, value]) => value && value.trim() !== '')
       .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
       .join('&');
   }, [filters]);

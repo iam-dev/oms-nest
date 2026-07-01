@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DataTable } from '@/components/shared/DataTable';
 import type { Column } from '@/components/shared/DataTable';
@@ -35,7 +35,7 @@ const mockColumns: Column<MockData>[] = [
   {
     key: 'status',
     title: 'Status',
-    render: (value: any) => (
+    render: (value: MockData['status']) => (
       <span className={`status-badge ${value}`}>
         {value?.toUpperCase()}
       </span>

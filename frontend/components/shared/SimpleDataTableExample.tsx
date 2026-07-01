@@ -19,6 +19,10 @@ const columns: ColumnDef<Person>[] = [
 ];
 
 export default function SimpleDataTableExample() {
+  // TODO(react-hooks): TanStack Table's useReactTable() returns functions that the React
+  // Compiler cannot safely memoize; this is a known limitation of the TanStack Table API —
+  // no behavior change, compiler opts this component out of auto-memoization.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

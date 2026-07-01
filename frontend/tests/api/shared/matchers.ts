@@ -6,7 +6,7 @@
 import '@testing-library/jest-dom';
 
 export const toBeOneOfMatcher = {
-  toBeOneOf(received: any, expected: Array<any>) {
+  toBeOneOf(received: unknown, expected: Array<unknown>) {
     const pass = expected.includes(received);
     return {
       message: () => pass

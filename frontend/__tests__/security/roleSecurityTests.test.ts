@@ -1,6 +1,8 @@
 import { getEnrichedOrders } from '@/services/enrichedOrders';
 import { hasScreenPermission, canPerformAction, Screen, Permission } from '@/utils/rolePermissions';
-import { UserRole } from '@/types/Role';
+import { UserRole, User } from '@/types/Role';
+import * as enrichedOrdersModule from '@/services/enrichedOrders';
+import * as apiModule from '@/services/api';
 
 // Import mapRolesToPrimary locally
 const mapRolesToPrimary = (roles: string[]): string => {
@@ -13,16 +15,16 @@ const mapRolesToPrimary = (roles: string[]): string => {
 };
 
 // Mock user storage functions that use localStorage
-let _storedUser: any = null;
+let _storedUser: User | null = null;
 
-function getCurrentUserImpl(): any {
+function getCurrentUserImpl(): User | null {
   // If _storedUser is set, return it
   if (_storedUser !== null) return _storedUser;
   // Otherwise try to read from localStorage
   try {
     const stored = localStorage.getItem('userBasicInfo');
     if (stored) {
-      return JSON.parse(stored);
+      return JSON.parse(stored) as User;
     }
   } catch {
     return null;
@@ -30,7 +32,7 @@ function getCurrentUserImpl(): any {
   return null;
 }
 
-function setUserBasicInfoImpl(user: any): void {
+function setUserBasicInfoImpl(user: User | null): void {
   _storedUser = user;
   if (user) {
     try {
@@ -73,7 +75,7 @@ jest.mock('@/services/api', () => ({
 }));
 
 jest.mock('@/services/enrichedOrders', () => ({
-  getEnrichedOrders: jest.fn().mockImplementation(async (params: any) => {
+  getEnrichedOrders: jest.fn().mockImplementation(async () => {
     // Simple mock for now, just return empty results
     return {
       data: [],
@@ -88,8 +90,8 @@ jest.mock('@/context/AuthContext', () => ({
 }));
 
 // Get references to the mocked functions
-const mockGetEnrichedOrders = require('@/services/enrichedOrders').getEnrichedOrders as jest.MockedFunction<any>;
-const mockFetchEntities = require('@/services/api').fetchEntities as jest.MockedFunction<any>;
+const mockGetEnrichedOrders = jest.mocked(enrichedOrdersModule.getEnrichedOrders);
+const mockFetchEntities = jest.mocked((apiModule as { fetchEntities: typeof import('@/services/api').fetchEntities }).fetchEntities);
 
 describe('Role Security and Edge Case Tests', () => {
   beforeEach(() => {
@@ -105,10 +107,10 @@ describe('Role Security and Edge Case Tests', () => {
   describe('Fitter Filtering Security', () => {
     it('prevents fitter from bypassing filtering through localStorage manipulation', async () => {
       // Set up legitimate fitter user
-      const legitimateUser = {
+      const legitimateUser: User = {
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       };
 
       // Mock the getCurrentUser function to return our test user
@@ -123,7 +125,7 @@ describe('Role Security and Edge Case Tests', () => {
       });
 
       // First call should work normally
-      await getEnrichedOrders({ page: 1, filters: {} } as any);
+      await getEnrichedOrders({ page: 1, filters: {} });
 
       // Check that getEnrichedOrders was called and applied fitter filtering
       expect(mockGetEnrichedOrders).toHaveBeenCalledWith({ page: 1, filters: {} });
@@ -135,11 +137,11 @@ describe('Role Security and Edge Case Tests', () => {
       localStorage.setItem('userBasicInfo', JSON.stringify({
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_ADMIN' as any, // Malicious change
+        role: UserRole.ADMIN, // Malicious change
       }));
 
       // Service should still apply filter based on actual user context
-      await getEnrichedOrders({ page: 1, filters: {} } as any);
+      await getEnrichedOrders({ page: 1, filters: {} });
 
       // Should still get the legitimate user data, not the manipulated data
       const currentUser = getCurrentUser();
@@ -149,25 +151,25 @@ describe('Role Security and Edge Case Tests', () => {
     it('ensures fitter filtering cannot be disabled through null username', async () => {
       const maliciousUser = {
         id: 1,
-        username: null, // Malicious null username
-        role: 'ROLE_FITTER' as any,
-      };
+        username: null as unknown as string, // Malicious null username
+        role: UserRole.FITTER,
+      } satisfies Partial<User> as User;
 
-      setUserBasicInfo(maliciousUser as any);
+      setUserBasicInfo(maliciousUser);
 
       mockFetchEntities.mockResolvedValue({
         'hydra:member': [],
         'hydra:totalItems': 0,
       });
 
-      await getEnrichedOrders({ page: 1, filters: {} } as any);
+      await getEnrichedOrders({ page: 1, filters: {} });
     });
 
     it('prevents fitter from seeing other fitters orders through filter manipulation', async () => {
-      const fitterUser = {
+      const fitterUser: User = {
         id: 1,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       };
 
       setUserBasicInfo(fitterUser);
@@ -183,29 +185,29 @@ describe('Role Security and Edge Case Tests', () => {
         filters: {
           fitterUsername: 'other.fitter', // Attempting to see other fitter's orders
         },
-      } as any);
+      });
     });
 
     it('handles concurrent role changes securely', async () => {
-      const initialUser = {
+      const initialUser: User = {
         id: 1,
         username: 'concurrent.user',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       };
 
       setUserBasicInfo(initialUser);
 
       // Simulate concurrent role change during API call
-      const promise1 = getEnrichedOrders({ page: 1, filters: {} } as any);
+      const promise1 = getEnrichedOrders({ page: 1, filters: {} });
 
       // Change role while first call is in progress
       setUserBasicInfo({
         id: 1,
         username: 'concurrent.user',
-        role: 'ROLE_ADMIN' as any,
+        role: UserRole.ADMIN,
       });
 
-      const promise2 = getEnrichedOrders({ page: 1, filters: {} } as any);
+      const promise2 = getEnrichedOrders({ page: 1, filters: {} });
 
       await Promise.all([promise1, promise2]);
 
@@ -278,7 +280,7 @@ describe('Role Security and Edge Case Tests', () => {
 
   describe('Multi-Role Security Edge Cases', () => {
     it('handles role array manipulation attacks', () => {
-      const maliciousRoleArrays = [
+      const maliciousRoleArrays: unknown[][] = [
         ['ROLE_USER', 'ROLE_ADMIN', 'ROLE_SUPERVISOR'], // Valid but should map correctly
         ['ROLE_ADMIN\x00', 'ROLE_SUPERVISOR'], // Null byte injection
         ['ROLE_ADMIN; DROP TABLE roles; --'], // SQL injection attempt
@@ -288,22 +290,22 @@ describe('Role Security and Edge Case Tests', () => {
       ];
 
       maliciousRoleArrays.forEach(roles => {
-        const result = mapRolesToPrimary(roles as any);
+        const result = mapRolesToPrimary(roles as string[]);
         // Should either return a valid role or default to ROLE_USER
         expect(['ROLE_SUPERVISOR', 'ROLE_ADMIN', 'ROLE_FITTER', 'ROLE_SUPPLIER', 'ROLE_USER']).toContain(result);
       });
     });
 
     it('prevents prototype pollution through role objects', () => {
-      const maliciousRoles: any[] = [
-        { __proto__: { role: 'ROLE_ADMIN' } } as any,
-        { constructor: { prototype: { role: 'ROLE_ADMIN' } } } as any,
-        { toString: () => 'ROLE_ADMIN' } as any,
-        { valueOf: () => 'ROLE_ADMIN' } as any,
+      const maliciousRoles: object[] = [
+        { __proto__: { role: 'ROLE_ADMIN' } },
+        { constructor: { prototype: { role: 'ROLE_ADMIN' } } },
+        { toString: () => 'ROLE_ADMIN' },
+        { valueOf: () => 'ROLE_ADMIN' },
       ];
 
       maliciousRoles.forEach(maliciousRole => {
-        const result = mapRolesToPrimary([maliciousRole as any]);
+        const result = mapRolesToPrimary([maliciousRole as unknown as string]);
         expect(result).toBe('ROLE_USER'); // Should default to safe role
       });
     });
@@ -321,17 +323,17 @@ describe('Role Security and Edge Case Tests', () => {
         },
       };
 
-      const result = mapRolesToPrimary([deeplyNested as any]);
+      const result = mapRolesToPrimary([deeplyNested as unknown as string]);
       expect(result).toBe('ROLE_USER'); // Should not process complex objects
     });
   });
 
   describe('Data Integrity and Consistency', () => {
     it('ensures user data consistency across storage mechanisms', () => {
-      const testUser = {
+      const testUser: User = {
         id: 1,
         username: 'consistency.test',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       };
 
       // Set user data
@@ -342,7 +344,7 @@ describe('Role Security and Edge Case Tests', () => {
       expect(retrievedUser).toEqual(testUser);
 
       // Verify localStorage content
-      const storedUser = JSON.parse(localStorage.getItem('userBasicInfo') || '{}');
+      const storedUser = JSON.parse(localStorage.getItem('userBasicInfo') || '{}') as User;
       expect(storedUser).toEqual(testUser);
     });
 
@@ -361,12 +363,12 @@ describe('Role Security and Edge Case Tests', () => {
       const largeUser = {
         id: 1,
         username: 'large.user',
-        role: 'ROLE_FITTER',
+        role: UserRole.FITTER,
         extraData: 'x'.repeat(10000000), // Very large string
-      };
+      } satisfies Partial<User> as User;
 
       // Should handle large data gracefully
-      expect(() => setUserBasicInfo(largeUser as any)).not.toThrow();
+      expect(() => setUserBasicInfo(largeUser)).not.toThrow();
     });
   });
 
@@ -386,18 +388,18 @@ describe('Role Security and Edge Case Tests', () => {
       malformedTokens.forEach(token => {
         const roles = token?.roles;
         if (Array.isArray(roles)) {
-          const result = mapRolesToPrimary(roles);
+          const result = mapRolesToPrimary(roles as string[]);
           expect(typeof result).toBe('string');
         } else {
           // Should handle non-array gracefully
-          const result = mapRolesToPrimary(roles as any);
+          const result = mapRolesToPrimary(roles as unknown as string[]);
           expect(result).toBe('ROLE_USER');
         }
       });
     });
 
     it('validates role data types consistently', () => {
-      const invalidRoleData = [
+      const invalidRoleData: unknown[] = [
         123,
         true,
         {},
@@ -409,7 +411,7 @@ describe('Role Security and Edge Case Tests', () => {
       ];
 
       invalidRoleData.forEach(invalidData => {
-        const result = mapRolesToPrimary([invalidData as any]);
+        const result = mapRolesToPrimary([invalidData as string]);
         expect(result).toBe('ROLE_USER');
       });
     });
@@ -417,16 +419,16 @@ describe('Role Security and Edge Case Tests', () => {
 
   describe('API Security Integration', () => {
     it('ensures filter parameters cannot be manipulated to bypass security', async () => {
-      const fitterUser = {
+      const fitterUser: User = {
         id: 1,
         username: 'security.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       };
 
       setUserBasicInfo(fitterUser);
 
       // Test various malicious filter attempts
-      const maliciousFilters = [
+      const maliciousFilters: Record<string, unknown>[] = [
         { 'fitterUsername': 'DROP TABLE orders; --' },
         { fitterUsername: null },
         { fitterUsername: undefined },
@@ -439,8 +441,8 @@ describe('Role Security and Edge Case Tests', () => {
 
         await getEnrichedOrders({
           page: 1,
-          filters: maliciousFilter as any,
-        } as any);
+          filters: maliciousFilter as Record<string, string>,
+        });
 
         // getEnrichedOrders should still be called (it's mocked)
         expect(mockGetEnrichedOrders).toHaveBeenCalled();
@@ -448,10 +450,10 @@ describe('Role Security and Edge Case Tests', () => {
     });
 
     it('prevents injection attacks through search parameters', async () => {
-      const adminUser = {
+      const adminUser: User = {
         id: 1,
         username: 'admin.user',
-        role: 'ROLE_ADMIN' as any,
+        role: UserRole.ADMIN,
       };
 
       setUserBasicInfo(adminUser);
@@ -471,7 +473,7 @@ describe('Role Security and Edge Case Tests', () => {
           page: 1,
           searchTerm,
           filters: {},
-        } as any);
+        });
 
         // getEnrichedOrders should still be called (it's mocked)
         expect(mockGetEnrichedOrders).toHaveBeenCalled();
@@ -498,15 +500,15 @@ describe('Role Security and Edge Case Tests', () => {
 
     it('handles high-frequency role checks efficiently', () => {
       const start = Date.now();
-      
+
       for (let i = 0; i < 10000; i++) {
         hasScreenPermission(UserRole.ADMIN, Screen.ORDERS);
         canPerformAction(UserRole.FITTER, Screen.CUSTOMERS, Permission.VIEW);
         mapRolesToPrimary(['ROLE_ADMIN', 'ROLE_FITTER']);
       }
-      
+
       const duration = Date.now() - start;
-      
+
       // Should complete within reasonable time (less than 1 second)
       expect(duration).toBeLessThan(1000);
     });
@@ -514,10 +516,10 @@ describe('Role Security and Edge Case Tests', () => {
 
   describe('Error Handling Security', () => {
     it('does not leak sensitive information in error messages', async () => {
-      const fitterUser = {
+      const fitterUser: User = {
         id: 1,
         username: 'error.fitter',
-        role: 'ROLE_FITTER' as any,
+        role: UserRole.FITTER,
       };
 
       setUserBasicInfo(fitterUser);
@@ -526,7 +528,7 @@ describe('Role Security and Edge Case Tests', () => {
       mockFetchEntities.mockRejectedValue(new Error('Database connection failed: host=internal.db.server user=admin password=secret123'));
 
       try {
-        await getEnrichedOrders({ page: 1, filters: {} } as any);
+        await getEnrichedOrders({ page: 1, filters: {} });
       } catch (error) {
         // Error should be thrown but shouldn't contain sensitive info in production
         expect(error).toBeInstanceOf(Error);
@@ -536,10 +538,10 @@ describe('Role Security and Edge Case Tests', () => {
 
     it('handles undefined/null user data without exposing internal state', () => {
       clearUserBasicInfo();
-      
+
       const user = getCurrentUser();
       expect(user).toBeNull();
-      
+
       // Should not throw or expose internal errors
       expect(() => getCurrentUser()).not.toThrow();
     });

@@ -25,6 +25,10 @@ export function SupplierEditModal({ supplier, isOpen, onClose, onSave }: Supplie
   useEffect(() => {
     if (supplier) {
       // Edit mode - populate with existing data
+      // TODO(react-hooks): derives controlled form state from the `supplier` prop when the
+      // modal opens; replacing with useMemo would require lifting all field handlers to the
+      // parent — suppress until a full controlled-form refactor is scheduled.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedSupplier({
         ...supplier,
         name: supplier.name || '',

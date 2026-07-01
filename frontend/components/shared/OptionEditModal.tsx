@@ -25,6 +25,10 @@ export function OptionEditModal({ option, isOpen, onClose, onSave }: OptionEditM
   // Set initial option data
   useEffect(() => {
     if (option) {
+      // TODO(react-hooks): derives controlled form state from the `option` prop when the
+      // modal opens; replacing with useMemo would require lifting all field handlers to the
+      // parent — suppress until a full controlled-form refactor is scheduled.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedOption({
         ...option,
         name: option.name || '',

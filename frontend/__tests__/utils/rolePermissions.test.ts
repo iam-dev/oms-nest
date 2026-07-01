@@ -9,31 +9,6 @@ import {
 import { UserRole } from '@/types/Role';
 import { FITTER_RESTRICTED_STATUSES } from '@/utils/orderConstants';
 
-// Define test constants based on actual implementation
-const Screen = {
-  DASHBOARD: 'DASHBOARD',
-  ORDERS: 'ORDERS',
-  CUSTOMERS: 'CUSTOMERS',
-  FITTERS: 'FITTERS',
-  REPORTS: 'REPORTS',
-  BRANDS: 'BRANDS',
-  MODELS: 'MODELS',
-  LEATHER_TYPES: 'LEATHER_TYPES',
-  OPTIONS: 'OPTIONS',
-  EXTRAS: 'EXTRAS',
-  PRESETS: 'PRESETS',
-  SUPPLIERS: 'SUPPLIERS',
-  SADDLE_MODELING: 'SADDLE_MODELING',
-  ORDER_CREATE: 'ORDER_CREATE',
-  ORDER_EDIT: 'ORDER_EDIT',
-  ORDER_DELETE: 'ORDER_DELETE',
-  ORDER_APPROVE: 'ORDER_APPROVE',
-  ORDER_VIEW: 'ORDER_VIEW',
-  CUSTOMER_CREATE: 'CUSTOMER_CREATE',
-  CUSTOMER_EDIT: 'CUSTOMER_EDIT',
-  CUSTOMER_DELETE: 'CUSTOMER_DELETE',
-} as const;
-
 type ScreenType = keyof typeof SCREEN_PERMISSIONS;
 
 describe('Role Permissions System', () => {
@@ -456,8 +431,8 @@ describe('Role Permissions System', () => {
     });
 
     it('should handle undefined values gracefully', () => {
-      expect(hasScreenPermission(undefined as any, 'DASHBOARD')).toBe(false);
-      expect(hasScreenPermission(UserRole.ADMIN, undefined as any)).toBe(false);
+      expect(hasScreenPermission(undefined as unknown as null, 'DASHBOARD')).toBe(false);
+      expect(hasScreenPermission(UserRole.ADMIN, undefined as unknown as keyof typeof SCREEN_PERMISSIONS)).toBe(false);
     });
   });
 

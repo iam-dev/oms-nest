@@ -37,6 +37,8 @@ export function ColumnManager({ open, onOpenChange, columns, onSave, tabName }: 
           merged.push({ key: col.key, label: col.label, visible: false, order: 100 + i });
         }
       });
+      // TODO(react-hooks): syncing dialog-local state from props when the dialog opens is intentional; not a cascading-render bug
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalColumns(merged);
     }
   }, [open, columns]);

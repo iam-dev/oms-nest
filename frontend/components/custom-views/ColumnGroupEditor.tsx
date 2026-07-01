@@ -35,6 +35,8 @@ export function ColumnGroupEditor({
 
   useEffect(() => {
     if (open) {
+      // TODO(react-hooks): syncing dialog-local copies from props when the dialog opens is intentional; not a cascading-render bug
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalGroups(columnGroups.map((g) => ({ ...g, columnKeys: [...g.columnKeys] })));
       setLocalColumns(columns.map((c) => ({ ...c })));
     }

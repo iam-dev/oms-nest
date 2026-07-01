@@ -71,6 +71,7 @@ export function ModelPricesModal({ model, isOpen, onClose }: ModelPricesModalPro
 
   useEffect(() => {
     if (isOpen && model) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): loadData triggers async fetch+setState; setEditingId resets UI on open
       loadData();
       setEditingId(null);
     }

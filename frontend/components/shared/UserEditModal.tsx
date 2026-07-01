@@ -17,8 +17,10 @@ interface UserEditModalProps {
   onSave: (updatedUser: Partial<User>) => Promise<void>;
 }
 
+type EditedUser = Partial<User> & { password?: string };
+
 export function UserEditModal({ user, isOpen, onClose, onSave }: UserEditModalProps) {
-  const [editedUser, setEditedUser] = useState<Partial<User>>({});
+  const [editedUser, setEditedUser] = useState<EditedUser>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,6 +28,10 @@ export function UserEditModal({ user, isOpen, onClose, onSave }: UserEditModalPr
   useEffect(() => {
     if (user) {
       // Edit mode - populate with existing data
+      // TODO(react-hooks): derives controlled form state from the `user` prop each time the
+      // modal opens; replacing with useMemo would require lifting all field handlers to the
+      // parent — suppress until a full controlled-form refactor is scheduled.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedUser({
         ...user,
         username: user.username || '',

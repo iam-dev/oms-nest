@@ -4,11 +4,12 @@ import { logger } from '@/utils/logger';
 // Define the shape of our JWT payload
 interface JwtPayload {
   exp?: number;
-  role?: string | string[];
+  role?: string | string[] | { name?: string };
   roles?: string[];
   type?: string;
   userId?: string;
-  [key: string]: any;
+  id?: string | number;
+  [key: string]: unknown;
 }
 
 // Import jose for Edge Runtime compatible JWT handling
@@ -137,8 +138,8 @@ export async function middleware(request: NextRequest) {
         payload = decodeJwtPayload(token);
       }
     }
-    const userRole = typeof payload?.role === 'object' && payload.role
-      ? (payload.role as any).name?.toLowerCase()
+    const userRole = typeof payload?.role === 'object' && payload.role && !Array.isArray(payload.role)
+      ? (payload.role as { name?: string }).name?.toLowerCase()
       : undefined;
 
     logger.log('Middleware: role:', userRole || 'none');

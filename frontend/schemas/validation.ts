@@ -177,7 +177,7 @@ export const dateRangeSchema = z.object({
 export const apiResponseSchema = z.object({
   success: z.boolean(),
   message: z.string().optional(),
-  data: z.any().optional(),
+  data: z.unknown().optional(),
   errors: z.array(z.string()).optional(),
 });
 
@@ -236,14 +236,14 @@ export function sanitizeString(input: string): string {
 }
 
 // Helper function to sanitize object with string values
-export function sanitizeObject(obj: Record<string, any>): Record<string, any> {
-  const sanitized: Record<string, any> = {};
+export function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
   
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string') {
       sanitized[key] = sanitizeString(value);
     } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      sanitized[key] = sanitizeObject(value);
+      sanitized[key] = sanitizeObject(value as Record<string, unknown>);
     } else if (Array.isArray(value)) {
       sanitized[key] = value.map(item => 
         typeof item === 'string' ? sanitizeString(item) : item

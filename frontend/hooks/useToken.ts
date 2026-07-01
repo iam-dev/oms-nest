@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-
 /**
  * @deprecated Token is now stored as httpOnly cookie and not accessible from JS.
  * Authentication is handled via credentials: 'include' on fetch requests.

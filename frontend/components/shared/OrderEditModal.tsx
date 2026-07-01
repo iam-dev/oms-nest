@@ -40,6 +40,11 @@ export function OrderEditModal({ order, isOpen, onClose, onSave }: OrderEditModa
 
   useEffect(() => {
     if (order) {
+      // TODO(react-hooks): derives controlled form state from the `order` prop when the modal
+      // opens, including hydrated display values (customerName, fitterName, seatSizesString);
+      // replacing with useMemo would require lifting all field handlers to the parent —
+      // suppress until a full controlled-form refactor is scheduled.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedOrder({
         ...order,
         // Use direct field names from enriched order, fallback to hydrated values

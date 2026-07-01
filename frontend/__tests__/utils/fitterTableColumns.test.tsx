@@ -1,9 +1,34 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { getFitterTableColumns, type FitterHeaderFilters, type SetFitterHeaderFilters } from '@/utils/fitterTableColumns';
-import type { Fitter } from '@/types/Fitter';
 
-const mockFitter: any = {
+interface MockFitterRow {
+  id: number;
+  name: string;
+  username: string;
+  email: string;
+  city: string;
+  country: string;
+  phone: string;
+  address: string;
+  enabled: boolean;
+  lastLogin: string | null;
+  region: string;
+  certificationLevel: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
+}
+
+/** Local column shape with a 2-arg render — matches actual Ant-style column contracts */
+interface ColumnDef {
+  key: string;
+  title: React.ReactNode;
+  render: (value: unknown, row: unknown) => React.ReactNode;
+}
+
+const mockFitter: MockFitterRow = {
   id: 1,
   name: 'Jane Fitter',
   username: 'janefitter',
@@ -25,10 +50,15 @@ const mockFitter: any = {
 const mockHeaderFilters: FitterHeaderFilters = {};
 const mockSetHeaderFilters: SetFitterHeaderFilters = jest.fn();
 
+/** Cast the raw columns to the typed ColumnDef shape used by tests. */
+function getColumns(): ColumnDef[] {
+  return getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters) as unknown as ColumnDef[];
+}
+
 describe('Fitter Table Columns', () => {
   describe('Column Generation', () => {
     it('generates all expected columns', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
 
       expect(columns).toHaveLength(7);
 
@@ -43,7 +73,7 @@ describe('Fitter Table Columns', () => {
     });
 
     it('sets correct column titles', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
 
       const nameCol = columns.find(col => col.key === 'name');
       expect(nameCol?.title).toBeDefined();
@@ -65,7 +95,7 @@ describe('Fitter Table Columns', () => {
     });
 
     it('configures columns with TableHeaderFilter titles', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
 
       columns.forEach(column => {
         expect(column.title).toBeDefined();
@@ -76,13 +106,13 @@ describe('Fitter Table Columns', () => {
 
   describe('Text Column Rendering', () => {
     it('renders name column correctly', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const nameCol = columns.find(col => col.key === 'name');
 
       expect(nameCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (nameCol?.render as any)?.(mockFitter.name, mockFitter);
+        const renderedValue = nameCol?.render(mockFitter.name, mockFitter);
         return <div data-testid="fitter-name">{renderedValue}</div>;
       };
 
@@ -91,13 +121,13 @@ describe('Fitter Table Columns', () => {
     });
 
     it('renders username column correctly', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const usernameCol = columns.find(col => col.key === 'username');
 
       expect(usernameCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (usernameCol?.render as any)?.(mockFitter.username, mockFitter);
+        const renderedValue = usernameCol?.render(mockFitter.username, mockFitter);
         return <div data-testid="fitter-username">{renderedValue}</div>;
       };
 
@@ -106,13 +136,13 @@ describe('Fitter Table Columns', () => {
     });
 
     it('renders city column correctly', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const cityCol = columns.find(col => col.key === 'city');
 
       expect(cityCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (cityCol?.render as any)?.(mockFitter.city, mockFitter);
+        const renderedValue = cityCol?.render(mockFitter.city, mockFitter);
         return <div data-testid="fitter-city">{renderedValue}</div>;
       };
 
@@ -121,13 +151,13 @@ describe('Fitter Table Columns', () => {
     });
 
     it('renders country column correctly', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const countryCol = columns.find(col => col.key === 'country');
 
       expect(countryCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (countryCol?.render as any)?.(mockFitter.country, mockFitter);
+        const renderedValue = countryCol?.render(mockFitter.country, mockFitter);
         return <div data-testid="fitter-country">{renderedValue}</div>;
       };
 
@@ -138,13 +168,13 @@ describe('Fitter Table Columns', () => {
 
   describe('Status Column Rendering', () => {
     it('renders enabled status for active fitter', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const enabledCol = columns.find(col => col.key === 'enabled');
 
       expect(enabledCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (enabledCol?.render as any)?.(true, mockFitter);
+        const renderedValue = enabledCol?.render(true, mockFitter);
         return <div data-testid="fitter-status">{renderedValue}</div>;
       };
 
@@ -154,11 +184,11 @@ describe('Fitter Table Columns', () => {
 
     it('renders enabled status for inactive fitter', () => {
       const inactiveFitter = { ...mockFitter, enabled: false };
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const enabledCol = columns.find(col => col.key === 'enabled');
 
       const TestComponent = () => {
-        const renderedValue = (enabledCol?.render as any)?.(false, inactiveFitter);
+        const renderedValue = enabledCol?.render(false, inactiveFitter);
         return <div data-testid="fitter-status">{renderedValue}</div>;
       };
 
@@ -169,13 +199,13 @@ describe('Fitter Table Columns', () => {
 
   describe('Date Formatting', () => {
     it('formats last login date correctly', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const lastLoginCol = columns.find(col => col.key === 'lastLogin');
 
       expect(lastLoginCol?.render).toBeDefined();
 
       const TestComponent = () => {
-        const renderedValue = (lastLoginCol?.render as any)?.(mockFitter.lastLogin, mockFitter);
+        const renderedValue = lastLoginCol?.render(mockFitter.lastLogin, mockFitter);
         return <div data-testid="last-login">{renderedValue}</div>;
       };
 
@@ -185,11 +215,11 @@ describe('Fitter Table Columns', () => {
 
     it('handles null last login date', () => {
       const fitterWithoutDate = { ...mockFitter, lastLogin: null };
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const lastLoginCol = columns.find(col => col.key === 'lastLogin');
 
       const TestComponent = () => {
-        const renderedValue = (lastLoginCol?.render as any)?.(null, fitterWithoutDate);
+        const renderedValue = lastLoginCol?.render(null, fitterWithoutDate);
         return <div data-testid="last-login">{renderedValue}</div>;
       };
 
@@ -200,11 +230,11 @@ describe('Fitter Table Columns', () => {
 
   describe('Error Handling', () => {
     it('handles missing fitter data gracefully', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const nameCol = columns.find(col => col.key === 'name');
 
       const TestComponent = () => {
-        const renderedValue = (nameCol?.render as any)?.(null, null);
+        const renderedValue = nameCol?.render(null, null);
         return <div data-testid="fitter-name">{renderedValue || 'No name'}</div>;
       };
 
@@ -213,11 +243,11 @@ describe('Fitter Table Columns', () => {
     });
 
     it('handles missing username gracefully', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const usernameCol = columns.find(col => col.key === 'username');
 
       const TestComponent = () => {
-        const renderedValue = (usernameCol?.render as any)?.(null, mockFitter);
+        const renderedValue = usernameCol?.render(null, mockFitter);
         return <div data-testid="fitter-username">{renderedValue || 'No username'}</div>;
       };
 
@@ -226,11 +256,11 @@ describe('Fitter Table Columns', () => {
     });
 
     it('handles missing city gracefully', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const cityCol = columns.find(col => col.key === 'city');
 
       const TestComponent = () => {
-        const renderedValue = (cityCol?.render as any)?.(null, mockFitter);
+        const renderedValue = cityCol?.render(null, mockFitter);
         return <div data-testid="fitter-city">{renderedValue || 'No city'}</div>;
       };
 
@@ -239,11 +269,11 @@ describe('Fitter Table Columns', () => {
     });
 
     it('handles missing country gracefully', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const countryCol = columns.find(col => col.key === 'country');
 
       const TestComponent = () => {
-        const renderedValue = (countryCol?.render as any)?.(null, mockFitter);
+        const renderedValue = countryCol?.render(null, mockFitter);
         return <div data-testid="fitter-country">{renderedValue || 'No country'}</div>;
       };
 
@@ -255,11 +285,11 @@ describe('Fitter Table Columns', () => {
   describe('Special Character Handling', () => {
     it('handles special characters in name', () => {
       const fitterWithSpecialChars = { ...mockFitter, name: 'José María-Fernández' };
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const nameCol = columns.find(col => col.key === 'name');
 
       const TestComponent = () => {
-        const renderedValue = (nameCol?.render as any)?.(fitterWithSpecialChars.name, fitterWithSpecialChars);
+        const renderedValue = nameCol?.render(fitterWithSpecialChars.name, fitterWithSpecialChars);
         return <div data-testid="fitter-name">{renderedValue}</div>;
       };
 
@@ -269,11 +299,11 @@ describe('Fitter Table Columns', () => {
 
     it('handles international cities', () => {
       const fitterWithInternationalCity = { ...mockFitter, city: 'São Paulo' };
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const cityCol = columns.find(col => col.key === 'city');
 
       const TestComponent = () => {
-        const renderedValue = (cityCol?.render as any)?.(fitterWithInternationalCity.city, fitterWithInternationalCity);
+        const renderedValue = cityCol?.render(fitterWithInternationalCity.city, fitterWithInternationalCity);
         return <div data-testid="fitter-city">{renderedValue}</div>;
       };
 
@@ -284,7 +314,7 @@ describe('Fitter Table Columns', () => {
 
   describe('Column Order', () => {
     it('maintains expected column order', () => {
-      const columns = getFitterTableColumns(mockHeaderFilters, mockSetHeaderFilters);
+      const columns = getColumns();
       const columnKeys = columns.map(col => col.key);
 
       expect(columnKeys).toEqual([

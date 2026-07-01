@@ -97,7 +97,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Verify session with backend (cookie sent automatically)
         await fetchUserData();
         logger.log('AuthContext: Session verified via /auth/me');
-      } catch (error) {
+      } catch {
         logger.log('AuthContext: no valid session, clearing auth state');
         logoutAction();
       } finally {
@@ -106,7 +106,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     checkAuth();
-  }, []); // Empty dependency array - should only run once on mount
+  // TODO(react-hooks): intentionally empty — this effect must run exactly once on mount
+  // to restore an existing session. Adding fetchUserData/user/isLoading/logoutAction/
+  // setLoadingAction as deps would trigger re-auth on every state change, causing an
+  // infinite authentication loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Login function
   const login = async (username: string, password: string) => {
@@ -134,15 +139,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
           // Fallback: use user info from login response
           if (result.user) {
-            const userRole = mapTypeNameToRole(result.user?.role?.type || result.user?.role || 'user');
+            const u = result.user;
+            const rawRole = u['role'];
+            const roleTypeName =
+              (typeof rawRole === 'object' && rawRole !== null && 'type' in rawRole && typeof (rawRole as Record<string, unknown>)['type'] === 'string')
+                ? (rawRole as Record<string, unknown>)['type'] as string
+                : typeof rawRole === 'string'
+                  ? rawRole
+                  : 'user';
+            const userRole = mapTypeNameToRole(roleTypeName);
 
             const userData: User = {
-              id: result.userId || result.user.id || 0,
-              username: result.user.username || username,
+              id: (result.userId ?? (typeof u['id'] === 'string' || typeof u['id'] === 'number' ? u['id'] : 0)) as string | number,
+              username: typeof u['username'] === 'string' ? u['username'] : username,
               role: userRole,
-              email: result.user.email,
-              firstName: result.user.firstName || '',
-              lastName: result.user.lastName || '',
+              email: typeof u['email'] === 'string' ? u['email'] : undefined,
+              firstName: typeof u['firstName'] === 'string' ? u['firstName'] : '',
+              lastName: typeof u['lastName'] === 'string' ? u['lastName'] : '',
             };
 
             logger.log('AuthContext: using fallback user data from login response');
@@ -190,6 +203,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       logger.error('Failed to refresh user data:', error);
       logout();
     }
+  // TODO(react-hooks): `logout` is defined in the same render scope without useCallback
+  // and would create a new reference each render, making refreshUser a new function on
+  // every render if added. The logout function itself only calls stable Jotai actions
+  // and clearAuthTokens, so the stale-closure risk is negligible.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchUserData]);
 
   // Create the context value

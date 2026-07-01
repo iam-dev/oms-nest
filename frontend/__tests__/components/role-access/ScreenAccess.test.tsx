@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { UserRole } from '@/types/Role';
 import { RoleProtectedComponent } from '@/components/shared/RoleProtectedComponent';
-import { getAllRoles, roleTestCases, hasScreenAccess, shouldDenyScreenAccess } from '../../utils/roleTestHelpers';
+import { getAllRoles, roleTestCases, hasScreenAccess } from '../../utils/roleTestHelpers';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
 
 // Mock the hooks and utilities
 jest.mock('@/hooks/useUserRole', () => ({
@@ -27,8 +29,8 @@ jest.mock('@/utils/rolePermissions', () => ({
   }
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
+const mockHasScreenPermission = rolePermissionsModule.hasScreenPermission as jest.Mock;
 
 // Mock components representing different screens
 const DashboardScreen = () => <div data-testid="dashboard-screen">Dashboard Content</div>;

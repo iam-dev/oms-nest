@@ -467,9 +467,10 @@ test.describe('Customers CRUD Operations', () => {
   test('should validate customer data integrity from API response', async () => {
     // waitForApiResponse captures the response that fired when beforeEach navigated
     // to /customers and the component fetched data
-    const response = await apiHelper.waitForApiResponse('/customers');
+    const responseRaw = await apiHelper.waitForApiResponse('/customers');
+    const response = responseRaw as { 'hydra:member': Record<string, unknown>[] };
 
-    expect(response).toHaveProperty('hydra:member');
+    expect(responseRaw).toHaveProperty('hydra:member');
     expect(Array.isArray(response['hydra:member'])).toBe(true);
 
     response['hydra:member'].forEach(

@@ -17,7 +17,7 @@ export function getOptionTableColumns(headerFilters: OptionHeaderFilters, setHea
           entityType="option"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '200px',
     },
     {
@@ -31,7 +31,7 @@ export function getOptionTableColumns(headerFilters: OptionHeaderFilters, setHea
           entityType="option"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '200px',
     },
     {
@@ -45,7 +45,7 @@ export function getOptionTableColumns(headerFilters: OptionHeaderFilters, setHea
           entityType="option"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '250px',
     },
     {
@@ -59,7 +59,7 @@ export function getOptionTableColumns(headerFilters: OptionHeaderFilters, setHea
           entityType="option"
         />
       ),
-      render: (v: any) => v ? `$${parseFloat(v).toFixed(2)}` : '',
+      render: (v: unknown) => (v != null && v !== '') ? `$${parseFloat(String(v)).toFixed(2)}` : '',
       maxWidth: '120px',
     },
     {
@@ -73,7 +73,7 @@ export function getOptionTableColumns(headerFilters: OptionHeaderFilters, setHea
           entityType="option"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => String(v ?? ''),
       maxWidth: '120px',
     },
     {
@@ -91,7 +91,7 @@ export function getOptionTableColumns(headerFilters: OptionHeaderFilters, setHea
           entityType="option"
         />
       ),
-      render: (v: any) => v ? 'Yes' : 'No',
+      render: (v: unknown) => v ? 'Yes' : 'No',
       maxWidth: '100px',
     },
   ];

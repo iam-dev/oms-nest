@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import type { Column } from '@/components/shared/DataTable';
 import { useTableFilters, usePagination } from '@/hooks';
-import { getModelTableColumns } from '@/utils/modelTableColumns';
+import { getModelTableColumns, type ModelRow } from '@/utils/modelTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { fetchModels, updateModel, deleteModel, createModel, type Model } from '@/services/models';
 import { ModelDetailModal } from '@/components/shared/ModelDetailModal';
@@ -65,6 +66,9 @@ export default function Models() {
 
   // Fetch models when dependencies change
   useEffect(() => {
+    // TODO(react-hooks): fetchModelsData is a useCallback that calls setState internally;
+    // this is the standard async fetch-on-mount/dep-change pattern and is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchModelsData();
   }, [fetchModelsData]);
 
@@ -189,11 +193,11 @@ export default function Models() {
       <EntityTable
         entities={models}
         columns={getModelTableColumns(filters, handleFilterChange, {
-          onInfo: handleInfoClick,
-          onExtras: handleExtrasClick,
-          onOptions: handleOptionsClick,
-          onPrices: handlePricesClick,
-        })}
+          onInfo: handleInfoClick as unknown as (model: ModelRow) => void,
+          onExtras: handleExtrasClick as unknown as (model: ModelRow) => void,
+          onOptions: handleOptionsClick as unknown as (model: ModelRow) => void,
+          onPrices: handlePricesClick as unknown as (model: ModelRow) => void,
+        }) as unknown as Column<Model>[]}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

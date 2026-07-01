@@ -1,6 +1,8 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { CreateRepairDialog } from '@/components/CreateRepairDialog';
+import * as enrichedOrdersModule from '@/services/enrichedOrders';
+import * as sonnerModule from 'sonner';
 
 // ---------------------------------------------------------------------------
 // External service mocks
@@ -106,10 +108,11 @@ jest.mock('@/utils/logger', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const { fetchOrderDetail, createOrderFromPayload, getEnrichedOrders } =
-  require('@/services/enrichedOrders');
+const fetchOrderDetail = enrichedOrdersModule.fetchOrderDetail as jest.Mock;
+const createOrderFromPayload = enrichedOrdersModule.createOrderFromPayload as jest.Mock;
+const getEnrichedOrders = enrichedOrdersModule.getEnrichedOrders as jest.Mock;
 
-const { toast } = require('sonner');
+const toast = sonnerModule.toast as unknown as { success: jest.Mock; error: jest.Mock };
 
 const mockOrderDetail = {
   id: 42,

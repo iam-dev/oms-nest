@@ -28,6 +28,8 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
 
   useEffect(() => {
     if (fitter) {
+      // TODO(react-hooks): syncing fitter prop to local edit state; derived-state-from-props pattern, safe here
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedFitter({
         ...fitter,
         username: fitter.username || '',

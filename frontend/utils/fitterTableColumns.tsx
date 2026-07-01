@@ -23,7 +23,7 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           entityType="fitter"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'username',
@@ -36,7 +36,7 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           entityType="fitter"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'city',
@@ -49,7 +49,7 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           entityType="fitter"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'country',
@@ -63,7 +63,7 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           entityType="fitter"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => v ?? '',
     },
     {
       key: 'enabled',
@@ -80,7 +80,7 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           entityType="fitter"
         />
       ),
-      render: (v: any) => {
+      render: (v: unknown) => {
         const status = v ? 'ACTIVE' : 'INACTIVE';
         return <StatusBadge status={status} type="fitter" />;
       },
@@ -96,7 +96,7 @@ export function getFitterTableColumns(headerFilters: FitterHeaderFilters, setHea
           entityType="fitter"
         />
       ),
-      render: (v: any) => v ?? 'Never',
+      render: (v: unknown) => v ?? 'Never',
     },
   ];
 }

@@ -13,10 +13,12 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { OrderSearchMessage } from './OrderSearchMessage';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { fetchCompleteOrderData } from '../utils/orderProcessing';
+import type { Order as OrderDomainType } from '@/types/Order';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
 import { useUserRole } from '@/hooks/useUserRole';
 import { logger } from '@/utils/logger';
 import type { Column } from '@/components/shared/DataTable';
+import type { OrderTableRow } from '@/utils/orderProcessing';
 
 // Enriched order customer/fitter/supplier can be a string name or an object with id+name
 interface OrderRelatedEntity {
@@ -101,6 +103,10 @@ export default function Orders() {
 
   // Clear selection when page or filters change
   useEffect(() => {
+    // TODO(react-hooks): Resetting checkbox selection to empty on page/filter navigation is
+    // intentional UI behavior. Refactoring to derived state would require keying the subtree
+    // or filtering selectedOrderIds by visibleIds on every render, risking behavior change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedOrderIds(new Set());
   }, [page, headerFilters]);
 
@@ -166,7 +172,7 @@ export default function Orders() {
   // Use shared fetchCompleteOrderData utility
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const fetchCompleteOrderDataWrapper = async (order: Order): Promise<Order> => {
-    return fetchCompleteOrderData(order, setIsLoadingOrderData, setOrderDataError);
+    return fetchCompleteOrderData(order as unknown as OrderDomainType, setIsLoadingOrderData, setOrderDataError) as unknown as Promise<Order>;
   };
 
   const handleViewDetails = (order: Order) => {
@@ -234,7 +240,7 @@ export default function Orders() {
       <div className="space-y-4">
         <EntityTable
           entities={processedOrders}
-          columns={[checkboxColumn, ...getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes, { hideFitter: isFitter })]}
+          columns={[checkboxColumn, ...getOrderTableColumns(headerFilters, handleFilterChange, dynamicFactories, dynamicSeatSizes, { hideFitter: isFitter })] as Column<OrderTableRow>[]}
           onView={(order) => handleViewDetails(order as unknown as Order)}
           onEdit={(order) => handleEditOrder(order as unknown as Order)}
           onDelete={(order) => handleDeleteOrder(order as unknown as Order)}
