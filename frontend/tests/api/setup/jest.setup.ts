@@ -2,18 +2,23 @@
  * Jest setup for API tests
  */
 
+import { TextEncoder, TextDecoder } from 'util';
+// @ts-expect-error -- node-fetch v2 ships no declaration file; @types/node-fetch is not installed
+import fetch, { Headers, Request, Response } from 'node-fetch';
+
 // Add missing globals for Jest environment
 Object.assign(global, {
-  TextEncoder: require('util').TextEncoder,
-  TextDecoder: require('util').TextDecoder,
+  TextEncoder,
+  TextDecoder,
 });
 
 // Simple fetch polyfill for Jest test environment
-const fetch = require('node-fetch');
-global.fetch = fetch;
-global.Headers = fetch.Headers;
-global.Request = fetch.Request;
-global.Response = fetch.Response;
+Object.assign(global, {
+  fetch,
+  Headers,
+  Request,
+  Response,
+});
 
 // Set test timeout
 jest.setTimeout(30000);
@@ -28,7 +33,7 @@ const originalConsoleWarn = console.warn;
 beforeAll(() => {
   // Suppress expected console errors during tests unless in debug mode
   if (!process.env.DEBUG_TESTS) {
-    console.error = (...args: any[]) => {
+    console.error = (...args: unknown[]) => {
       // Still show authentication and important API errors
       const message = args.join(' ');
       if (message.includes('authentication') || message.includes('ECONNREFUSED') || message.includes('500')) {
@@ -36,7 +41,7 @@ beforeAll(() => {
       }
     };
 
-    console.warn = (...args: any[]) => {
+    console.warn = (...args: unknown[]) => {
       // Suppress most warnings unless they're critical
       const message = args.join(' ');
       if (message.includes('deprecated') === false) {
@@ -52,18 +57,17 @@ afterAll(() => {
   console.warn = originalConsoleWarn;
 });
 
-afterEach(() => {
+afterEach(async () => {
   // Clean up any active API requests after each test to prevent Jest warnings
-  if (typeof require !== 'undefined') {
-    try {
-      // Dynamically import and clean up the API client to avoid circular dependencies
-      const { apiClient } = require('../shared/api-client');
-      if (apiClient && typeof apiClient.cleanup === 'function') {
-        apiClient.cleanup();
-      }
-    } catch (error) {
-      // Ignore cleanup errors - just ensure we don't leave hanging requests
+  try {
+    // Dynamically import and clean up the API client to avoid circular dependencies
+    const mod = await import('../shared/api-client');
+    const client = (mod as { apiClient?: { cleanup?: () => void } }).apiClient;
+    if (client && typeof client.cleanup === 'function') {
+      client.cleanup();
     }
+  } catch {
+    // Ignore cleanup errors - just ensure we don't leave hanging requests
   }
 });
 

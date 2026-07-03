@@ -34,18 +34,22 @@ async function fetchSaddleStock(
 
 export async function fetchMySaddleStock({
   page = 1,
-  partial = false,
-  orderBy = 'productId',
-  order = 'desc',
+}: {
+  page?: number;
+  partial?: boolean;
+  orderBy?: string;
+  order?: string;
 } = {}): Promise<SaddleStockSearchResult> {
   return fetchSaddleStock('my', { page });
 }
 
 export async function fetchAvailableSaddleStock({
   page = 1,
-  partial = false,
-  orderBy = 'productId',
-  order = 'desc',
+}: {
+  page?: number;
+  partial?: boolean;
+  orderBy?: string;
+  order?: string;
 } = {}): Promise<SaddleStockSearchResult> {
   return fetchSaddleStock('available', { page });
 }
@@ -57,7 +61,7 @@ export async function fetchAllSaddleStock({
   return fetchSaddleStock('all', { page, search });
 }
 
-export async function getSaddleStockById(id: string): Promise<any> {
+export async function getSaddleStockById(id: string): Promise<unknown> {
   const res = await fetch(`${API_URL}/api/v1/saddle-stock/${id}`, {
     headers: {
       'Content-Type': 'application/json',

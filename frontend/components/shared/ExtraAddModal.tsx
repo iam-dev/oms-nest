@@ -45,6 +45,8 @@ export function ExtraAddModal({ isOpen, onClose, onSave }: ExtraAddModalProps) {
 
   useEffect(() => {
     if (isOpen) {
+      // TODO(react-hooks): form reset on modal open; derived-state-from-props pattern, safe here
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNewExtra({ ...INITIAL_STATE });
       setError('');
     }

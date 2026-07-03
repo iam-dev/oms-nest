@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import type { Column } from '@/components/shared/DataTable';
 import { useTableFilters, usePagination } from '@/hooks';
 import { getLeathertypeTableColumns } from '@/utils/leathertypeTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -59,6 +60,9 @@ export default function Leathertypes() {
 
   // Fetch leathertypes when dependencies change
   useEffect(() => {
+    // TODO(react-hooks): fetchLeathertypesData is a useCallback that calls setState internally;
+    // this is the standard async fetch-on-mount/dep-change pattern and is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLeathertypesData();
   }, [fetchLeathertypesData]);
   
@@ -169,7 +173,7 @@ export default function Leathertypes() {
 
       <EntityTable
         entities={leathertypes}
-        columns={getLeathertypeTableColumns(filters, handleFilterChange)}
+        columns={getLeathertypeTableColumns(filters, handleFilterChange) as unknown as Column<Leathertype>[]}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

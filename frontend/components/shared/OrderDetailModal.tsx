@@ -157,7 +157,7 @@ export function OrderDetailModal({ order, isOpen, onClose }: OrderDetailModalPro
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-700">Factory:</span>
-                  <span className="text-gray-900">{order.supplierName || getSupplierName(order) || '-'}</span>
+                  <span className="text-gray-900">{String(order.supplierName || getSupplierName(order) || '-')}</span>
                 </div>
               </div>
             </div>

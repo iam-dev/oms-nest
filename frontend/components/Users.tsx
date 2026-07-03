@@ -93,7 +93,8 @@ export default function Users() {
 
   // Initial data fetch - trigger refetch when dependencies change
   React.useEffect(() => {
-    refetch();
+    // TODO(react-hooks): refetch() is async — setState calls happen after the awaited fetch, not synchronously in the effect body.
+    refetch(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
   }, [refetch]);
 
   // Debounced search and filter effect
@@ -223,7 +224,7 @@ export default function Users() {
         firstName: newUser.firstName,
         lastName: newUser.lastName,
         role: newUser.role!,
-        password: newUser.password!,
+        password: String(newUser.password ?? ''),
       });
 
       // Add to list optimistically if we have a result

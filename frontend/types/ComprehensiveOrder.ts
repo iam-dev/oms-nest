@@ -345,7 +345,7 @@ export interface ProductSaddleEditFormState {
   flapLength?: string;
   selectedItems: ProductSaddleItem[];
   selectedExtras: ProductSaddleExtra[];
-  configuration: any;
+  configuration: Record<string, unknown>;
   basePrice: number;
   totalPrice: number;
 }

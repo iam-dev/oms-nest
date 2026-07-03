@@ -1,6 +1,12 @@
 # Production Dockerfile for Next.js
 FROM node:20-alpine AS base
 
+# Pull latest Alpine security patches — the base image is baked with a
+# libcrypto3/libssl3 version affected by CVE-2026-45447 (openssl
+# PKCS7_verify use-after-free). apk upgrade picks up the fix from
+# Alpine's live repo at build time.
+RUN apk update && apk upgrade --no-cache
+
 # Install dependencies only when needed
 FROM base AS deps
 RUN apk add --no-cache libc6-compat

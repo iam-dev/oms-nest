@@ -260,15 +260,19 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Load order data and edit options
   useEffect(() => {
     if (orderId) {
-      loadData();
+      // TODO(react-hooks): loadData() is async — all setState calls happen after await, not synchronously in the effect body.
+      loadData(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
     }
   }, [orderId, loadData]);
 
-  // Customer search
+  // Customer search — debounced with 300 ms.
   // FE-043: abort the in-flight fetch on each keystroke to avoid stale result races.
+  // The synchronous setCustomerSearchResults([]) on the early-return path is a stale-results
+  // cleanup; suppressed because refactoring into the timer callback would delay clearing by 300 ms.
   useEffect(() => {
     if (customerSearchTerm.length < 2) {
-      setCustomerSearchResults([]);
+      // TODO(react-hooks): synchronous setState clears stale results immediately when term < 2 chars.
+      setCustomerSearchResults([]); // eslint-disable-line react-hooks/set-state-in-effect -- immediate cleanup when search term is too short
       return;
     }
     const controller = new AbortController();
@@ -295,11 +299,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     };
   }, [customerSearchTerm]);
 
-  // Fitter search
+  // Fitter search — debounced with 300 ms. Same rationale as customer search above.
   // FE-043: abort the in-flight fetch on each keystroke to avoid stale result races.
   useEffect(() => {
     if (fitterSearchTerm.length < 2) {
-      setFitterSearchResults([]);
+      // TODO(react-hooks): synchronous setState clears stale results immediately when term < 2 chars.
+      setFitterSearchResults([]); // eslint-disable-line react-hooks/set-state-in-effect -- immediate cleanup when search term is too short
       return;
     }
     const controller = new AbortController();

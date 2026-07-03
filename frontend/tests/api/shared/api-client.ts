@@ -3,7 +3,7 @@
  * Mirrors the authentication and request patterns used by the UI
  */
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   data: T;
   status: number;
   statusText: string;
@@ -14,7 +14,7 @@ interface ApiError {
   message: string;
   status: number;
   statusText: string;
-  data?: any;
+  data?: unknown;
 }
 
 interface LoginCredentials {
@@ -22,9 +22,17 @@ interface LoginCredentials {
   password: string;
 }
 
+interface LoginUser {
+  id?: number;
+  email?: string;
+  name?: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
 interface LoginResponse {
   token?: string;
-  user?: any;
+  user?: LoginUser;
   message?: string;
 }
 
@@ -77,7 +85,7 @@ export class ApiClient {
         if (controller && !controller.signal.aborted) {
           controller.abort();
         }
-      } catch (error) {
+      } catch {
         // Silently ignore cleanup errors to prevent Jest warnings
       }
     });
@@ -118,7 +126,7 @@ export class ApiClient {
    */
   private safeLog(level: 'log' | 'warn' | 'error', message: string) {
     // Only log during active test execution, not during cleanup
-    if (this.isTestEnvironment && typeof jest !== 'undefined' && (jest as any).isTornDown) {
+    if (this.isTestEnvironment && typeof jest !== 'undefined' && (jest as { isTornDown?: boolean }).isTornDown) {
       return; // Jest is shutting down, don't log
     }
 
@@ -159,18 +167,18 @@ export class ApiClient {
   /**
    * Make HTTP request with retry logic and error handling
    */
-  private async request<T = any>(
+  private async request<T = unknown>(
     method: string,
     endpoint: string,
-    data?: any,
+    data?: unknown,
     headers: Record<string, string> = {}
   ): Promise<ApiResponse<T>> {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         return await this.makeRequest<T>(method, endpoint, data, headers);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Don't retry for HTTP errors (401, 403, etc.) - only for network errors
-        if (error.status && error.status > 0) {
+        if (error && typeof error === 'object' && 'status' in error && (error as ApiError).status > 0) {
           throw error;
         }
 
@@ -190,10 +198,10 @@ export class ApiClient {
   /**
    * Make single HTTP request with error handling
    */
-  private async makeRequest<T = any>(
+  private async makeRequest<T = unknown>(
     method: string,
     endpoint: string,
-    data?: any,
+    data?: unknown,
     headers: Record<string, string> = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
@@ -206,7 +214,7 @@ export class ApiClient {
         if (!controller.signal.aborted) {
           controller.abort();
         }
-      } catch (error) {
+      } catch {
         // Ignore timeout abort errors
       } finally {
         this.activeRequests.delete(controller);
@@ -319,9 +327,9 @@ export class ApiClient {
 
     this.storeCookies(response);
 
-    let data: any;
+    let data: { token?: string; accessToken?: string; user?: LoginUser; message?: string };
     try {
-      data = await response.json();
+      data = await response.json() as typeof data;
     } catch {
       data = {};
     }
@@ -370,7 +378,7 @@ export class ApiClient {
   /**
    * HTTP Methods
    */
-  async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
+  async get<T = unknown>(endpoint: string, params?: Record<string, string | number | boolean | null | undefined>): Promise<ApiResponse<T>> {
     let url = endpoint;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -384,19 +392,19 @@ export class ApiClient {
     return this.request<T>('GET', url);
   }
 
-  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T = unknown>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>('POST', endpoint, data);
   }
 
-  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T = unknown>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>('PUT', endpoint, data);
   }
 
-  async patch<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async patch<T = unknown>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>('PATCH', endpoint, data);
   }
 
-  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+  async delete<T = unknown>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>('DELETE', endpoint);
   }
 

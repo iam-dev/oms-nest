@@ -1,6 +1,8 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { EditOrder } from '@/components/EditOrder';
+import * as orderEditViewModule from '@/services/orderEditView';
+import * as enrichedOrdersModule from '@/services/enrichedOrders';
 
 // ---------------------------------------------------------------------------
 // Service mocks
@@ -34,17 +36,17 @@ jest.mock('@/utils/logger', () => ({
 // ---------------------------------------------------------------------------
 
 jest.mock('@/components/ui/dialog', () => ({
-  DialogContent: ({ children }: any) => (
+  DialogContent: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="dialog-content">{children}</div>
   ),
-  DialogHeader: ({ children }: any) => <div>{children}</div>,
-  DialogTitle: ({ children }: any) => (
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => (
     <h2 data-testid="dialog-title">{children}</h2>
   ),
 }));
 
 jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, disabled, ...props }: any) => (
+  Button: ({ children, onClick, disabled, ...props }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; 'data-testid'?: string }) => (
     <button onClick={onClick} disabled={disabled} data-testid={props['data-testid']}>
       {children}
     </button>
@@ -52,33 +54,33 @@ jest.mock('@/components/ui/button', () => ({
 }));
 
 jest.mock('@/components/ui/input', () => ({
-  Input: (props: any) => <input {...props} />,
+  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
 jest.mock('@/components/ui/label', () => ({
-  Label: ({ children, ...props }: any) => <label {...props}>{children}</label>,
+  Label: ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement> & { children: React.ReactNode }) => <label {...props}>{children}</label>,
 }));
 
 jest.mock('@/components/ui/select', () => ({
-  Select: ({ children, onValueChange, value }: any) => (
+  Select: ({ children, value }: { children: React.ReactNode; value?: string }) => (
     <div data-testid="select" data-value={value}>
       {children}
     </div>
   ),
-  SelectTrigger: ({ children }: any) => <div>{children}</div>,
-  SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
-  SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children, value }: any) => (
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
     <div data-value={value}>{children}</div>
   ),
 }));
 
 jest.mock('@/components/ui/checkbox', () => ({
-  Checkbox: (props: any) => <input type="checkbox" {...props} />,
+  Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
 }));
 
 jest.mock('@/components/ui/textarea', () => ({
-  Textarea: (props: any) => <textarea {...props} />,
+  Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
 }));
 
 jest.mock('lucide-react', () => ({
@@ -95,19 +97,10 @@ jest.mock('lucide-react', () => ({
 // Typed references to mocked modules (resolved after jest.mock hoisting)
 // ---------------------------------------------------------------------------
 
-const {
-  fetchOrderEditData,
-  saveOrderEditData,
-} = require('@/services/orderEditView') as {
-  fetchOrderEditData: jest.Mock;
-  searchCustomers: jest.Mock;
-  searchFitters: jest.Mock;
-  saveOrderEditData: jest.Mock;
-};
+const fetchOrderEditData = orderEditViewModule.fetchOrderEditData as jest.Mock;
+const saveOrderEditData = orderEditViewModule.saveOrderEditData as jest.Mock;
 
-const { createOrderFromPayload } = require('@/services/enrichedOrders') as {
-  createOrderFromPayload: jest.Mock;
-};
+const createOrderFromPayload = enrichedOrdersModule.createOrderFromPayload as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Fixtures

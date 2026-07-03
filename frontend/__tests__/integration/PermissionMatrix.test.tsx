@@ -312,14 +312,14 @@ describe('Comprehensive Permission Matrix Validation', () => {
 
     test('undefined role has no permissions', () => {
       Object.keys(SCREEN_PERMISSIONS).forEach(permission => {
-        expect(hasScreenPermission(undefined as any, permission as keyof typeof SCREEN_PERMISSIONS)).toBe(false);
+        expect(hasScreenPermission(undefined as unknown as null, permission as keyof typeof SCREEN_PERMISSIONS)).toBe(false);
       });
     });
 
     test('invalid permission keys return false', () => {
       getAllRoles().forEach(role => {
         // Test with a completely invalid permission key that doesn't exist
-        const invalidResult = hasScreenPermission(role, 'TOTALLY_INVALID_PERMISSION_THAT_DOES_NOT_EXIST' as any);
+        const invalidResult = hasScreenPermission(role, 'TOTALLY_INVALID_PERMISSION_THAT_DOES_NOT_EXIST' as unknown as keyof typeof SCREEN_PERMISSIONS);
         expect(invalidResult).toBe(false);
       });
     });

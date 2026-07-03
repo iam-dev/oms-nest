@@ -2,6 +2,15 @@ import { fetchEntities } from './api';
 import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 
+interface SaveBundleError {
+  ErrorMessage?: string;
+  message?: string;
+  Message?: string;
+  error?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
 export interface Supplier {
   id: number; // INTEGER - matching legacy database
   name: string;
@@ -118,9 +127,10 @@ export async function createSupplier(supplierData: Partial<Supplier>): Promise<S
   };
 
   // Remove undefined fields to keep payload clean
-  Object.keys(entity).forEach(key => {
-    if (key !== 'entityAspect' && (entity as any)[key] === undefined) {
-      delete (entity as any)[key];
+  const entityRecord = entity as Record<string, unknown>;
+  Object.keys(entityRecord).forEach(key => {
+    if (key !== 'entityAspect' && entityRecord[key] === undefined) {
+      delete entityRecord[key];
     }
   });
 
@@ -157,7 +167,7 @@ export async function createSupplier(supplierData: Partial<Supplier>): Promise<S
   if (result.Errors && result.Errors.length > 0) {
     logger.error('SaveBundle errors:', result.Errors);
     logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: any) => {
+    const errorMessages = result.Errors.map((err: SaveBundleError) => {
       return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
     }).join(', ');
     throw new Error(`Supplier creation failed: ${errorMessages}`);
@@ -209,9 +219,10 @@ export async function updateSupplier(id: number | string, supplierData: Partial<
   };
 
   // Remove undefined fields to keep payload clean
-  Object.keys(entity).forEach(key => {
-    if (key !== 'entityAspect' && (entity as any)[key] === undefined) {
-      delete (entity as any)[key];
+  const updateEntityRecord = entity as Record<string, unknown>;
+  Object.keys(updateEntityRecord).forEach(key => {
+    if (key !== 'entityAspect' && updateEntityRecord[key] === undefined) {
+      delete updateEntityRecord[key];
     }
   });
 
@@ -249,7 +260,7 @@ export async function updateSupplier(id: number | string, supplierData: Partial<
     logger.error('SaveBundle errors:', result.Errors);
     // Log the full error structure to understand the format
     logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: any) => {
+    const errorMessages = result.Errors.map((err: SaveBundleError) => {
       // Try different error message fields
       return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
     }).join(', ');

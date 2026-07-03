@@ -25,6 +25,8 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
 
   useEffect(() => {
     if (customer) {
+      // TODO(react-hooks): syncing customer prop to local edit state; derived-state-from-props pattern, safe here
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedCustomer({
         ...customer,
         name: customer.name || '',

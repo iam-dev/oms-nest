@@ -41,7 +41,7 @@ async function checkPrerequisites(): Promise<boolean> {
     // Check if backend is running
     await execAsync('curl -s http://localhost:3001/health || echo "Backend not running"');
     console.log('✅ Backend API is accessible');
-  } catch (error) {
+  } catch {
     console.log('❌ Backend API is not accessible at http://localhost:3001');
     console.log('   Please start the backend with: cd backend && npm run start:dev');
     return false;
@@ -51,7 +51,7 @@ async function checkPrerequisites(): Promise<boolean> {
     // Check if frontend is running
     await execAsync('curl -s http://localhost:3000 || echo "Frontend not running"');
     console.log('✅ Frontend is accessible');
-  } catch (error) {
+  } catch {
     console.log('❌ Frontend is not accessible at http://localhost:3000');
     console.log('   Please start the frontend with: npm run dev');
     return false;
@@ -65,12 +65,13 @@ async function runTestSuite(suite: TestSuite): Promise<{ success: boolean; outpu
   console.log(`   ${suite.description}`);
 
   try {
-    const { stdout, stderr } = await execAsync(`npx playwright test ${suite.path} --reporter=list`);
+    const { stdout } = await execAsync(`npx playwright test ${suite.path} --reporter=list`);
     console.log(`✅ ${suite.name} tests completed successfully`);
     return { success: true, output: stdout };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.log(`❌ ${suite.name} tests failed`);
-    return { success: false, output: error.stdout || error.message };
+    const err = error as { stdout?: string; message?: string };
+    return { success: false, output: err.stdout || err.message || String(error) };
   }
 }
 

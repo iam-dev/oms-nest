@@ -1,14 +1,17 @@
 import { renderHook } from '@testing-library/react';
 import { useRolePermission } from '@/components/shared/RoleProtectedComponent';
 import { UserRole } from '@/types/Role';
-import { getAllRoles } from '../utils/roleTestHelpers';
+import { SCREEN_PERMISSIONS } from '@/utils/rolePermissions';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+
+type ScreenKey = keyof typeof SCREEN_PERMISSIONS;
 
 // Mock the useUserRole hook
 jest.mock('@/hooks/useUserRole', () => ({
   useUserRole: jest.fn()
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
 
 describe('useRolePermission Hook', () => {
   beforeEach(() => {
@@ -182,10 +185,10 @@ describe('useRolePermission Hook', () => {
         })
       }));
 
-      const orderActions = ['ORDER_CREATE', 'ORDER_EDIT', 'ORDER_DELETE', 'ORDER_APPROVE'];
+      const orderActions: ScreenKey[] = ['ORDER_CREATE', 'ORDER_EDIT', 'ORDER_DELETE', 'ORDER_APPROVE'];
       
       orderActions.forEach(action => {
-        const { result } = renderHook(() => useRolePermission(action as any));
+        const { result } = renderHook(() => useRolePermission(action));
         expect(result.current).toBe(true);
       });
     });
@@ -204,16 +207,16 @@ describe('useRolePermission Hook', () => {
         })
       }));
 
-      const allowedActions = ['ORDER_CREATE', 'ORDER_VIEW'];
-      const deniedActions = ['ORDER_EDIT', 'ORDER_DELETE', 'ORDER_APPROVE'];
+      const allowedActions: ScreenKey[] = ['ORDER_CREATE', 'ORDER_VIEW'];
+      const deniedActions: ScreenKey[] = ['ORDER_EDIT', 'ORDER_DELETE', 'ORDER_APPROVE'];
       
       allowedActions.forEach(action => {
-        const { result } = renderHook(() => useRolePermission(action as any));
+        const { result } = renderHook(() => useRolePermission(action));
         expect(result.current).toBe(true);
       });
 
       deniedActions.forEach(action => {
-        const { result } = renderHook(() => useRolePermission(action as any));
+        const { result } = renderHook(() => useRolePermission(action));
         expect(result.current).toBe(false);
       });
     });

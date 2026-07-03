@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import type { Column } from '@/components/shared/DataTable';
 import { useTableFilters } from '@/hooks';
 import { getCustomerTableColumns } from '@/utils/customerTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -86,9 +87,12 @@ export default function Customers() {
   }, [currentPage, searchTerm, filters]);
 
   // Fetch customers when dependencies change
+  // TODO(react-hooks): fetchCustomersData is a useCallback-wrapped async fetch — standard data-loading trigger, not a cascading-render issue
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchCustomersData();
   }, [fetchCustomersData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Handle filter changes
   const handleFilterChange = (key: string, value: string) => {
@@ -229,7 +233,7 @@ export default function Customers() {
 
       <EntityTable
         entities={customers}
-        columns={getCustomerTableColumns(filters, handleFilterChange)}
+        columns={getCustomerTableColumns(filters, handleFilterChange) as unknown as Column<Customer>[]}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

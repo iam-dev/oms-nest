@@ -23,11 +23,12 @@ import { ArrowLeft, ChevronRight, Search, User, Package, Settings, Plus } from '
 import { fetchOrderEditData, searchCustomers, searchFitters, saveOrderEditData } from '@/services/orderEditView';
 import { createOrderFromPayload, UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
-import { 
-  ComprehensiveOrderData, 
+import {
+  ComprehensiveOrderData,
   OrderEditFormState,
   Customer,
   Fitter,
+  OrderLine,
   OrderStatus
 } from '@/types/ComprehensiveOrder';
 import { logger } from '@/utils/logger';
@@ -273,7 +274,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       
       // Initialize form data from comprehensive order data
       setFormData({
-        orderLines: data.orderLines || [],
+        orderLines: (data.orderLines || []) as OrderLine[],
         pricing: data.order.pricing || {
           subtotal: 0,
           discount: 0,
@@ -385,7 +386,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   // Load comprehensive order data
   useEffect(() => {
     if (order?.id) {
-      loadOrderData();
+      // TODO(react-hooks): loadOrderData() is async — all setState calls happen after awaited fetches, not synchronously in the effect body.
+      loadOrderData(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
     }
   }, [order?.id, loadOrderData]);
 
@@ -400,7 +402,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       setCustomerSearchLoading(true);
       try {
         const results = await searchCustomers(searchTerm);
-        setCustomerSearchResults(results);
+        setCustomerSearchResults(results as unknown as Customer[]);
       } catch (error) {
         logger.error('Error searching customers:', error);
         setCustomerSearchResults([]);
@@ -422,7 +424,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       setFitterSearchLoading(true);
       try {
         const results = await searchFitters(searchTerm);
-        setFitterSearchResults(results);
+        setFitterSearchResults(results as unknown as Fitter[]);
       } catch (error) {
         logger.error('Error searching fitters:', error);
         setFitterSearchResults([]);
@@ -664,7 +666,9 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const regularOptions = sortedOptions.filter(o => o.type !== 2);
   const extraOptions = sortedOptions.filter(o => o.type === 2);
 
-  // Auto-fill option selections from preset
+  // Auto-fill option selections from preset.
+  // Dep is the whole editOptions object rather than editOptions?.presetItems so the React
+  // Compiler can infer an exact match between the source and the memoization boundary.
   const applyPreset = useCallback((presetId: string) => {
     setSelectedPresetId(presetId);
     if (presetId === 'none' || !editOptions?.presetItems) return;
@@ -677,7 +681,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     setOptionSelections(selections);
     setOptionCustom({});
     setSelectedExtras({});
-  }, [editOptions?.presetItems]);
+  }, [editOptions]);
 
   return (
     <DialogContent className="max-w-[1400px] h-[90vh] p-0 flex flex-col">

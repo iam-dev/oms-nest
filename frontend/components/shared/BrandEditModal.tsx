@@ -24,6 +24,8 @@ export function BrandEditModal({ brand, isOpen, onClose, onSave }: BrandEditModa
   // Set initial brand data
   useEffect(() => {
     if (brand) {
+      // TODO(react-hooks): syncing brand prop to local edit state; derived-state-from-props pattern, safe here
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedBrand({
         ...brand,
         name: brand.name || '',

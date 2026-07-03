@@ -2,6 +2,7 @@
 import { fetchEntities } from '@/services/api';
 import { orderFilterSchema, validateData, sanitizeObject } from '@/schemas/validation';
 import { logger } from '@/utils/logger';
+import type { Order } from '@/types/Order';
 
 // Type definitions for order processing
 export interface OrderTableRow {
@@ -20,7 +21,7 @@ export interface OrderTableRow {
   name?: string;
   isUrgent?: boolean;
   // Allow additional properties from the API response (brandName, modelName, customerName, etc.)
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface HeaderFilters {
@@ -28,59 +29,68 @@ export interface HeaderFilters {
 }
 
 // Helper functions from Dashboard and Orders components
-export function getCustomerName(order: any): string {
-  if (order.customerName) return order.customerName;
+export function getCustomerName(order: Order): string {
+  if (order.customerName) return String(order.customerName);
   if (order.customer) {
     if (typeof order.customer === 'string') return order.customer;
-    if (order.customer.name) return order.customer.name;
-    if (order.customer.firstName && order.customer.lastName) {
-      return `${order.customer.firstName} ${order.customer.lastName}`;
+    if (typeof order.customer === 'object' && order.customer !== null) {
+      const c = order.customer as unknown as Record<string, unknown>;
+      if (typeof c.name === 'string') return c.name;
+      if (typeof c.firstName === 'string' && typeof c.lastName === 'string') {
+        return `${c.firstName} ${c.lastName}`;
+      }
     }
   }
   return '';
 }
 
-export function getFitterName(order: any): string {
-  if (order.fitterName) return order.fitterName;
+export function getFitterName(order: Order): string {
+  if (order.fitterName) return String(order.fitterName);
   if (order.fitter) {
     if (typeof order.fitter === 'string') return order.fitter;
-    if (order.fitter.name) return order.fitter.name;
-    if (order.fitter.firstName && order.fitter.lastName) {
-      return `${order.fitter.firstName} ${order.fitter.lastName}`;
+    if (typeof order.fitter === 'object' && order.fitter !== null) {
+      const f = order.fitter as unknown as Record<string, unknown>;
+      if (typeof f.name === 'string') return f.name;
+      if (typeof f.firstName === 'string' && typeof f.lastName === 'string') {
+        return `${f.firstName} ${f.lastName}`;
+      }
     }
   }
   return '';
 }
 
-export function getSupplierName(order: any): string {
-  if (order.supplierName) return order.supplierName;
+export function getSupplierName(order: Order): string {
+  if (order.supplierName) return String(order.supplierName);
   if (order.supplier) {
     if (typeof order.supplier === 'string') return order.supplier;
-    if (order.supplier.name) return order.supplier.name;
-    if (order.supplier.firstName && order.supplier.lastName) {
-      return `${order.supplier.firstName} ${order.supplier.lastName}`;
+    if (typeof order.supplier === 'object' && order.supplier !== null) {
+      const s = order.supplier as Record<string, unknown>;
+      if (typeof s.name === 'string') return s.name;
+      if (typeof s.firstName === 'string' && typeof s.lastName === 'string') {
+        return `${s.firstName} ${s.lastName}`;
+      }
     }
   }
   return '';
 }
 
 // Build comprehensive filters from headerFilters with validation
-export function buildOrderFilters(headerFilters: HeaderFilters): Record<string, any> {
+export function buildOrderFilters(headerFilters: HeaderFilters): Record<string, unknown> {
   // Sanitize the input first
   const sanitizedFilters = sanitizeObject(headerFilters);
-  
+
   // Validate the filters
   const validation = validateData(orderFilterSchema, sanitizedFilters);
   if (!validation.success) {
     logger.warn('Invalid order filters:', validation.errors);
     return {}; // Return empty filters if validation fails
   }
-  
+
   const validFilters = validation.data;
-  const filters: Record<string, any> = {};
-  
+  const filters: Record<string, unknown> = {};
+
   Object.keys(validFilters).forEach(key => {
-    const value = (validFilters as any)[key];
+    const value = validFilters[key as keyof typeof validFilters];
     if (value && value !== '') {
       // Map frontend filter keys to API keys if needed
       if (key === 'id') {
@@ -126,7 +136,7 @@ export function buildOrderFilters(headerFilters: HeaderFilters): Record<string, 
 }
 
 // Extract seat sizes from order (handles both snake_case and camelCase)
-export function extractSeatSizes(order: any): string {
+export function extractSeatSizes(order: Order): string {
   if (!order) return '';
 
   // Check for seat_sizes from backend (snake_case, JSONB array)
@@ -190,7 +200,7 @@ export function extractSeatSizesFromText(text: string): string[] {
 }
 
 // Extract unique factory names from orders array
-export function extractDynamicFactories(orders: any[]): Array<{label: string, value: string}> {
+export function extractDynamicFactories(orders: Order[]): Array<{label: string, value: string}> {
   const factories = new Set<string>();
 
   orders.forEach(order => {
@@ -200,14 +210,16 @@ export function extractDynamicFactories(orders: any[]): Array<{label: string, va
     if (factoryName && typeof factoryName === 'string' && factoryName.trim()) {
       factories.add(factoryName.trim());
     } else if (order.factory) {
-      if (typeof order.factory === 'object' && order.factory.name) {
-        factories.add(order.factory.name);
+      if (typeof order.factory === 'object') {
+        const f = order.factory as { name?: string };
+        if (f.name) factories.add(f.name);
       } else if (typeof order.factory === 'string' && order.factory.trim()) {
         factories.add(order.factory.trim());
       }
     } else if (order.supplier) {
-      if (typeof order.supplier === 'object' && order.supplier.name) {
-        factories.add(order.supplier.name);
+      if (typeof order.supplier === 'object') {
+        const s = order.supplier as { name?: string };
+        if (s.name) factories.add(s.name);
       } else if (typeof order.supplier === 'string' && order.supplier.trim()) {
         factories.add(order.supplier.trim());
       }
@@ -220,23 +232,25 @@ export function extractDynamicFactories(orders: any[]): Array<{label: string, va
 }
 
 // Extract unique seat sizes from orders array
-export function extractDynamicSeatSizes(orders: any[]): string[] {
+export function extractDynamicSeatSizes(orders: Order[]): string[] {
   const sizes = new Set<string>();
 
   orders.forEach(order => {
     // Check seat_sizes from backend (JSONB array)
-    if (Array.isArray(order.seat_sizes) && order.seat_sizes.length > 0) {
-      order.seat_sizes.forEach((size: any) => sizes.add(normalizeSeatSize(String(size))));
+    const seatSizesRaw = order['seat_sizes'];
+    if (Array.isArray(seatSizesRaw) && seatSizesRaw.length > 0) {
+      seatSizesRaw.forEach((size: unknown) => sizes.add(normalizeSeatSize(String(size))));
     }
     // Check seatSizes (camelCase)
     else if (Array.isArray(order.seatSizes) && order.seatSizes.length > 0) {
-      order.seatSizes.forEach((size: any) => sizes.add(normalizeSeatSize(String(size))));
+      order.seatSizes.forEach((size: unknown) => sizes.add(normalizeSeatSize(String(size))));
     } else if (order.seatSize) {
       sizes.add(normalizeSeatSize(String(order.seatSize)));
     }
     // Extract from special_notes or comments
     else if (order.special_notes || order.comments) {
-      const extracted = extractSeatSizesFromText(order.special_notes || order.comments);
+      const noteText = String(order.special_notes || order.comments);
+      const extracted = extractSeatSizesFromText(noteText);
       extracted.forEach(size => sizes.add(size));
     }
     // Fallback to reference field
@@ -250,8 +264,10 @@ export function extractDynamicSeatSizes(orders: any[]): string[] {
 }
 
 // Process orders for Dashboard display
-export function processDashboardOrders(data: any): any[] {
-  return (data['hydra:member'] || []).map((order: any) => {
+export function processDashboardOrders(data: Record<string, unknown>): Order[] {
+  const members = data['hydra:member'];
+  const orders = Array.isArray(members) ? (members as Order[]) : [];
+  return orders.map((order: Order) => {
     // Extract and normalize data from the hydra response
     const processedOrder = {
       ...order, // Keep all original API data
@@ -272,13 +288,13 @@ export function processDashboardOrders(data: any): any[] {
       ...(order.fitterName ? {} : { fitter: getFitterName(order) || '' }),
       ...(order.factoryName || order.supplierName ? {} : { factory: getSupplierName(order) || '' })
     };
-    return processedOrder;
+    return processedOrder as unknown as Order;
   });
 }
 
 // Process orders for Orders table display
-export function processOrdersTableData(orders: any[]): OrderTableRow[] {
-  return (orders || []).map((order: any): OrderTableRow => {
+export function processOrdersTableData(orders: Order[]): OrderTableRow[] {
+  return (orders || []).map((order: Order): OrderTableRow => {
     // Get the customer, fitter, and factory names
     const customerName = getCustomerName(order) || '';
     const fitterName = getFitterName(order) || '';
@@ -291,48 +307,53 @@ export function processOrdersTableData(orders: any[]): OrderTableRow[] {
       ...order,  // Preserve all original API fields for column render functions
       id: Number(order.id) || 0,
       reference: order.reference || '',
-      seatSize: order.seatSize || '',
+      seatSize: Array.isArray(order.seatSize) ? order.seatSize.join(', ') : (order.seatSize ? String(order.seatSize) : ''),
       customer: typeof customerName === 'string' ? customerName : '',
       fitter: typeof fitterName === 'string' ? fitterName : '',
       factory: typeof factoryName === 'string' ? factoryName : '',
       orderStatus: order.orderStatus || '',
-      orderTime: order.orderTime || order.createdAt || '',
-      createdAt: order.createdAt || '',
+      orderTime: order.orderTime ? String(order.orderTime) : (order.createdAt ? String(order.createdAt) : ''),
+      createdAt: order.createdAt ? String(order.createdAt) : '',
       status: order.orderStatus || 'pending',
       urgent: Boolean(order.urgent),
-      // Include any additional fields that might be needed
-      ...(order.seatSizes && { seatSizes: Array.isArray(order.seatSizes) ? order.seatSizes.map(String) : [] }),
-      ...(order.name && { name: order.name }),
-      ...(order.isUrgent !== undefined && { isUrgent: Boolean(order.isUrgent) })
+      // Include any additional fields that might be needed; always override seatSizes to drop null
+      seatSizes: order.seatSizes != null ? (Array.isArray(order.seatSizes) ? order.seatSizes.map(String) : []) : undefined,
+      ...(order.name != null ? { name: String(order.name) } : {}),
+      ...(order.isUrgent !== undefined ? { isUrgent: Boolean(order.isUrgent) } : {})
     };
   });
 }
 
 // Process supplier/factory data for dropdown options
-export function processSupplierData(suppliersData: any[]): Array<{label: string, value: string}> {
+export function processSupplierData(suppliersData: Record<string, unknown>[]): Array<{label: string, value: string}> {
   if (!suppliersData || !Array.isArray(suppliersData)) {
     return [];
   }
   return suppliersData
-    .filter((supplier: any) => supplier) // Filter out null/undefined
-    .map((supplier: any) => {
+    .filter((supplier: Record<string, unknown>) => supplier) // Filter out null/undefined
+    .map((supplier: Record<string, unknown>) => {
       // Support multiple naming conventions: name, displayName, username
-      const label = supplier.name || supplier.displayName || supplier.username ||
-                   (supplier.city ? `Factory in ${supplier.city}` : null) ||
+      const label = (supplier.name as string | undefined) ||
+                   (supplier.displayName as string | undefined) ||
+                   (supplier.username as string | undefined) ||
+                   (supplier.city ? `Factory in ${String(supplier.city)}` : null) ||
                    'Unknown Factory';
       return {
         label,
-        value: supplier.name || supplier.displayName || supplier.username || String(supplier.id)
+        value: (supplier.name as string | undefined) ||
+               (supplier.displayName as string | undefined) ||
+               (supplier.username as string | undefined) ||
+               String(supplier.id)
       };
     });
 }
 
 // Fetch complete order data by INTEGER ID
 export async function fetchCompleteOrderData(
-  order: any,
+  order: Order,
   setIsLoadingOrderData: (loading: boolean) => void,
   setOrderDataError: (error: string | null) => void
-): Promise<any> {
+): Promise<Order> {
   setIsLoadingOrderData(true);
   setOrderDataError(null);
 
@@ -348,7 +369,7 @@ export async function fetchCompleteOrderData(
       entity: 'enriched_orders',
       extraParams: { id: orderId },
       partial: false
-    });
+    }) as Record<string, Order[]>;
 
     if (result['hydra:member'] && result['hydra:member'].length > 0) {
       logger.log('Successfully fetched order:', orderId);

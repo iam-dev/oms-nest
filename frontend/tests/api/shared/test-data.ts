@@ -70,7 +70,7 @@ export interface EntityConfig {
   sortable?: boolean;
   pagination?: boolean;
   requiredFields?: string[];
-  testData?: any;
+  testData?: Record<string, unknown>;
 }
 
 export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
@@ -261,7 +261,7 @@ export const TEST_PATTERNS = {
 /**
  * Helper to generate random test data
  */
-export function generateTestData(type: 'customer' | 'supplier' | 'fitter' | 'brand' | 'model' | 'user' | 'order' | 'leathertype' | 'option' | 'extra' | 'preset', customFields: Record<string, any> = {}) {
+export function generateTestData(type: 'customer' | 'supplier' | 'fitter' | 'brand' | 'model' | 'user' | 'order' | 'leathertype' | 'option' | 'extra' | 'preset', customFields: Record<string, unknown> = {}) {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 1000);
   const uniqueId = `${timestamp}_${random}`;
@@ -414,15 +414,15 @@ export function generateTestData(type: 'customer' | 'supplier' | 'fitter' | 'bra
 /**
  * Generate test data sets for bulk operations
  */
-export function generateTestDataSet(entityType: string, count: number, customFields: Record<string, any> = {}): Record<string, any>[] {
-  return Array.from({ length: count }, () => generateTestData(entityType as any, customFields));
+export function generateTestDataSet(entityType: string, count: number, customFields: Record<string, unknown> = {}): Record<string, unknown>[] {
+  return Array.from({ length: count }, () => generateTestData(entityType as Parameters<typeof generateTestData>[0], customFields));
 }
 
 /**
  * Generate invalid test data for validation testing
  */
-export function generateInvalidTestData(entityType: string): Record<string, any>[] {
-  const invalidDataSets: Record<string, any>[] = [];
+export function generateInvalidTestData(entityType: string): Record<string, unknown>[] {
+  const invalidDataSets: Record<string, unknown>[] = [];
 
   // Common invalid patterns
   const commonInvalidData = [
@@ -625,7 +625,7 @@ export function generateSortingTestCases(entityType: string): Array<{ orderby: s
 /**
  * Generate pagination test cases
  */
-export function generatePaginationTestCases(): Array<{ params: Record<string, any>; description: string }> {
+export function generatePaginationTestCases(): Array<{ params: Record<string, unknown>; description: string }> {
   return [
     { params: { $top: 10 }, description: 'first 10 items' },
     { params: { $top: 25 }, description: 'first 25 items' },
@@ -639,7 +639,7 @@ export function generatePaginationTestCases(): Array<{ params: Record<string, an
 /**
  * Generate invalid pagination test cases
  */
-export function generateInvalidPaginationTestCases(): Array<{ params: Record<string, any>; description: string }> {
+export function generateInvalidPaginationTestCases(): Array<{ params: Record<string, unknown>; description: string }> {
   return [
     { params: { $top: 0 }, description: 'zero items requested' },
     { params: { $top: -1 }, description: 'negative items requested' },

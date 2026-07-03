@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Model } from '@/services/models';
 import { Button } from '@/components/ui/button';
@@ -22,14 +22,7 @@ export function ModelDetailModal({ model, isOpen, onClose, onEdit }: ModelDetail
   const [factoryLookup, setFactoryLookup] = useState<Map<number, string>>(new Map());
   const [loadingFactories, setLoadingFactories] = useState(false);
 
-  // Load factories when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadFactories();
-    }
-  }, [isOpen]);
-
-  const loadFactories = async () => {
+  const loadFactories = useCallback(async () => {
     setLoadingFactories(true);
     try {
       const data = await fetchFactories();
@@ -41,7 +34,15 @@ export function ModelDetailModal({ model, isOpen, onClose, onEdit }: ModelDetail
     } finally {
       setLoadingFactories(false);
     }
-  };
+  }, []);
+
+  // Load factories when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): loadFactories triggers async fetch+setState; standard data-on-open pattern
+      loadFactories();
+    }
+  }, [isOpen, loadFactories]);
 
   const getFactoryName = (factoryId?: number): string => {
     if (factoryId === undefined || factoryId === null || factoryId === 0) return '-';

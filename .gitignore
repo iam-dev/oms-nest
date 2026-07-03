@@ -162,6 +162,9 @@ ARCHIVE
 
 docs/git-and-sessions-activity-log.md
 
+# Internal security reviews — local only, never commit
+docs/reviews/
+
 backend/certs
 .playwright-mcp
 .playwright-mcp/

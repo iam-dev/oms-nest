@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { RoleProtectedComponent } from '@/components/shared/RoleProtectedComponent';
 import { UserRole } from '@/types/Role';
 import { getAllRoles } from '../../utils/roleTestHelpers';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
 
 // Mock the useUserRole hook
 jest.mock('@/hooks/useUserRole', () => ({
@@ -23,8 +25,8 @@ jest.mock('@/utils/rolePermissions', () => ({
   }
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
+const mockHasScreenPermission = rolePermissionsModule.hasScreenPermission as jest.Mock;
 
 describe('RoleProtectedComponent', () => {
   beforeEach(() => {

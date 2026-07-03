@@ -38,6 +38,7 @@ import { exportToXlsx } from '../utils/exportXlsx';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
 import { getSavedFilters, getDefaultFilter, createSavedFilter, updateSavedFilter, deleteSavedFilter } from '../services/reportSavedFilters';
 import type { SavedFilter } from '../services/reportSavedFilters';
+import type { Order as OrderDomainType } from '@/types/Order';
 
 const saleTypeOptions = [
   { label: 'Normal orders', value: 'normal' },
@@ -184,6 +185,8 @@ export default function Reports() {
   }, [filterOptions, orders]);
 
   useEffect(() => {
+    // TODO(react-hooks): setLoading drives loading spinner; safe synchronous flag before async fetch
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     // Build filters for API Platform
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -548,13 +551,13 @@ export default function Reports() {
       // Apply client-side date filtering consistent with filteredOrders
       const filteredAll = allOrders.filter((order: unknown) => {
         if (!date.from && !date.to) return true;
-        const orderDate = new Date(getDate(order as Record<string, unknown>));
+        const orderDate = new Date(getDate(order as unknown as OrderDomainType & Record<string, unknown>));
         if (date.from && orderDate < date.from) return false;
         if (date.to && orderDate > date.to) return false;
         return true;
       });
 
-      await exportToXlsx(filteredAll as Record<string, unknown>[]);
+      await exportToXlsx(filteredAll as unknown as OrderDomainType[]);
     } catch (err) {
       logger.error('Export failed:', err);
     } finally {

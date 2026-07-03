@@ -93,7 +93,7 @@ describe('Enriched Orders Service', () => {
         'hydra:totalItems': 2,
       });
 
-      const result = await getEnrichedOrders({
+      await getEnrichedOrders({
         page: 1,
         filters: {},
       });

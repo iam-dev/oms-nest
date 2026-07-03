@@ -102,10 +102,12 @@ jest.mock('@/components/ui/button', () => ({
 // Renders a native <select> element so userEvent.selectOptions() works.
 // ---------------------------------------------------------------------------
 jest.mock('@/components/ui/select', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const mockReact = require('react');
+  // Use jest.requireActual to avoid the no-require-imports lint rule while still
+  // loading React fresh inside the mock factory (top-level imports cannot be
+  // referenced here due to jest.mock hoisting).
+  const mockReact = jest.requireActual('react') as typeof import('react');
 
-  const mockSelectCtx = mockReact.createContext({});
+  const mockSelectCtx = mockReact.createContext<{ value?: string; onValueChange?: (v: string) => void }>({});
 
   function Select({
     value,
@@ -114,7 +116,7 @@ jest.mock('@/components/ui/select', () => {
   }: {
     value?: string;
     onValueChange?: (v: string) => void;
-    children: unknown;
+    children: React.ReactNode;
   }) {
     return mockReact.createElement(
       mockSelectCtx.Provider,
@@ -123,7 +125,7 @@ jest.mock('@/components/ui/select', () => {
     );
   }
 
-  function SelectTrigger({ children }: { children: unknown }) {
+  function SelectTrigger({ children }: { children: React.ReactNode }) {
     return mockReact.createElement('div', { 'data-testid': 'select-trigger' }, children);
   }
 
@@ -131,7 +133,7 @@ jest.mock('@/components/ui/select', () => {
     return mockReact.createElement('span', { 'data-testid': 'select-value' }, placeholder);
   }
 
-  function SelectContent({ children }: { children: unknown }) {
+  function SelectContent({ children }: { children: React.ReactNode }) {
     const { value, onValueChange } = mockReact.useContext(mockSelectCtx);
     return mockReact.createElement(
       'select',
@@ -144,7 +146,7 @@ jest.mock('@/components/ui/select', () => {
     );
   }
 
-  function SelectItem({ value, children }: { value: string; children: unknown }) {
+  function SelectItem({ value, children }: { value: string; children: React.ReactNode }) {
     return mockReact.createElement('option', { value }, children);
   }
 

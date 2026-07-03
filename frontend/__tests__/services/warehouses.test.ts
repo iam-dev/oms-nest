@@ -1,4 +1,13 @@
 import { fetchWarehouses, createWarehouse, updateWarehouse, deleteWarehouse } from '@/services/warehouses';
+import type { Warehouse, CreateWarehouseData } from '@/services/warehouses';
+import * as apiModule from '@/services/api';
+
+// Minimal fetch response shape used in mocks
+interface MockFetchResponse {
+  ok: boolean;
+  statusText?: string;
+  json: () => Promise<unknown>;
+}
 
 // Mock the api service
 jest.mock('@/services/api', () => ({
@@ -8,7 +17,7 @@ jest.mock('@/services/api', () => ({
 // Mock fetch globally
 global.fetch = jest.fn();
 
-const mockFetchEntities = require('@/services/api').fetchEntities as jest.Mock;
+const mockFetchEntities = jest.mocked(apiModule.fetchEntities);
 const mockFetch = global.fetch as jest.Mock;
 
 describe('Warehouses Service', () => {
@@ -26,7 +35,7 @@ describe('Warehouses Service', () => {
             username: 'main-warehouse',
             location: 'New York',
             status: 'active',
-          } as any
+          } satisfies Warehouse
         ],
         'hydra:totalItems': 1
       };
@@ -80,14 +89,14 @@ describe('Warehouses Service', () => {
 
   describe('createWarehouse', () => {
     test('creates warehouse with correct data', async () => {
-      const warehouseData = {
+      const warehouseData: CreateWarehouseData = {
         username: 'new-warehouse',
         name: 'New Warehouse',
         location: 'California',
-        status: 'active' as const,
-      } as any;
+        status: 'active',
+      };
 
-      const mockResponse = {
+      const mockResponse: Warehouse = {
         id: '123',
         ...warehouseData
       };
@@ -95,26 +104,26 @@ describe('Warehouses Service', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
-      } as any);
+      } satisfies MockFetchResponse);
 
-      const result = await createWarehouse(warehouseData as any);
+      const result = await createWarehouse(warehouseData);
 
       expect(result).toEqual(mockResponse);
     });
 
     test('handles create warehouse error', async () => {
-      const warehouseData = {
+      const warehouseData: CreateWarehouseData = {
         username: 'new-warehouse',
         name: 'New Warehouse',
-      } as any;
+      };
 
       mockFetch.mockResolvedValue({
         ok: false,
         statusText: 'Failed to create warehouse',
         json: async () => ({}),
-      } as any);
+      } satisfies MockFetchResponse);
 
-      await expect(createWarehouse(warehouseData as any)).rejects.toThrow();
+      await expect(createWarehouse(warehouseData)).rejects.toThrow();
     });
   });
 
@@ -135,9 +144,9 @@ describe('Warehouses Service', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
-      } as any);
+      } satisfies MockFetchResponse);
 
-      const result = await updateWarehouse(warehouseId, updateData as any);
+      const result = await updateWarehouse(warehouseId, updateData);
 
       expect(result).toEqual(mockResponse);
     });
@@ -150,9 +159,9 @@ describe('Warehouses Service', () => {
         ok: false,
         statusText: 'Failed to update warehouse',
         json: async () => ({}),
-      } as any);
+      } satisfies MockFetchResponse);
 
-      await expect(updateWarehouse(warehouseId, updateData as any)).rejects.toThrow();
+      await expect(updateWarehouse(warehouseId, updateData)).rejects.toThrow();
     });
   });
 
@@ -163,7 +172,7 @@ describe('Warehouses Service', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({}),
-      } as any);
+      } satisfies MockFetchResponse);
 
       await deleteWarehouse(warehouseId);
     });
@@ -175,7 +184,7 @@ describe('Warehouses Service', () => {
         ok: false,
         statusText: 'Failed to delete warehouse',
         json: async () => ({}),
-      } as any);
+      } satisfies MockFetchResponse);
 
       await expect(deleteWarehouse(warehouseId)).rejects.toThrow();
     });
@@ -187,7 +196,7 @@ describe('Warehouses Service', () => {
         ok: false,
         statusText: 'Warehouse not found',
         json: async () => ({ message: 'Warehouse not found' }),
-      } as any);
+      } satisfies MockFetchResponse);
 
       await expect(deleteWarehouse(warehouseId)).rejects.toThrow();
     });
@@ -198,7 +207,7 @@ describe('Warehouses Service', () => {
       const statuses = ['active', 'inactive', 'maintenance'] as const;
 
       for (const status of statuses) {
-        const warehouseData = {
+        const warehouseData: CreateWarehouseData = {
           username: `${status}-warehouse`,
           name: `${status} Warehouse`,
           location: 'Test Location',
@@ -208,11 +217,11 @@ describe('Warehouses Service', () => {
         mockFetch.mockResolvedValue({
           ok: true,
           json: async () => ({ id: '123', ...warehouseData }),
-        } as any);
+        } satisfies MockFetchResponse);
 
-        const result = await createWarehouse(warehouseData as any);
+        const result = await createWarehouse(warehouseData);
 
-        expect((result as any).status).toBe(status);
+        expect(result.status).toBe(status);
       }
     });
   });
@@ -221,7 +230,7 @@ describe('Warehouses Service', () => {
     test('filters warehouses by status', async () => {
       const mockResponse = {
         'hydra:member': [
-          { id: '1', name: 'Active Warehouse', status: 'active' } as any
+          { id: '1', name: 'Active Warehouse', username: 'active-warehouse', status: 'active' } satisfies Warehouse
         ],
         'hydra:totalItems': 1
       };
@@ -296,12 +305,12 @@ describe('Warehouses Service', () => {
         ok: false,
         statusText: 'Unauthorized',
         json: async () => ({ message: 'Unauthorized' }),
-      } as any);
+      } satisfies MockFetchResponse);
 
       await expect(createWarehouse({
         username: 'test',
         name: 'Test Warehouse',
-      } as any)).rejects.toThrow();
+      })).rejects.toThrow();
     });
   });
 });

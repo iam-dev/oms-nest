@@ -13,5 +13,5 @@ export type User = {
   firstName?: string;
   lastName?: string;
   role: UserRole;
-  [key: string]: any; // Allow additional properties
+  [key: string]: unknown; // Allow additional properties
 };

@@ -177,7 +177,7 @@ describe('Role Permissions Configuration', () => {
     });
 
     test('all permissions have valid roles', () => {
-      Object.entries(SCREEN_PERMISSIONS).forEach(([permission, roles]) => {
+      Object.values(SCREEN_PERMISSIONS).forEach((roles) => {
         expect(Array.isArray(roles)).toBe(true);
         expect(roles.length).toBeGreaterThan(0);
         

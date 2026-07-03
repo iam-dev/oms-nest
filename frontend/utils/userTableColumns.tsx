@@ -221,9 +221,9 @@ export function getUserTableColumnsFiltered(headerFilters: UserHeaderFilters, se
           entityType="user"
         />
       ),
-      render: (value: any) => {
+      render: (value: unknown) => {
         // Handle different role value formats
-        let roleValue = value;
+        let roleValue: UserRole = UserRole.USER;
 
         if (typeof value === 'string') {
           // Check if it's already a UserRole enum value

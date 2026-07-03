@@ -4,6 +4,9 @@ import { Sidebar } from '@/components/Sidebar';
 import { SaddlesSidebarSection } from '@/components/SaddlesSidebarSection';
 import { UserRole } from '@/types/Role';
 import { getAllRoles, roleTestCases } from '../../utils/roleTestHelpers';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
+import * as nextNavigationModule from 'next/navigation';
 
 // Mock the hooks and utilities
 jest.mock('@/hooks/useUserRole', () => ({
@@ -81,8 +84,8 @@ jest.mock('lucide-react', () => ({
   Palette: () => <div data-testid="palette-icon">Palette Icon</div>,
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
+const mockHasScreenPermission = rolePermissionsModule.hasScreenPermission as jest.Mock;
 
 describe('Navigation Access Control', () => {
   beforeEach(() => {
@@ -294,7 +297,7 @@ describe('Navigation Access Control', () => {
 
     test('auto-expands when current route matches saddle modelling item', () => {
       // Mock current pathname to be a saddle modelling route
-      const mockUsePathname = require('next/navigation').usePathname as jest.Mock;
+      const mockUsePathname = nextNavigationModule.usePathname as jest.Mock;
       mockUsePathname.mockReturnValue('/models');
 
       mockUseUserRole.mockReturnValue({

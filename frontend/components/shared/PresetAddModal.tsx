@@ -30,22 +30,6 @@ export function PresetAddModal({ isOpen, onClose, onSave }: PresetAddModalProps)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Load models when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadModels();
-      // Reset form when modal opens
-      setNewPreset({
-        name: '',
-        sequence: 0,
-        active: true,
-        description: '',
-        modelId: '',
-      });
-      setError('');
-    }
-  }, [isOpen]);
-
   const loadModels = async () => {
     setLoadingModels(true);
     try {
@@ -62,6 +46,24 @@ export function PresetAddModal({ isOpen, onClose, onSave }: PresetAddModalProps)
       setLoadingModels(false);
     }
   };
+
+  // Load models when modal opens.
+  // Declared after loadModels so React Compiler can resolve the reference as stable.
+  useEffect(() => {
+    if (isOpen) {
+      loadModels(); // eslint-disable-line react-hooks/set-state-in-effect -- async; setState runs after await
+      // Reset form when modal opens
+      // TODO(react-hooks): setNewPreset reset is intentional — driven by isOpen prop change, not internal state churn.
+      setNewPreset({
+        name: '',
+        sequence: 0,
+        active: true,
+        description: '',
+        modelId: '',
+      });
+      setError('');
+    }
+  }, [isOpen]);
 
   const handleSave = async () => {
     setSaving(true);

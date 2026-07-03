@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import type { Column } from '@/components/shared/DataTable';
 import { useTableFilters, usePagination, useEntityData } from '@/hooks';
 import { getCountryManagerTableColumns } from '@/utils/countryManagersTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -113,7 +114,7 @@ export default function CountryManagers() {
 
       <EntityTable
         entities={countryManagers}
-        columns={getCountryManagerTableColumns(filters, handleFilterChange)}
+        columns={getCountryManagerTableColumns(filters, handleFilterChange) as unknown as Column<CountryManager>[]}
         searchTerm={searchTerm}
         onSearch={setSearchTerm}
         headerFilters={filters}

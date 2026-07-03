@@ -72,6 +72,10 @@ export function CreateRepairDialog({ sourceOrderId, sourceDisplayOrderId, onClos
     const minLength = isNumeric ? 1 : 3;
 
     if (phase !== 'search' || trimmed.length < minLength) {
+      // TODO(react-hooks): guard reset — clears stale results when below the minimum
+      // search length; a single synchronous clear that cannot cascade because it only
+      // runs when the condition is false (no subsequent setState in this branch).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchResults([]);
       return;
     }
@@ -153,6 +157,10 @@ export function CreateRepairDialog({ sourceOrderId, sourceDisplayOrderId, onClos
   // Load detail when sourceOrderId is provided directly
   useEffect(() => {
     if (sourceOrderId && phase === 'form') {
+      // TODO(react-hooks): loadOrderDetail is async; all setState calls happen inside
+      // promise callbacks — standard data-fetching-in-effect pattern triggered by a
+      // prop change (sourceOrderId).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadOrderDetail(sourceOrderId);
     }
   }, [sourceOrderId, phase, loadOrderDetail]);

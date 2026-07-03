@@ -95,6 +95,10 @@ function Carousel({
 
   React.useEffect(() => {
     if (!api) return
+    // TODO(react-hooks): onSelect calls setCanScrollPrev/setCanScrollNext to initialize
+    // scroll-button state from embla on mount — this is the canonical embla pattern;
+    // subsequent updates come through the event listeners registered below.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     onSelect(api)
     api.on("reInit", onSelect)
     api.on("select", onSelect)

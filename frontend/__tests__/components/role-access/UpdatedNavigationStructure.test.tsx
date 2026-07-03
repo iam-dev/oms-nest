@@ -1,14 +1,16 @@
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import { Sidebar } from '@/components/Sidebar';
 import { UserRole } from '@/types/Role';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
 
 // Mock the navigation components
 jest.mock('@/components/SaddlesSidebarSection', () => {
-  const SaddlesSidebarSection = ({ isCollapsed }: { isCollapsed: boolean }) => {
-    const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
+  const SaddlesSidebarSection = () => {
+    const mockUseUserRole = (jest.requireMock('@/hooks/useUserRole') as { useUserRole: () => { role: unknown } }).useUserRole;
     const { role } = mockUseUserRole();
-    const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
+    const mockHasScreenPermission = (jest.requireMock('@/utils/rolePermissions') as { hasScreenPermission: (...args: unknown[]) => boolean }).hasScreenPermission;
 
     const saddleItems = ['Models', 'Brands', 'Leather Types', 'Options', 'Extras', 'Presets'];
     const permissionMap: Record<string, string> = {
@@ -44,10 +46,10 @@ jest.mock('@/components/SaddlesSidebarSection', () => {
 });
 
 jest.mock('@/components/AccountManagementSidebarSection', () => {
-  const AccountManagementSidebarSection = ({ isCollapsed }: { isCollapsed: boolean }) => {
-    const mockUseUserRole = require('@/hooks/useUserRole').useUserRole;
+  const AccountManagementSidebarSection = () => {
+    const mockUseUserRole = (jest.requireMock('@/hooks/useUserRole') as { useUserRole: () => { role: unknown } }).useUserRole;
     const { role } = mockUseUserRole();
-    const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission;
+    const mockHasScreenPermission = (jest.requireMock('@/utils/rolePermissions') as { hasScreenPermission: (...args: unknown[]) => boolean }).hasScreenPermission;
 
     const accountItems = [
       { name: 'Users', permission: 'USER_MANAGEMENT' },
@@ -147,8 +149,8 @@ jest.mock('lucide-react', () => ({
   UserCog: () => <div data-testid="user-cog-icon">UserCog Icon</div>,
 }));
 
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
+const mockUseUserRole = (useUserRoleModule as unknown as { useUserRole: jest.Mock }).useUserRole;
+const mockHasScreenPermission = (rolePermissionsModule as unknown as { hasScreenPermission: jest.Mock }).hasScreenPermission;
 
 describe('Updated Navigation Structure', () => {
   beforeEach(() => {

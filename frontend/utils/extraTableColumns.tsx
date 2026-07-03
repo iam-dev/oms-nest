@@ -10,8 +10,8 @@ export type ExtraHeaderFilters = {
 
 export type SetExtraHeaderFilters = (key: keyof ExtraHeaderFilters, value: string) => void;
 
-const formatPrice = (v: any, symbol: string) => {
-  const numValue = typeof v === 'number' ? v : parseFloat(v);
+const formatPrice = (v: unknown, symbol: string) => {
+  const numValue = typeof v === 'number' ? v : parseFloat(String(v));
   return !isNaN(numValue) ? `${symbol} ${numValue.toFixed(2)}` : `${symbol} 0.00`;
 };
 
@@ -28,49 +28,49 @@ export function getExtraTableColumns(headerFilters: ExtraHeaderFilters, setHeade
           entityType="extra"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: unknown) => (v != null ? String(v) : ''),
       maxWidth: '200px',
     },
     {
       key: 'price1',
       title: 'USD',
-      render: (v: any) => formatPrice(v, '$'),
+      render: (v: unknown) => formatPrice(v, '$'),
       maxWidth: '100px',
     },
     {
       key: 'price2',
       title: 'EUR',
-      render: (v: any) => formatPrice(v, '€'),
+      render: (v: unknown) => formatPrice(v, '€'),
       maxWidth: '100px',
     },
     {
       key: 'price3',
       title: 'GBP',
-      render: (v: any) => formatPrice(v, '£'),
+      render: (v: unknown) => formatPrice(v, '£'),
       maxWidth: '100px',
     },
     {
       key: 'price4',
       title: 'CAD',
-      render: (v: any) => formatPrice(v, 'C$'),
+      render: (v: unknown) => formatPrice(v, 'C$'),
       maxWidth: '100px',
     },
     {
       key: 'price5',
       title: 'AUD',
-      render: (v: any) => formatPrice(v, 'A$'),
+      render: (v: unknown) => formatPrice(v, 'A$'),
       maxWidth: '100px',
     },
     {
       key: 'price6',
       title: 'NOK',
-      render: (v: any) => formatPrice(v, 'N€'),
+      render: (v: unknown) => formatPrice(v, 'N€'),
       maxWidth: '100px',
     },
     {
       key: 'price7',
       title: 'DKK',
-      render: (v: any) => formatPrice(v, 'D€'),
+      render: (v: unknown) => formatPrice(v, 'D€'),
       maxWidth: '100px',
     },
     {

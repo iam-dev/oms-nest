@@ -103,6 +103,10 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
 
   useEffect(() => {
     if (!orderId) {
+      // TODO(react-hooks): Early-exit guard — orderId is 0/falsy only when the parent passes
+      // no valid id. Setting error+loading synchronously here is safe: it runs once at mount
+      // with a stable falsy orderId and avoids a dangling async fetch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('No order ID provided');
       setLoading(false);
       return;

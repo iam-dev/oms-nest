@@ -1,20 +1,20 @@
-import { chromium, FullConfig } from '@playwright/test';
+import { FullConfig } from '@playwright/test';
 
 // Add Node.js polyfills for Playwright
 if (typeof globalThis.TransformStream === 'undefined') {
-  // @ts-ignore
+  // @ts-expect-error polyfilling TransformStream with minimal stub
   globalThis.TransformStream = class TransformStream {
-    readable: any;
-    writable: any;
+    readable: unknown;
+    writable: unknown;
 
-    constructor(transformer?: any, writableStrategy?: any, readableStrategy?: any) {
+    constructor(_transformer?: unknown, _writableStrategy?: unknown, _readableStrategy?: unknown) {
       this.readable = { getReader: () => ({}) };
       this.writable = { getWriter: () => ({}) };
     }
   };
 }
 
-async function globalSetup(config: FullConfig) {
+async function globalSetup(_config: FullConfig) {
   console.log('Global setup: Starting...');
 
   // Check if backend API is available using the NestJS health endpoint

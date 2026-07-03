@@ -32,9 +32,10 @@ function PasswordChangeForm() {
 
   // FE-029: The isExpired check is cosmetic only — it provides a faster
   // UX signal to the user, but the backend performs the authoritative
-  // hash validation.  A manipulated `expires` param will be rejected
+  // hash validation. A manipulated `expires` param will be rejected
   // server-side regardless of what this client-side guard says.
-  const isExpired = expires ? Date.now() > Number(expires) : false;
+  // Compute once on mount — comparing against a static URL param never needs re-evaluation.
+  const [isExpired] = useState(() => (expires ? Date.now() > Number(expires) : false));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

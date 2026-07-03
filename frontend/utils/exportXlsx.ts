@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { extractSeatSizes } from './orderProcessing';
 import { getCustomerName, getFitterName, getDate, getStatus } from './orderHydration';
 import { sanitizeForCell } from './cellSanitization';
+import type { Order } from '@/types/Order';
 
 interface OrderExportData {
   orderId: string | number;
@@ -105,8 +106,7 @@ export async function exportOrderToXlsx(
   URL.revokeObjectURL(url);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function exportToXlsx(orders: any[]): Promise<void> {
+export async function exportToXlsx(orders: Order[]): Promise<void> {
   const columns = ['ID', 'Brand', 'Saddle', 'Seat Size', 'Customer', 'Fitter', 'Date', 'Payment', 'Status', 'Options'];
 
   const rows = orders.map(order => {

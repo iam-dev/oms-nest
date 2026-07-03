@@ -1,5 +1,6 @@
 // Add custom jest matchers for testing-library
 import '@testing-library/jest-dom';
+import React from 'react';
 
 // Add custom Jest matchers for API tests
 import { setupMatchers } from './tests/api/shared/matchers';
@@ -51,7 +52,6 @@ jest.mock('next/navigation', () => ({
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props) => {
-    const React = require('react');
     return React.createElement('img', props);
   },
 }));

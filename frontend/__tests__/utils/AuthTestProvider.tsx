@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react';
 import { Provider } from 'jotai';
 import { User, UserRole } from '@/types/Role';
-import { mockUsers, getMockUserByRole } from './mockUsers';
+import { getMockUserByRole } from './mockUsers';
 
 interface AuthTestProviderProps {
   children: ReactNode;
@@ -18,22 +18,9 @@ export const AuthTestProvider: React.FC<AuthTestProviderProps> = ({
 }) => {
   const mockUserData = getMockUserByRole(role);
   const mockUser = customUser || mockUserData.user;
-  // Mock the auth store atoms
-  const mockAuthStore = React.useMemo(() => {
-    const store = new Map();
-
-    if (isAuthenticated) {
-      // Set authenticated state
-      store.set('userAtom', mockUser);
-      store.set('isAuthenticatedAtom', true);
-    } else {
-      // Set unauthenticated state
-      store.set('userAtom', null);
-      store.set('isAuthenticatedAtom', false);
-    }
-
-    return store;
-  }, [mockUser, isAuthenticated]);
+  // Mock the auth store atoms (unused but documents intended behavior)
+  void mockUser;
+  void isAuthenticated;
 
   return (
     <Provider>
@@ -46,11 +33,13 @@ export const createAuthTestWrapper = (
   role: UserRole | string = UserRole.USER,
   isAuthenticated: boolean = true
 ) => {
-  return ({ children }: { children: ReactNode }) => (
+  const AuthTestWrapper = ({ children }: { children: ReactNode }) => (
     <AuthTestProvider role={role} isAuthenticated={isAuthenticated}>
       {children}
     </AuthTestProvider>
   );
+  AuthTestWrapper.displayName = 'AuthTestWrapper';
+  return AuthTestWrapper;
 };
 
 // Helper function to mock AuthContext for non-Jotai tests

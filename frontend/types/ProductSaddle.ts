@@ -4,16 +4,16 @@ export interface ProductSaddle {
   name: string;
   specialNotes?: string;
   stock: number;
-  model: string | { name?: string; [key: string]: any };
+  model: string | { name?: string; [key: string]: unknown };
   preset?: string;
-  leatherType: string | { name?: string; [key: string]: any };
+  leatherType: string | { name?: string; [key: string]: unknown };
   demo: boolean;
   customizableProduct: boolean;
   productHasBeenOrdered: boolean;
   sponsored: boolean;
   createdAt: string;
   optionItems?: OptionItem[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface OptionItem {

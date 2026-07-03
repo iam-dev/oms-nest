@@ -1,7 +1,15 @@
-import { fetchEntities } from './api';
 import { API_URL } from './api-config';
 import { User, UserRole } from '@/types/Role';
 import { logger } from '@/utils/logger';
+
+interface SaveBundleError {
+  ErrorMessage?: string;
+  message?: string;
+  Message?: string;
+  error?: string;
+  description?: string;
+  [key: string]: unknown;
+}
 
 const backendRoleToFrontend: Record<string, UserRole> = {
   admin: UserRole.ADMIN,
@@ -64,7 +72,6 @@ export async function fetchUsers({
   limit = 30,
   orderBy = 'email',
   order = 'asc',
-  partial = false,
   filters = {},
   searchTerm = '',
   forceRefresh = false
@@ -147,9 +154,9 @@ export async function fetchUsers({
   });
 
   // Map backend response to frontend format
-  const mappedUsers = (result.data || []).map((backendUser: any) => {
+  const mappedUsers = (result.data || []).map((backendUser: Record<string, unknown>) => {
     // Split single "name" field into firstName/lastName
-    const nameParts = (backendUser.name || '').split(' ').filter((p: string) => p.length > 0);
+    const nameParts = (String(backendUser.name ?? '')).split(' ').filter((p: string) => p.length > 0);
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -160,7 +167,7 @@ export async function fetchUsers({
       username: backendUser.username || '',
       email: backendUser.email || '',
       // Map backend typeName to frontend UserRole enum format
-      role: mapBackendRole(backendUser.typeName || backendUser.role),
+      role: mapBackendRole((backendUser.typeName || backendUser.role) as string | undefined),
     };
   });
 
@@ -270,9 +277,10 @@ export async function createUser(userData: CreateUserData): Promise<User> {
   };
 
   // Remove undefined fields to keep payload clean
-  Object.keys(entity).forEach(key => {
-    if (key !== 'entityAspect' && (entity as any)[key] === undefined) {
-      delete (entity as any)[key];
+  const entityRecord = entity as Record<string, unknown>;
+  Object.keys(entityRecord).forEach(key => {
+    if (key !== 'entityAspect' && entityRecord[key] === undefined) {
+      delete entityRecord[key];
     }
   });
 
@@ -309,18 +317,18 @@ export async function createUser(userData: CreateUserData): Promise<User> {
   if (result.Errors && result.Errors.length > 0) {
     logger.error('SaveBundle errors:', result.Errors);
     logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: any) => {
+    const errorMessages = result.Errors.map((err: SaveBundleError) => {
       return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
     }).join(', ');
     throw new Error(`User creation failed: ${errorMessages}`);
   }
 
   // Helper function to map backend user to frontend User type
-  const mapBackendUserToFrontend = (backendUser: any): User => {
+  const mapBackendUserToFrontend = (backendUser: Record<string, unknown>): User => {
     logger.log('🔍 Mapping backend user:', backendUser);
 
     // Split name into firstName and lastName
-    const nameParts = (backendUser.name || '').split(' ').filter((part: string) => part.length > 0);
+    const nameParts = (String(backendUser.name ?? '')).split(' ').filter((part: string) => part.length > 0);
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -337,8 +345,8 @@ export async function createUser(userData: CreateUserData): Promise<User> {
       // Then override with our mapped fields
       firstName: firstName,
       lastName: lastName,
-      role: backendUser.role || userData.role,
-    };
+      role: (backendUser.role || userData.role) as UserRole,
+    } as unknown as User;
   };
 
   // Return the created user from the save result
@@ -366,8 +374,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
  */
 export async function updateUser(id: string, userData: UpdateUserData): Promise<User> {
   // Build the update payload matching NestJS UpdateUserDto
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const payload: Record<string, any> = {};
+  const payload: Record<string, unknown> = {};
 
   if (userData.username !== undefined) {
     payload.username = userData.username;

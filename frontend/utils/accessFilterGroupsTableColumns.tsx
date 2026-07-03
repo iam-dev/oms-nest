@@ -18,7 +18,7 @@ export function getAccessFilterGroupTableColumns(headerFilters: AccessFilterGrou
           entityType="access-filter-group"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: string | null | undefined) => v ?? '',
     },
     {
       key: 'description',
@@ -31,7 +31,7 @@ export function getAccessFilterGroupTableColumns(headerFilters: AccessFilterGrou
           entityType="access-filter-group"
         />
       ),
-      render: (v: any) => v ?? '',
+      render: (v: string | null | undefined) => v ?? '',
     },
     {
       key: 'enabled',
@@ -48,7 +48,7 @@ export function getAccessFilterGroupTableColumns(headerFilters: AccessFilterGrou
           entityType="access-filter-group"
         />
       ),
-      render: (v: any) => {
+      render: (v: boolean | null | undefined) => {
         const status = v ? 'ACTIVE' : 'INACTIVE';
         return <StatusBadge status={status} type="access-filter-group" />;
       },
@@ -64,7 +64,7 @@ export function getAccessFilterGroupTableColumns(headerFilters: AccessFilterGrou
           entityType="access-filter-group"
         />
       ),
-      render: (v: any) => {
+      render: (v: string | null | undefined) => {
         if (!v) return 'N/A';
         const date = new Date(v);
         return date.toLocaleDateString();

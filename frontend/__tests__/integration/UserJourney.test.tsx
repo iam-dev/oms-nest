@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { UserRole } from '@/types/Role';
-import { AuthTestProvider } from '../utils/AuthTestProvider';
 import { getAllRoles, getMockUserByRole, getMockToken } from '../utils/roleTestHelpers';
+import * as useUserRoleModule from '@/hooks/useUserRole';
+import * as authContextModule from '@/context/AuthContext';
+import * as rolePermissionsModule from '@/utils/rolePermissions';
 
 // Mock all the components we'll be testing
 jest.mock('@/hooks/useUserRole', () => ({
@@ -41,9 +43,9 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/dashboard'
 }));
 
-const mockUseAuth = require('@/context/AuthContext').useAuth as jest.Mock;
-const mockUseUserRole = require('@/hooks/useUserRole').useUserRole as jest.Mock;
-const mockHasScreenPermission = require('@/utils/rolePermissions').hasScreenPermission as jest.Mock;
+const mockUseAuth = authContextModule.useAuth as jest.Mock;
+const mockUseUserRole = useUserRoleModule.useUserRole as jest.Mock;
+const mockHasScreenPermission = rolePermissionsModule.hasScreenPermission as jest.Mock;
 
 // Mock Application Component that represents the full app with role-based features
 const MockApplication = ({ role }: { role: UserRole | null }) => {
@@ -93,7 +95,7 @@ const MockApplication = ({ role }: { role: UserRole | null }) => {
       'USER_PERMISSIONS_VIEW': [UserRole.SUPERVISOR]
     };
 
-    const allowedRoles: UserRole[] = (permissionMap as any)[permission] || [];
+    const allowedRoles: UserRole[] = (permissionMap as Record<string, UserRole[]>)[permission] || [];
 
     // Handle supervisor inheritance
     if (userRole === UserRole.SUPERVISOR) {

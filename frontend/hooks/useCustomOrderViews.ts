@@ -151,9 +151,13 @@ export function useCustomOrderViews() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync activeView when activeTab changes
+  // Sync activeView when activeTab changes.
   useEffect(() => {
     if (activeTab) {
+      // TODO(react-hooks): activeView is also set independently by standalone-view handlers;
+      // deriving it purely from activeTab would require restructuring the entire view/tab
+      // state model. Suppressed to preserve existing behaviour.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveView(activeTab);
     }
   }, [activeTab]);

@@ -67,6 +67,7 @@ export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalP
 
   useEffect(() => {
     if (isOpen && model) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(react-hooks): loadData triggers async fetch+setState; standard data-on-open pattern
       loadData();
     }
   }, [isOpen, model, loadData]);

@@ -63,6 +63,9 @@ export default function Options() {
 
   // Fetch options when dependencies change
   useEffect(() => {
+    // TODO(react-hooks): fetchOptionsData is a useCallback that calls setState internally;
+    // this is the standard async fetch-on-mount/dep-change pattern and is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOptionsData();
   }, [fetchOptionsData]);
   

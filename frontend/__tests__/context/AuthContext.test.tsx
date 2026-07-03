@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { clearAuthTokens } from '@/api/login';
 import { useAtom } from 'jotai';
+import { UserRole } from '@/types/Role';
 
 // Mock dependencies
 jest.mock('@/api/login', () => ({
@@ -23,7 +23,6 @@ jest.mock('jotai', () => ({
 global.fetch = jest.fn();
 
 const mockUseAtom = useAtom as jest.MockedFunction<typeof useAtom>;
-const mockClearAuthTokens = clearAuthTokens as jest.MockedFunction<typeof clearAuthTokens>;
 const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
 
 // Test component to access auth context
@@ -42,9 +41,12 @@ const TestComponent = () => {
 };
 
 // Create individual atom state holders
-let mockUser: any = null;
+let mockUser: import('@/types/Role').User | null = null;
 let mockIsAuthLoading: boolean = false;
 let mockIsAuthenticated: boolean = false;
+
+/** Cast a mock-implementation function to the type mockImplementation expects. */
+type UseAtomImpl = Parameters<typeof mockUseAtom.mockImplementation>[0];
 
 describe('AuthContext - Cookie-Based Auth', () => {
   beforeEach(() => {
@@ -61,34 +63,36 @@ describe('AuthContext - Cookie-Based Auth', () => {
     jest.spyOn(console, 'error').mockImplementation();
 
     // Setup Jotai mock to return different atom hooks based on which atom is being used
-    mockUseAtom.mockImplementation((atom: any): any => {
-      if (atom?.init === null && !atom?.key) {
+    mockUseAtom.mockImplementation(((atom: unknown): [unknown, jest.Mock] => {
+      const a = atom as Record<string, unknown> | null;
+      if (a?.init === null && !a?.key) {
         // This is the userAtom (plain atom with null init)
-        return [mockUser, jest.fn((newValue: any) => {
+        return [mockUser, jest.fn((newValue: typeof mockUser) => {
           mockUser = newValue;
         })];
-      } else if (atom?.init === false) {
+      } else if (a?.init === false) {
         // This could be isAuthLoadingAtom (init: false) -- but we start with true
-        return [mockIsAuthLoading, jest.fn((newValue: any) => { mockIsAuthLoading = newValue; })];
+        return [mockIsAuthLoading, jest.fn((newValue: boolean) => { mockIsAuthLoading = newValue; })];
       } else if (typeof atom === 'function') {
         // Derived atom like isAuthenticatedAtom
         mockIsAuthenticated = !!mockUser;
         return [mockIsAuthenticated, jest.fn()];
       } else {
         // Action atoms - return a setter function
-        return [null, jest.fn((action: any) => {
-          if (action && action.user) {
+        return [null, jest.fn((action: unknown) => {
+          const act = action as Record<string, unknown> | boolean | null | undefined;
+          if (act && typeof act === 'object' && 'user' in act) {
             // This is loginActionAtom
-            mockUser = action.user;
+            mockUser = act.user as typeof mockUser;
             mockIsAuthLoading = false;
             mockIsAuthenticated = true;
-          } else if (action === true || action === false) {
+          } else if (act === true || act === false) {
             // This might be setLoadingAtom
-            mockIsAuthLoading = action;
+            mockIsAuthLoading = act;
           }
         })];
       }
-    });
+    }) as UseAtomImpl);
   });
 
   afterEach(() => {
@@ -109,7 +113,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockUser = {
         id: 1000,
         username: 'api.user',
-        role: 'ROLE_ADMIN',
+        role: UserRole.ADMIN,
         email: 'api@example.com',
         firstName: 'API',
         lastName: 'User',
@@ -172,7 +176,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockUser = {
         id: 1,
         username: 'admin.user',
-        role: 'ROLE_ADMIN',
+        role: UserRole.ADMIN,
         email: 'admin@example.com',
         firstName: 'Admin',
         lastName: 'User',
@@ -180,15 +184,16 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockIsAuthenticated = true;
       mockIsAuthLoading = false;
 
-      mockUseAtom.mockImplementation((atom: any): any => {
-        if (atom?.init === null && !atom?.key) {
+      mockUseAtom.mockImplementation(((atom: unknown): [unknown, jest.Mock] => {
+        const a = atom as Record<string, unknown> | null;
+        if (a?.init === null && !a?.key) {
           return [mockUser, jest.fn()];
-        } else if (atom?.init === false) {
+        } else if (a?.init === false) {
           return [false, jest.fn()];
         } else {
           return [true, jest.fn()];
         }
-      });
+      }) as UseAtomImpl);
 
       render(
         <AuthProvider>
@@ -205,7 +210,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockUser = {
         id: 456,
         username: 'supervisor.admin',
-        role: 'ROLE_SUPERVISOR',
+        role: UserRole.SUPERVISOR,
         email: 'supervisor@example.com',
         firstName: 'Super',
         lastName: 'Visor',
@@ -213,15 +218,16 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockIsAuthenticated = true;
       mockIsAuthLoading = false;
 
-      mockUseAtom.mockImplementation((atom: any): any => {
-        if (atom?.init === null && !atom?.key) {
+      mockUseAtom.mockImplementation(((atom: unknown): [unknown, jest.Mock] => {
+        const a = atom as Record<string, unknown> | null;
+        if (a?.init === null && !a?.key) {
           return [mockUser, jest.fn()];
-        } else if (atom?.init === false) {
+        } else if (a?.init === false) {
           return [false, jest.fn()];
         } else {
           return [true, jest.fn()];
         }
-      });
+      }) as UseAtomImpl);
 
       render(
         <AuthProvider>
@@ -238,7 +244,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockUser = {
         id: 789,
         username: 'jane.fitter',
-        role: 'ROLE_FITTER',
+        role: UserRole.FITTER,
         email: 'jane@example.com',
         firstName: 'Jane',
         lastName: 'Fitter',
@@ -246,15 +252,16 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockIsAuthenticated = true;
       mockIsAuthLoading = false;
 
-      mockUseAtom.mockImplementation((atom: any): any => {
-        if (atom?.init === null && !atom?.key) {
+      mockUseAtom.mockImplementation(((atom: unknown): [unknown, jest.Mock] => {
+        const a = atom as Record<string, unknown> | null;
+        if (a?.init === null && !a?.key) {
           return [mockUser, jest.fn()];
-        } else if (atom?.init === false) {
+        } else if (a?.init === false) {
           return [false, jest.fn()];
         } else {
           return [true, jest.fn()];
         }
-      });
+      }) as UseAtomImpl);
 
       render(
         <AuthProvider>
@@ -274,7 +281,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockUser = {
         id: 1003,
         username: 'storage.test',
-        role: 'ROLE_ADMIN',
+        role: UserRole.ADMIN,
         email: 'storage@example.com',
         firstName: '',
         lastName: '',
@@ -331,7 +338,7 @@ describe('AuthContext - Cookie-Based Auth', () => {
       mockUser = {
         id: 1005,
         username: 'concurrent.user',
-        role: 'ROLE_ADMIN',
+        role: UserRole.ADMIN,
         firstName: '',
         lastName: '',
       };
@@ -358,11 +365,11 @@ describe('AuthContext - Cookie-Based Auth', () => {
   });
 
   describe('Role Hierarchy Scenarios', () => {
-    const roleHierarchyTests = [
-      { description: 'SUPERVISOR role renders correctly', role: 'ROLE_SUPERVISOR', userId: 2000 },
-      { description: 'ADMIN role renders correctly', role: 'ROLE_ADMIN', userId: 2001 },
-      { description: 'FITTER role renders correctly', role: 'ROLE_FITTER', userId: 2002 },
-      { description: 'SUPPLIER role renders correctly', role: 'ROLE_SUPPLIER', userId: 2003 },
+    const roleHierarchyTests: Array<{ description: string; role: UserRole; userId: number }> = [
+      { description: 'SUPERVISOR role renders correctly', role: UserRole.SUPERVISOR, userId: 2000 },
+      { description: 'ADMIN role renders correctly', role: UserRole.ADMIN, userId: 2001 },
+      { description: 'FITTER role renders correctly', role: UserRole.FITTER, userId: 2002 },
+      { description: 'SUPPLIER role renders correctly', role: UserRole.SUPPLIER, userId: 2003 },
     ];
 
     roleHierarchyTests.forEach(({ description, role, userId }) => {
