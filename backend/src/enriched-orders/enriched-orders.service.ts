@@ -307,7 +307,9 @@ export class EnrichedOrdersService {
           ORDER BY name
         `),
         queryRunner.query(`
-          SELECT DISTINCT CONCAT_WS(' - ', NULLIF(s.brand, ''), NULLIF(s.model_name, '')) as name
+          SELECT DISTINCT
+            CONCAT_WS(' - ', NULLIF(s.brand, ''), NULLIF(s.model_name, ''))
+              || CASE WHEN s.deleted = 1 THEN ' (Deleted)' ELSE '' END AS name
           FROM orders o
           JOIN saddles s ON o.saddle_id = s.id
           WHERE o.deleted_at IS NULL AND (s.brand IS NOT NULL OR s.model_name IS NOT NULL)
@@ -703,11 +705,22 @@ export class EnrichedOrdersService {
     }
 
     // Filter by saddle name (brand - model format)
-    // Supports comma-separated values for multi-select
+    // Supports comma-separated values for multi-select.
+    // Dropdown labels for discontinued saddles carry a " (Deleted)" suffix
+    // (see filter-options query); strip it so the brand/model split still
+    // matches the underlying catalogue row and pre-suffix saved filters
+    // keep working.
+    // Match exactly " (Deleted)" at the end (no leading/trailing \s*) to avoid
+    // polynomial backtracking on attacker-controlled input. The dropdown query
+    // always appends a single literal space + "(Deleted)", and a final .trim()
+    // below soaks up any incidental whitespace either side.
+    const DELETED_SUFFIX_RE = / \(Deleted\)$/i;
+    const stripDeletedSuffix = (v: string): string =>
+      v.replace(DELETED_SUFFIX_RE, "").trim();
     if (query.saddleName) {
       const saddleValues = String(query.saddleName)
         .split(",")
-        .map((v) => v.trim())
+        .map((v) => stripDeletedSuffix(v.trim()))
         .filter(Boolean);
       if (saddleValues.length === 1) {
         const parts = saddleValues[0].split(" - ");
