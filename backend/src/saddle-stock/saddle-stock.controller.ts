@@ -81,6 +81,7 @@ export class SaddleStockController {
         page,
         limit,
         search,
+        userRoleId,
       );
 
       return {

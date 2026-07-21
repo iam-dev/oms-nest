@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { API_URL } from "@/services/api-config";
+
+// FE-030: metadata cannot be exported from a "use client" module in the App Router.
+// Set the no-referrer policy via an inline <meta> element rendered inside the form
+// so the hash token is not leaked in the Referer header to third-party origins.
 
 function PasswordChangeForm() {
   const searchParams = useSearchParams();
@@ -16,6 +20,20 @@ function PasswordChangeForm() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // FE-030: remove the `hash` query param from the URL on mount so it is not
+  // retained in browser history or shared via copy-paste.
+  useEffect(() => {
+    if (hash) {
+      router.replace("/password-change");
+    }
+    // We only want to run this once on mount; router is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // FE-029: The isExpired check is cosmetic only — it provides a faster
+  // UX signal to the user, but the backend performs the authoritative
+  // hash validation. A manipulated `expires` param will be rejected
+  // server-side regardless of what this client-side guard says.
   // Compute once on mount — comparing against a static URL param never needs re-evaluation.
   const [isExpired] = useState(() => (expires ? Date.now() > Number(expires) : false));
 
@@ -23,8 +41,9 @@ function PasswordChangeForm() {
     e.preventDefault();
     setError("");
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    // FE-028: minimum password length raised to 12
+    if (password.length < 12) {
+      setError("Password must be at least 12 characters.");
       return;
     }
 
@@ -112,7 +131,7 @@ function PasswordChangeForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          minLength={6}
+          minLength={12}
           style={{
             width: "100%",
             padding: "10px 12px",
@@ -122,6 +141,10 @@ function PasswordChangeForm() {
             boxSizing: "border-box",
           }}
         />
+        {/* FE-028: complexity hint — no external libraries */}
+        <p style={{ fontSize: 12, color: "#c0c0c0", marginTop: 4 }}>
+          At least 12 characters. Use a mix of letters, numbers, and symbols for a stronger password.
+        </p>
       </div>
       <div style={{ marginBottom: 16 }}>
         <label
@@ -136,7 +159,7 @@ function PasswordChangeForm() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          minLength={6}
+          minLength={12}
           style={{
             width: "100%",
             padding: "10px 12px",
@@ -183,6 +206,8 @@ export default function PasswordChangePage() {
         justifyContent: "center",
       }}
     >
+      {/* FE-030: prevent the reset hash from leaking in the Referer header */}
+      <meta name="referrer" content="no-referrer" />
       <div
         style={{
           background: "#757575",

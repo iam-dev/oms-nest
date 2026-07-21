@@ -64,25 +64,15 @@ export class AuthService {
       });
     }
 
-    // Check if account is locked (properties might exist in extended user from DB)
-    const extendedUser = user as User & {
-      lockedUntil?: Date;
-      failedLoginAttempts?: number;
-      role?: any;
-    };
-    if (extendedUser.lockedUntil && extendedUser.lockedUntil > new Date()) {
-      throw new UnprocessableEntityException({
-        status: HttpStatus.UNPROCESSABLE_ENTITY,
-        errors: {
-          account: "locked",
-        },
-      });
-    }
-
-    // Unlock account if lockout period has expired
-    if (extendedUser.lockedUntil && extendedUser.lockedUntil <= new Date()) {
-      await this.usersService.unlockAccount(user.id);
-    }
+    // TODO(security/BE-001): Implement brute-force lockout.
+    // The User domain and credentials table currently have no `failed_login_attempts`
+    // or `locked_until` columns. To implement properly:
+    //   1. Add `failedLoginAttempts: number` and `lockedUntil: Date | null` to the
+    //      User domain, UserEntity, and a DB migration.
+    //   2. On wrong password → increment counter; when count >= 5 set lockedUntil = now+15min.
+    //   3. On successful login → reset both fields to 0 / null.
+    //   4. Check lockedUntil here before the password compare and throw 422 {account:"locked"}.
+    // Until then the original dead-code lockout branch has been removed to avoid confusion.
 
     if (!user.password) {
       throw new UnprocessableEntityException({
@@ -139,6 +129,13 @@ export class AuthService {
     const frontendRole =
       roleNameToFrontend[userRole.name.toLowerCase()] || "ROLE_USER";
 
+    // TODO(BE-026): Slim down JWT payload — the full `role` object (including name
+    // and all properties) and `username`/`enabled` fields are unnecessary in the
+    // token and increase its size.  The minimal shape needed by the backend is:
+    //   { id, legacyId, role: { id }, roles: string[] }
+    // Coordinate with the frontend before removing `username`, `enabled`, and the
+    // full role object, since the frontend currently reads those from the token.
+    //
     // Simple token for testing (without session management)
     const token = await this.jwtService.signAsync(
       {
@@ -333,11 +330,13 @@ export class AuthService {
 
     const user = await this.usersService.findById(userId);
 
+    // BE-015: Do NOT return 404 when the user is not found or is already enabled.
+    // A 404 leaks user-existence information via the confirm-email flow.
+    // Return idempotent success instead:
+    //   • User not found    → token is stale/reused after account deletion; treat as already done.
+    //   • User already enabled → idempotent re-confirmation; no-op.
     if (!user || user.enabled) {
-      throw new NotFoundException({
-        status: HttpStatus.NOT_FOUND,
-        error: `notFound`,
-      });
+      return;
     }
 
     // Status update disabled for staging schema compatibility
@@ -560,35 +559,35 @@ export class AuthService {
       const userByEmail = await this.usersService.findByEmail(userDto.email);
 
       if (userByEmail && userByEmail.id !== currentUser.id) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            email: "emailExists",
+        // BE-027: Do NOT throw when the email belongs to another user — that leaks
+        // whether the address is registered. Silently skip sending the confirmation
+        // email and log internally; the caller receives the same 200 response shape.
+        this.logger.warn(
+          `BE-027: email-change confirmation skipped — address already in use by another account ` +
+            `(requestingUserId=${String(currentUser.id)})`,
+        );
+      } else {
+        const hash = await this.jwtService.signAsync(
+          {
+            confirmEmailUserId: currentUser.id,
+            newEmail: userDto.email,
           },
+          {
+            secret: this.configService.getOrThrow("auth.confirmEmailSecret", {
+              infer: true,
+            }),
+            expiresIn: this.configService.getOrThrow(
+              "auth.confirmEmailExpires",
+              { infer: true },
+            ),
+          },
+        );
+
+        await this.mailService.confirmNewEmail({
+          to: userDto.email,
+          data: { hash },
         });
       }
-
-      const hash = await this.jwtService.signAsync(
-        {
-          confirmEmailUserId: currentUser.id,
-          newEmail: userDto.email,
-        },
-        {
-          secret: this.configService.getOrThrow("auth.confirmEmailSecret", {
-            infer: true,
-          }),
-          expiresIn: this.configService.getOrThrow("auth.confirmEmailExpires", {
-            infer: true,
-          }),
-        },
-      );
-
-      await this.mailService.confirmNewEmail({
-        to: userDto.email,
-        data: {
-          hash,
-        },
-      });
     }
 
     delete userDto.email;
@@ -646,7 +645,20 @@ export class AuthService {
   }
 
   async logout(data: Pick<JwtRefreshPayloadType, "sessionId">) {
-    return this.sessionService.deleteById(data.sessionId);
+    // TODO(security/BE-002): Session management is disabled for staging compatibility
+    // (session table may not exist). When re-enabling sessions, remove this guard
+    // and ensure the session table is present in all environments.
+    // Session creation is commented out in validateLogin(); refreshToken is effectively
+    // non-functional until sessions are re-enabled.
+    if (!data.sessionId) {
+      // No session to delete — no-op instead of crashing.
+      return;
+    }
+    return this.sessionService.deleteById(data.sessionId).catch((err) => {
+      this.logger.warn(
+        `Logout: failed to delete session ${data.sessionId}: ${err.message}`,
+      );
+    });
   }
 
   private async getTokensData(data: {

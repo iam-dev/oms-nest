@@ -6,6 +6,7 @@ import { Cache } from "cache-manager";
 import { ConfigService } from "@nestjs/config";
 import { AllConfigType } from "../config/config.type";
 import { ProductionCacheService } from "../cache/production-cache.service";
+import { safeOrderBy } from "../common/utils/safe-order-by";
 
 // Status IDs where fitters (role 1) are NOT allowed to edit orders
 const FITTER_RESTRICTED_STATUS_IDS = [2, 3, 5, 7, 9, 10, 11];
@@ -172,16 +173,23 @@ export class EnrichedOrdersService {
   ) {}
 
   private async cacheGet<T>(key: string): Promise<T | undefined> {
+    // BE-017: Use AbortController + clearTimeout to avoid leaking the timeout
+    // timer when the cache resolves before the 2 s deadline.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
     try {
       const result = await Promise.race([
         this.cacheManager.get<T>(key),
-        new Promise<undefined>((resolve) =>
-          setTimeout(() => resolve(undefined), 2000),
-        ),
+        new Promise<undefined>((resolve) => {
+          controller.signal.addEventListener("abort", () => resolve(undefined));
+        }),
       ]);
       return result ?? undefined;
-    } catch {
+    } catch (err) {
+      this.logger.warn(`cacheGet failed for key "${key}": ${String(err)}`);
       return undefined;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -190,13 +198,20 @@ export class EnrichedOrdersService {
     value: unknown,
     ttl: number,
   ): Promise<void> {
+    // BE-017: AbortController pattern to prevent timer leak on early resolution.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
     try {
       await Promise.race([
         this.cacheManager.set(key, value, ttl),
-        new Promise<void>((resolve) => setTimeout(() => resolve(), 2000)),
+        new Promise<void>((resolve) => {
+          controller.signal.addEventListener("abort", () => resolve());
+        }),
       ]);
-    } catch {
-      // ignore cache errors
+    } catch (err) {
+      this.logger.warn(`cacheSet failed for key "${key}": ${String(err)}`);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -281,6 +296,10 @@ export class EnrichedOrdersService {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       const [
@@ -462,6 +481,10 @@ export class EnrichedOrdersService {
       await queryRunner.connect();
 
       // Set RLS bypass context (user_id = 0 triggers system_bypass policies)
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Execute count query
@@ -885,10 +908,18 @@ export class EnrichedOrdersService {
     // Supports comma-separated values for multi-select
     const seatSizeFilter = query.seatSizes || query.seatSize;
     if (seatSizeFilter) {
+      // BE-020: Whitelist format before passing dotSize into a regex parameter.
+      // Only digits and an optional decimal point are accepted; anything else is
+      // skipped (e.g. "17.5" passes, "17.5; DROP TABLE" does not).
+      const SEAT_SIZE_RE = /^[0-9]+(\.[0-9]+)?$/;
+
       const seatSizeValues = String(seatSizeFilter)
         .split(",")
         .map((v) => v.trim())
-        .filter(Boolean);
+        .filter((v) => {
+          const canonical = v.replace(",", ".");
+          return Boolean(v) && SEAT_SIZE_RE.test(canonical);
+        });
 
       const buildSeatSizeCondition = (size: string): string => {
         const commaSize = size.replace(".", ",");
@@ -1083,10 +1114,8 @@ export class EnrichedOrdersService {
   }
 
   private buildOrderBy(query: EnrichedOrdersQueryDto): string {
-    const orderBy = query.orderBy || "order_time";
-    const direction = query.orderDirection || "DESC";
-
-    // Map incoming column names to legacy schema columns
+    // BE-021: delegate to safeOrderBy() so the whitelist is enforced centrally
+    // and injected column names can never reach the database.
     const columnMap: Record<string, string> = {
       id: "o.id",
       orderId: "o.id",
@@ -1101,10 +1130,12 @@ export class EnrichedOrdersService {
       order_status: "o.order_status",
     };
 
-    const column = columnMap[orderBy] || "o.order_time";
-    const dir = direction === "ASC" ? "ASC" : "DESC";
-
-    return `ORDER BY ${column} ${dir}`;
+    return safeOrderBy(
+      query.orderBy ?? "order_time",
+      query.orderDirection,
+      columnMap,
+      "o.order_time",
+    );
   }
 
   private generateCacheKey(query: EnrichedOrdersQueryDto): string {
@@ -1180,6 +1211,10 @@ export class EnrichedOrdersService {
 
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Fetch comprehensive order data with all joins
@@ -1439,6 +1474,10 @@ export class EnrichedOrdersService {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       const fitters = await queryRunner.query(`
@@ -1607,6 +1646,10 @@ export class EnrichedOrdersService {
 
     try {
       await queryRunner.connect();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Look up the status ID from the statuses table
@@ -1701,6 +1744,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Look up the status ID from the statuses table
@@ -1804,6 +1851,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Verify order exists and get old status for audit
@@ -1986,6 +2037,13 @@ export class EnrichedOrdersService {
         }
       }
 
+      // TODO(BE-032): Audit log is written inside the open transaction via
+      // queryRunner.query().  If the log INSERT fails the whole update rolls back
+      // (desired), but if the business-logic commit succeeds and the log table is
+      // unavailable, the try/catch here swallows the error and the audit record is
+      // lost permanently.  The correct pattern is to commit the business transaction
+      // first, then write the audit log in a separate connection/transaction so
+      // transient log failures don't roll back business data — and vice versa.
       // Insert audit log entry
       try {
         const logText =
@@ -2038,6 +2096,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Resolve status name to integer ID
@@ -2225,6 +2287,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Copy the source order into a new row with Unordered status (0)
@@ -2277,6 +2343,9 @@ export class EnrichedOrdersService {
         [newOrderId, sourceOrderId],
       );
 
+      // TODO(BE-032): See note above — audit log inside a transaction risks
+      // silently losing the record if the log table is unavailable. Commit business
+      // data first, then log in a separate connection.
       // Insert audit log entry
       try {
         await queryRunner.query(
@@ -2331,6 +2400,10 @@ export class EnrichedOrdersService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      // TODO(security/BE-006): This method uses rls.user_id='0' (system_bypass) for all calls.
+      // Until currentUser is threaded through this method signature, FITTER ownership
+      // enforcement must be applied in the controller/guard layer before invoking this method.
+      // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
       // Verify source order exists
@@ -2392,6 +2465,9 @@ export class EnrichedOrdersService {
           [newOrderId, sourceOrderId],
         );
 
+        // TODO(BE-032): See note above — audit log inside a transaction risks
+        // silently losing the record if the log table is unavailable. Commit business
+        // data first, then log in a separate connection.
         // Insert audit log entry
         try {
           await queryRunner.query(
@@ -2486,14 +2562,23 @@ export class EnrichedOrdersService {
   }
 
   async invalidateCache(): Promise<void> {
+    // BE-017: AbortController pattern to prevent timer leak on early resolution.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
     try {
       await Promise.race([
         this.cacheManager.clear(),
-        new Promise<void>((resolve) => setTimeout(() => resolve(), 2000)),
+        new Promise<void>((resolve) => {
+          controller.signal.addEventListener("abort", () => resolve());
+        }),
       ]);
       this.logger.debug("Cleared all enriched orders cache");
     } catch (error) {
-      this.logger.warn("Failed to invalidate cache", error);
+      this.logger.warn(
+        `Failed to invalidate cache: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      clearTimeout(timer);
     }
   }
 }

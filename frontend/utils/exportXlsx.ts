@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { extractSeatSizes } from './orderProcessing';
 import { getCustomerName, getFitterName, getDate, getStatus } from './orderHydration';
+import { sanitizeForCell } from './cellSanitization';
 import type { Order } from '@/types/Order';
 
 interface OrderExportData {
@@ -53,7 +54,9 @@ export async function exportOrderToXlsx(
     row.getCell(2).fill = headerFill;
   };
   const addField = (label: string, value: string | number | undefined | null) => {
-    ws.addRow([label, value ?? '']);
+    // Sanitize string values to prevent formula injection; numbers pass through as-is.
+    const cellValue = typeof value === 'string' ? sanitizeForCell(value) : (value ?? '');
+    ws.addRow([label, cellValue]);
   };
   addSection('Order Information');
   addField('Order ID', data.orderId);
@@ -111,30 +114,27 @@ export async function exportToXlsx(orders: Order[]): Promise<void> {
     const model = order.model_name || order.modelName || '';
     const saddle = [brand, model].filter(Boolean).join(' - ');
 
+    // seatSize may be numeric (number) — do not sanitize it; all other columns are strings.
+    const seatSize = toSeatSizeCellValue(extractSeatSizes(order));
+    const optionsStr = (() => {
+      const opts = order.options || order.order_options || [];
+      if (Array.isArray(opts)) {
+        return (opts as unknown[]).map((o) => (typeof o === 'string' ? o : (o as Record<string, string>)?.name || (o as Record<string, string>)?.label || '')).filter(Boolean).join(', ');
+      }
+      return '';
+    })();
+
     return [
-      order.orderId || order.id || '',
-      brand,
-      saddle,
-      toSeatSizeCellValue(extractSeatSizes(order)),
-      getCustomerName(order),
-      getFitterName(order),
-      formatExportDate(getDate(order)),
-      order.paymentStatus || order.payment_status || '',
-      getStatus(order) || '',
-      (() => {
-        const opts = order.options || order.order_options || [];
-        if (Array.isArray(opts)) {
-          return opts.map((o: unknown) => {
-            if (typeof o === 'string') return o;
-            if (o !== null && typeof o === 'object') {
-              const obj = o as Record<string, unknown>;
-              return (typeof obj.name === 'string' ? obj.name : null) || (typeof obj.label === 'string' ? obj.label : null) || '';
-            }
-            return '';
-          }).filter(Boolean).join(', ');
-        }
-        return '';
-      })(),
+      sanitizeForCell(order.orderId || order.id || ''),
+      sanitizeForCell(brand),
+      sanitizeForCell(saddle),
+      typeof seatSize === 'number' ? seatSize : sanitizeForCell(seatSize),
+      sanitizeForCell(getCustomerName(order)),
+      sanitizeForCell(getFitterName(order)),
+      sanitizeForCell(formatExportDate(getDate(order))),
+      sanitizeForCell(order.paymentStatus || order.payment_status || ''),
+      sanitizeForCell(getStatus(order) || ''),
+      sanitizeForCell(optionsStr),
     ];
   });
 

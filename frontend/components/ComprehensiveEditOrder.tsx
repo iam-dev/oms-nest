@@ -1,3 +1,10 @@
+// TODO(FE-040): Introduce a Zod schema for the comprehensive order edit payload and
+// remove all `any` casts in this file.  Suggested approach:
+//   1. Define `comprehensiveOrderSchema = z.object({ ... })` mirroring UpdateOrderPayload.
+//   2. Derive the form type with `z.infer<typeof comprehensiveOrderSchema>`.
+//   3. Replace manual useState fields with `useForm<ComprehensiveOrderForm>({ resolver: zodResolver(...) })`.
+//   4. Replace `Record<string, any>` and untyped API responses with strict types.
+// This is a large refactor — do not attempt incrementally without full test coverage.
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -259,6 +266,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   }, [orderId, loadData]);
 
   // Customer search — debounced with 300 ms.
+  // FE-043: abort the in-flight fetch on each keystroke to avoid stale result races.
   // The synchronous setCustomerSearchResults([]) on the early-return path is a stale-results
   // cleanup; suppressed because refactoring into the timer callback would delay clearing by 300 ms.
   useEffect(() => {
@@ -267,49 +275,60 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       setCustomerSearchResults([]); // eslint-disable-line react-hooks/set-state-in-effect -- immediate cleanup when search term is too short
       return;
     }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setCustomerSearchLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/v1/customers?search=${encodeURIComponent(customerSearchTerm)}&limit=10`, {
-          headers: {
-            'Accept': 'application/json',
-          },
+          headers: { 'Accept': 'application/json' },
           credentials: 'include',
+          signal: controller.signal,
         });
         if (res.ok) {
           const data = await res.json();
           setCustomerSearchResults(data['hydra:member'] || []);
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
       setCustomerSearchLoading(false);
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [customerSearchTerm]);
 
   // Fitter search — debounced with 300 ms. Same rationale as customer search above.
+  // FE-043: abort the in-flight fetch on each keystroke to avoid stale result races.
   useEffect(() => {
     if (fitterSearchTerm.length < 2) {
       // TODO(react-hooks): synchronous setState clears stale results immediately when term < 2 chars.
       setFitterSearchResults([]); // eslint-disable-line react-hooks/set-state-in-effect -- immediate cleanup when search term is too short
       return;
     }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setFitterSearchLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/v1/fitters?search=${encodeURIComponent(fitterSearchTerm)}&limit=10`, {
-          headers: {
-            'Accept': 'application/json',
-          },
+          headers: { 'Accept': 'application/json' },
           credentials: 'include',
+          signal: controller.signal,
         });
         if (res.ok) {
           const data = await res.json();
           setFitterSearchResults(data['hydra:member'] || []);
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
       setFitterSearchLoading(false);
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fitterSearchTerm]);
 
   const handleSubmit = async () => {

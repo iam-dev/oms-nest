@@ -11,8 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseIntPipe,
-  Req,
-  UnauthorizedException,
+  BadRequestException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -28,6 +27,7 @@ import { RoleEnum } from "../roles/roles.enum";
 import { CustomOrderCellOverrideService } from "./custom-order-cell-override.service";
 import { CreateCellOverrideDto } from "./dto/create-cell-override.dto";
 import { BulkUpsertCellOverrideDto } from "./dto/bulk-upsert-cell-override.dto";
+import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 
 @ApiTags("Custom Order Cell Overrides")
 @Controller({ path: "custom-order-cell-overrides", version: "1" })
@@ -37,31 +37,24 @@ import { BulkUpsertCellOverrideDto } from "./dto/bulk-upsert-cell-override.dto";
 export class CustomOrderCellOverrideController {
   constructor(private readonly service: CustomOrderCellOverrideService) {}
 
-  private getUserId(req: { user?: { legacyId?: number } }): number {
-    const id = req.user?.legacyId;
-    if (!id)
-      throw new UnauthorizedException("User legacyId not found in JWT payload");
-    return id;
-  }
-
   @Post()
   @ApiOperation({ summary: "Upsert a single cell override" })
   @ApiResponse({ status: 201, description: "Override upserted" })
   async upsert(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Body() dto: CreateCellOverrideDto,
   ) {
-    return this.service.upsert(this.getUserId(req), dto);
+    return this.service.upsert(userId, dto);
   }
 
   @Put("bulk")
   @ApiOperation({ summary: "Bulk upsert cell overrides" })
   @ApiResponse({ status: 200, description: "Overrides upserted" })
   async bulkUpsert(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Body() dto: BulkUpsertCellOverrideDto,
   ) {
-    return this.service.bulkUpsert(this.getUserId(req), dto);
+    return this.service.bulkUpsert(userId, dto);
   }
 
   @Get()
@@ -69,27 +62,40 @@ export class CustomOrderCellOverrideController {
   @ApiQuery({
     name: "orderIds",
     required: false,
-    description: "Comma-separated order IDs",
+    description: "Comma-separated integer order IDs",
   })
   @ApiResponse({ status: 200, description: "List of overrides" })
   async findByUser(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Query("orderIds") orderIdsStr?: string,
   ) {
-    const orderIds = orderIdsStr
-      ? orderIdsStr.split(",").map((id) => parseInt(id.trim(), 10))
-      : undefined;
-    return this.service.findByUser(this.getUserId(req), orderIds);
+    let orderIds: number[] | undefined;
+
+    if (orderIdsStr) {
+      // BE-010: filter out non-integer values to prevent NaN from propagating
+      const parsed = orderIdsStr
+        .split(",")
+        .map((seg) => parseInt(seg.trim(), 10));
+      orderIds = parsed.filter(Number.isInteger);
+
+      if (orderIds.length === 0) {
+        throw new BadRequestException(
+          "orderIds must be a comma-separated list of integers",
+        );
+      }
+    }
+
+    return this.service.findByUser(userId, orderIds);
   }
 
   @Get("order/:orderId")
   @ApiOperation({ summary: "Get overrides for a specific order" })
   @ApiResponse({ status: 200, description: "List of overrides for order" })
   async findByOrder(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Param("orderId", ParseIntPipe) orderId: number,
   ) {
-    return this.service.findByOrder(this.getUserId(req), orderId);
+    return this.service.findByOrder(userId, orderId);
   }
 
   @Delete(":id")
@@ -97,10 +103,10 @@ export class CustomOrderCellOverrideController {
   @ApiOperation({ summary: "Delete a cell override by ID" })
   @ApiResponse({ status: 204, description: "Deleted" })
   async remove(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Param("id", ParseIntPipe) id: number,
   ) {
-    return this.service.remove(id, this.getUserId(req));
+    return this.service.remove(id, userId);
   }
 
   @Delete("order/:orderId/column/:columnKey")
@@ -108,14 +114,10 @@ export class CustomOrderCellOverrideController {
   @ApiOperation({ summary: "Delete override by order and column" })
   @ApiResponse({ status: 204, description: "Deleted" })
   async removeByOrderAndColumn(
-    @Req() req: { user?: { legacyId?: number } },
+    @CurrentUserId() userId: number,
     @Param("orderId", ParseIntPipe) orderId: number,
     @Param("columnKey") columnKey: string,
   ) {
-    return this.service.removeByOrderAndColumn(
-      this.getUserId(req),
-      orderId,
-      columnKey,
-    );
+    return this.service.removeByOrderAndColumn(userId, orderId, columnKey);
   }
 }

@@ -18,6 +18,13 @@ jest.mock('@/services/api-config', () => ({
   API_URL: 'http://localhost:3001',
 }));
 
+// FE-039: OrderDetails now uses useRouter for client-side navigation
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useSearchParams: () => ({ get: jest.fn(() => null) }),
+  usePathname: () => '/',
+}));
+
 // ---------------------------------------------------------------------------
 // UI component mocks
 // ---------------------------------------------------------------------------

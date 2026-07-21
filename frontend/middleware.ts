@@ -4,16 +4,16 @@ import { logger } from '@/utils/logger';
 // Define the shape of our JWT payload
 interface JwtPayload {
   exp?: number;
-  role?: string | string[] | { name?: string };
+  id?: string | number;
+  role?: string | { name?: string; type?: string } | string[];
   roles?: string[];
   type?: string;
   userId?: string;
-  id?: string | number;
   [key: string]: unknown;
 }
 
 // Import jose for Edge Runtime compatible JWT handling
-import { jwtVerify, decodeJwt } from 'jose';
+import { jwtVerify } from 'jose';
 
 // JWT verification function that works in Edge Runtime
 async function verifyJwt(token: string): Promise<JwtPayload | null> {
@@ -27,13 +27,20 @@ async function verifyJwt(token: string): Promise<JwtPayload | null> {
   }
 }
 
-// Decode JWT without signature verification (for role checking when verification is bypassed)
-function decodeJwtPayload(token: string): JwtPayload | null {
-  try {
-    return decodeJwt(token) as JwtPayload;
-  } catch {
-    return null;
+/**
+ * Extract the user role from a JWT payload that may use several different
+ * token shapes emitted by the backend over time.
+ */
+function extractRole(payload: JwtPayload): string | undefined {
+  if (typeof payload.role === 'string') return payload.role.toLowerCase();
+  if (typeof payload.role === 'object' && payload.role && !Array.isArray(payload.role)) {
+    const obj = payload.role as { name?: string; type?: string };
+    return (obj.name || obj.type)?.toLowerCase();
   }
+  if (Array.isArray(payload.roles) && payload.roles.length > 0) {
+    return String(payload.roles[0]).toLowerCase();
+  }
+  return undefined;
 }
 
 // Define which roles are allowed per route
@@ -61,7 +68,10 @@ const roleMap: Record<string, string[]> = {
   '/find-saddle': ['admin', 'user', 'supervisor', 'fitter'],
 };
 
-const JWT_SECRET = process.env.JWT_SECRET || '';
+// JWT_SECRET must be set in all environments.  An empty secret is treated as
+// absent so that misconfigured deployments fail closed rather than open.
+// Developers: set JWT_SECRET=dev-secret in .env.local
+const JWT_SECRET = process.env.JWT_SECRET ?? '';
 
 export async function middleware(request: NextRequest) {
   // --- CSP header generation ---
@@ -123,35 +133,39 @@ export async function middleware(request: NextRequest) {
   logger.log('Middleware: protected path:', protectedPath || 'none');
   
   if (protectedPath) {
-    // Verify token signature and extract role
-    let payload: JwtPayload | null = null;
-    if (token) {
-      if (JWT_SECRET) {
-        payload = await verifyJwt(token);
-        if (!payload) {
-          logger.log('Middleware: JWT verification failed, redirecting to login');
-          return NextResponse.redirect(new URL('/login', request.url));
-        }
-      } else {
-        // Fallback to decode-only when JWT_SECRET is not configured (dev without env)
-        logger.log('Middleware: JWT_SECRET not set, falling back to decode-only');
-        payload = decodeJwtPayload(token);
-      }
+    // No token at all on a protected route — redirect to login.
+    if (!token) {
+      logger.log('Middleware: no token on protected route, redirecting to login');
+      return NextResponse.redirect(new URL('/login', request.url));
     }
-    const userRole = typeof payload?.role === 'object' && payload.role && !Array.isArray(payload.role)
-      ? (payload.role as { name?: string }).name?.toLowerCase()
-      : undefined;
 
+    // JWT_SECRET absent means the deployment is misconfigured — fail closed.
+    if (!JWT_SECRET) {
+      logger.log('Middleware: JWT_SECRET not configured, redirecting to login');
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Verify token signature (jose also validates `exp`).
+    const payload = await verifyJwt(token);
+    if (!payload) {
+      logger.log('Middleware: JWT verification failed, redirecting to login');
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    const userRole = extractRole(payload);
     logger.log('Middleware: role:', userRole || 'none');
 
     const allowedRoles = roleMap[protectedPath];
-    if (allowedRoles && userRole && !allowedRoles.includes(userRole)) {
-      logger.log('Middleware: access denied for path:', protectedPath);
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    // Fail closed: if role is unknown or not in the allowed list, deny access.
+    if (allowedRoles) {
+      if (!userRole || !allowedRoles.includes(userRole)) {
+        logger.log('Middleware: access denied for path:', protectedPath, '— role:', userRole);
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
     }
 
-    requestHeaders.set('x-user-id', payload?.id?.toString() || 'unknown');
-    requestHeaders.set('x-user-role', userRole || 'unknown');
+    requestHeaders.set('x-user-id', payload.id?.toString() ?? 'unknown');
+    requestHeaders.set('x-user-role', userRole ?? 'unknown');
 
     const response = NextResponse.next({
       request: { headers: requestHeaders },

@@ -84,9 +84,22 @@ export class ProductionCacheService implements OnModuleInit {
       } catch (error) {
         this.logger.warn("Failed to connect Redis SCAN client", error);
       }
+    } else {
+      // BE-016: warn at boot so ops can see that pattern-based invalidation
+      // will fall back to a full cache.clear() (wider blast radius).
+      this.logger.warn(
+        "BE-016: Redis SCAN client not configured — invalidatePattern() will fall back " +
+          "to cacheManager.clear() which clears ALL cache keys, not just matching ones.",
+      );
     }
-    // Fire-and-forget: warmup must not block onModuleInit or app.listen() will never be called
-    void this.warmupCriticalData();
+    // BE-029: Cache loaders (loadBrandsData, loadStatusesData, loadLeatherTypesData)
+    // currently return empty arrays because no real data source is wired up.
+    // Warming the cache with empty arrays causes downstream code to serve stale
+    // empty results until the next TTL expiry.  Warmup is disabled until the
+    // loaders are connected to actual repositories.
+    //
+    // TODO(BE-029): Wire loaders to real repository/service dependencies, then
+    // re-enable: void this.warmupCriticalData();
   }
 
   /**
@@ -272,9 +285,14 @@ export class ProductionCacheService implements OnModuleInit {
           }
         });
       } else {
+        // BE-016: No SCAN client — fall back to full cache clear.
+        // This has a wider blast radius than pattern invalidation but prevents
+        // serving stale data. A warning is emitted at boot (see onModuleInit).
         this.logger.warn(
-          "Pattern invalidation not supported with current cache store",
+          `invalidatePattern fallback: no Redis SCAN client — clearing full cache ` +
+            `instead of pattern "${pattern}"`,
         );
+        await this.cacheManager.clear();
       }
     } catch (error) {
       this.logger.warn(`Failed to invalidate pattern: ${pattern}`, error);

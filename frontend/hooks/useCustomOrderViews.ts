@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast as sonnerToast } from 'sonner';
 import {
   CustomOrderView,
   ColumnConfig,
@@ -73,7 +74,8 @@ export function useCustomOrderViews() {
       const data = await getCellOverrides(orderIds);
       setOverrides(data);
     } catch {
-      // Silently fail — overrides are optional
+      // FE-013: surface the failure rather than silently discarding it
+      sonnerToast.error('Could not load overrides — showing original values');
     }
   }, []);
 
@@ -87,7 +89,8 @@ export function useCustomOrderViews() {
       const specsMap = await getBatchSaddleSpecs(orderIds);
       setSaddleSpecsMap(specsMap);
     } catch {
-      // Silently fail — saddle specs enhance the view but aren't required
+      // FE-013: surface the failure rather than silently discarding it
+      sonnerToast.error('Could not load overrides — showing original values');
     }
   }, []);
 
@@ -143,6 +146,9 @@ export function useCustomOrderViews() {
     }
     init();
     return () => { cancelled = true; };
+    // FE-014: [] is intentional — this runs once on mount to bootstrap state;
+    // setters (setViews, setGroups, etc.) are stable and do not need to be deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync activeView when activeTab changes.
@@ -247,22 +253,26 @@ export function useCustomOrderViews() {
           views: g.views.filter((v) => v.id !== viewId),
         })),
       );
-      if (activeGroup) {
-        setActiveGroup((prev) =>
-          prev ? { ...prev, views: prev.views.filter((v) => v.id !== viewId) } : prev,
-        );
-      }
-      if (activeTab?.id === viewId) {
-        const groupViews = activeGroup?.views.filter((v) => v.id !== viewId) || [];
-        setActiveTab(groupViews.length > 0 ? groupViews[0] : null);
-      }
+      // FE-015: compute the next tab inside the setActiveGroup functional updater
+      // so we always read current state rather than a stale closure snapshot.
+      setActiveGroup((prev) => {
+        if (!prev) return prev;
+        const updatedViews = prev.views.filter((v) => v.id !== viewId);
+        // Side-effect: update activeTab based on the freshly computed views.
+        // This runs synchronously inside React's batched update.
+        setActiveTab((currentTab) => {
+          if (currentTab?.id !== viewId) return currentTab;
+          return updatedViews.length > 0 ? updatedViews[0] : null;
+        });
+        return { ...prev, views: updatedViews };
+      });
       setViews((prev) => prev.filter((v) => v.id !== viewId));
       toast({ title: 'Tab deleted' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to delete tab';
       toast({ title: 'Error', description: message, variant: 'destructive' });
     }
-  }, [activeGroup, activeTab, toast]);
+  }, [toast]);
 
   const handleReorderTabs = useCallback(async (viewId: number, newTabOrder: number) => {
     try {

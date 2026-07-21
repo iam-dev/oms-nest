@@ -10,14 +10,38 @@ export interface CellOverride {
   updatedAt: string;
 }
 
+/** Maximum number of order IDs sent per request to avoid URL-length limits. */
+const BATCH_SIZE = 100;
+
 export async function getCellOverrides(orderIds?: number[]): Promise<CellOverride[]> {
-  const params = orderIds?.length ? `?orderIds=${orderIds.join(',')}` : '';
-  const response = await fetchWithRefresh(`${API_URL}/api/v1/custom-order-cell-overrides${params}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (!response.ok) throw new Error(`Failed to fetch cell overrides: ${response.status}`);
-  return response.json();
+  // FE-020: chunk large orderIds arrays into batches of ≤100 to avoid URL-length limits.
+  if (!orderIds || orderIds.length === 0) {
+    const response = await fetchWithRefresh(`${API_URL}/api/v1/custom-order-cell-overrides`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error(`Failed to fetch cell overrides: ${response.status}`);
+    return response.json();
+  }
+
+  const batches: number[][] = [];
+  for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+    batches.push(orderIds.slice(i, i + BATCH_SIZE));
+  }
+
+  const results = await Promise.all(
+    batches.map(async (batch) => {
+      const params = `?orderIds=${batch.join(',')}`;
+      const response = await fetchWithRefresh(
+        `${API_URL}/api/v1/custom-order-cell-overrides${params}`,
+        { headers: { Accept: 'application/json' }, credentials: 'include' },
+      );
+      if (!response.ok) throw new Error(`Failed to fetch cell overrides: ${response.status}`);
+      return response.json() as Promise<CellOverride[]>;
+    }),
+  );
+
+  return results.flat();
 }
 
 export async function getCellOverridesForOrder(orderId: number): Promise<CellOverride[]> {
@@ -75,8 +99,9 @@ export async function deleteCellOverrideByOrderAndColumn(
   orderId: number,
   columnKey: string,
 ): Promise<void> {
+  // FE-021: encode columnKey so keys containing special characters round-trip safely.
   const response = await fetchWithRefresh(
-    `${API_URL}/api/v1/custom-order-cell-overrides/order/${orderId}/column/${columnKey}`,
+    `${API_URL}/api/v1/custom-order-cell-overrides/order/${orderId}/column/${encodeURIComponent(columnKey)}`,
     { method: 'DELETE', credentials: 'include' },
   );
   if (!response.ok) throw new Error(`Failed to delete override: ${response.status}`);

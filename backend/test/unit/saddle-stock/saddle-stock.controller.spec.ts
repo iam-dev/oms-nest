@@ -144,12 +144,14 @@ describe("SaddleStockController", () => {
 
       // Assert
       expect(result.data).toBeDefined();
+      // BE-019: userRoleId is now passed to the service for role enforcement
       expect(service.getSaddleStock).toHaveBeenCalledWith(
         "my",
         10,
         1,
         30,
         undefined,
+        RoleEnum.fitter,
       );
     });
 
@@ -170,6 +172,7 @@ describe("SaddleStockController", () => {
         1,
         30,
         undefined,
+        RoleEnum.admin,
       );
     });
 
@@ -190,6 +193,7 @@ describe("SaddleStockController", () => {
         1,
         30,
         undefined,
+        RoleEnum.supervisor,
       );
     });
 
@@ -209,6 +213,7 @@ describe("SaddleStockController", () => {
         1,
         100,
         undefined,
+        RoleEnum.fitter,
       );
     });
 
@@ -228,6 +233,7 @@ describe("SaddleStockController", () => {
         1,
         30,
         undefined,
+        RoleEnum.fitter,
       );
     });
 
@@ -247,6 +253,7 @@ describe("SaddleStockController", () => {
         1,
         30,
         "test",
+        RoleEnum.fitter,
       );
     });
 

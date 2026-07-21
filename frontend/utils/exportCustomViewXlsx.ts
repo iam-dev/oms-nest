@@ -3,6 +3,7 @@ import { ColumnConfig, ColumnGroupConfig } from '@/services/customOrderViews';
 import { CellOverride } from '@/services/customOrderCellOverrides';
 import { CUSTOM_VIEW_COLUMNS } from './customViewColumns';
 import { toSeatSizeCellValue } from './exportXlsx';
+import { sanitizeForCell } from './cellSanitization';
 
 interface ExportOptions {
   columns: ColumnConfig[];
@@ -74,10 +75,9 @@ export async function exportCustomViewXlsx({
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(viewName || 'Custom View');
 
-  // Manually set column widths (don't use ws.columns with header — we build rows manually)
-  visibleColumns.forEach((col, i) => {
-    ws.getColumn(i + 1).width = Math.max(col.label.length + 4, 15);
-  });
+  // FE-051: track column max lengths during write; skip the O(n*m) second-pass eachCell scan.
+  // Seed with header label lengths.
+  const colMaxLen: number[] = visibleColumns.map((col) => col.label.length);
 
   let currentRow = 1;
 
@@ -133,7 +133,7 @@ export async function exportCustomViewXlsx({
   };
   currentRow++;
 
-  // Data rows
+  // Data rows — accumulate max cell lengths while writing (FE-051: single pass)
   for (const order of orders) {
     const orderId = order.id || order.orderId;
     const row = ws.getRow(currentRow);
@@ -148,23 +148,23 @@ export async function exportCustomViewXlsx({
         value = colDef ? colDef.getValue(order) : '';
       }
       if (col.key === 'seatSize' && typeof value === 'string') {
+        // toSeatSizeCellValue returns number | string; numeric values are safe.
         value = toSeatSizeCellValue(value);
       }
-      row.getCell(i + 1).value = value;
+      // FE-009: sanitize string values to prevent formula injection; numbers pass through as-is.
+      const cellValue = typeof value === 'string' ? sanitizeForCell(value) : value;
+      row.getCell(i + 1).value = cellValue;
+      // FE-051: track max length during write to avoid an O(n*m) second pass.
+      const len = String(cellValue ?? '').length;
+      if (len > colMaxLen[i]) colMaxLen[i] = len;
     });
     currentRow++;
   }
 
-  // Auto-size columns based on content
-  for (let i = 0; i < visibleColumns.length; i++) {
-    const column = ws.getColumn(i + 1);
-    let maxLen = visibleColumns[i].label.length;
-    column.eachCell({ includeEmpty: false }, (cell) => {
-      const len = String(cell.value || '').length;
-      if (len > maxLen) maxLen = len;
-    });
-    column.width = Math.min(maxLen + 2, 50);
-  }
+  // Apply computed widths — no second eachCell pass needed
+  visibleColumns.forEach((_col, i) => {
+    ws.getColumn(i + 1).width = Math.min(colMaxLen[i] + 2, 50);
+  });
 
   // Add vertical border lines at group boundaries (left border on first column of each group)
   if (hasGroups) {
@@ -223,9 +223,8 @@ function addWorksheet(
 
   const ws = wb.addWorksheet(sheetName);
 
-  visibleColumns.forEach((col, i) => {
-    ws.getColumn(i + 1).width = Math.max(col.label.length + 4, 15);
-  });
+  // FE-051: track max lengths during write; skip O(n*m) eachCell second pass.
+  const colMaxLen: number[] = visibleColumns.map((col) => col.label.length);
 
   let currentRow = 1;
 
@@ -265,6 +264,7 @@ function addWorksheet(
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
   currentRow++;
 
+  // Data rows — accumulate max cell lengths while writing (FE-051: single pass)
   for (const order of orders) {
     const orderId = order.id || order.orderId;
     const row = ws.getRow(currentRow);
@@ -278,22 +278,23 @@ function addWorksheet(
         value = colDef ? colDef.getValue(order) : '';
       }
       if (col.key === 'seatSize' && typeof value === 'string') {
+        // toSeatSizeCellValue returns number | string; numeric values are safe.
         value = toSeatSizeCellValue(value);
       }
-      row.getCell(i + 1).value = value;
+      // FE-009: sanitize string values to prevent formula injection; numbers pass through as-is.
+      const cellValue = typeof value === 'string' ? sanitizeForCell(value) : value;
+      row.getCell(i + 1).value = cellValue;
+      // FE-051: track max length during write to avoid an O(n*m) second pass.
+      const len = String(cellValue ?? '').length;
+      if (len > colMaxLen[i]) colMaxLen[i] = len;
     });
     currentRow++;
   }
 
-  for (let i = 0; i < visibleColumns.length; i++) {
-    const column = ws.getColumn(i + 1);
-    let maxLen = visibleColumns[i].label.length;
-    column.eachCell({ includeEmpty: false }, (cell) => {
-      const len = String(cell.value || '').length;
-      if (len > maxLen) maxLen = len;
-    });
-    column.width = Math.min(maxLen + 2, 50);
-  }
+  // Apply computed widths — no second eachCell pass needed
+  visibleColumns.forEach((_col, i) => {
+    ws.getColumn(i + 1).width = Math.min(colMaxLen[i] + 2, 50);
+  });
 
   if (hasGroups) {
     const groupStartCols = new Set<number>();

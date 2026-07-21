@@ -1,3 +1,10 @@
+// TODO(FE-040): Introduce a Zod schema for the order edit payload and remove all `any`
+// casts in this file.  Suggested approach:
+//   1. Define `editOrderSchema = z.object({ ... })` mirroring UpdateOrderPayload.
+//   2. Derive the form type with `z.infer<typeof editOrderSchema>`.
+//   3. Replace manual state fields with `useForm<EditOrderForm>({ resolver: zodResolver(editOrderSchema) })`.
+//   4. Replace `Record<string, any>` with the derived type throughout.
+// This is a large refactor — do not attempt incrementally without full test coverage.
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';

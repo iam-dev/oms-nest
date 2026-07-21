@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ForbiddenException,
 } from "@nestjs/common";
+import { DataSource } from "typeorm";
+import { InjectDataSource } from "@nestjs/typeorm";
 import { CustomOrderViewRepository } from "./infrastructure/persistence/relational/repositories/custom-order-view.repository";
 import { CreateCustomOrderViewDto } from "./dto/create-custom-order-view.dto";
 import { UpdateCustomOrderViewDto } from "./dto/update-custom-order-view.dto";
@@ -10,25 +12,59 @@ import { CustomOrderViewEntity } from "./infrastructure/persistence/relational/e
 
 @Injectable()
 export class CustomOrderViewService {
-  constructor(private readonly repository: CustomOrderViewRepository) {}
+  constructor(
+    private readonly repository: CustomOrderViewRepository,
+    @InjectDataSource() private readonly dataSource: DataSource,
+  ) {}
 
   async create(
     userId: number,
     dto: CreateCustomOrderViewDto,
   ): Promise<CustomOrderViewEntity> {
-    if (dto.isDefault) {
-      await this.repository.clearDefaults(userId);
+    // BE-013: clearDefaults + create must be atomic to prevent a race where
+    // two concurrent requests both clear and then both insert a default view,
+    // leaving the user with zero or two defaults.
+    if (!dto.isDefault) {
+      return this.repository.create({
+        userId,
+        name: dto.name,
+        columns: dto.columns as CustomOrderViewEntity["columns"],
+        columnGroups:
+          (dto.columnGroups as CustomOrderViewEntity["columnGroups"]) ?? [],
+        isDefault: false,
+        groupId: dto.groupId ?? null,
+        tabOrder: dto.tabOrder ?? 0,
+      });
     }
-    return this.repository.create({
-      userId,
-      name: dto.name,
-      columns: dto.columns as CustomOrderViewEntity["columns"],
-      columnGroups:
-        (dto.columnGroups as CustomOrderViewEntity["columnGroups"]) ?? [],
-      isDefault: dto.isDefault ?? false,
-      groupId: dto.groupId ?? null,
-      tabOrder: dto.tabOrder ?? 0,
-    });
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      await queryRunner.manager.update(
+        CustomOrderViewEntity,
+        { userId, isDefault: true },
+        { isDefault: false },
+      );
+      const entity = queryRunner.manager.create(CustomOrderViewEntity, {
+        userId,
+        name: dto.name,
+        columns: dto.columns as CustomOrderViewEntity["columns"],
+        columnGroups:
+          (dto.columnGroups as CustomOrderViewEntity["columnGroups"]) ?? [],
+        isDefault: true,
+        groupId: dto.groupId ?? null,
+        tabOrder: dto.tabOrder ?? 0,
+      });
+      const saved = await queryRunner.manager.save(entity);
+      await queryRunner.commitTransaction();
+      return saved;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async findAll(userId: number): Promise<CustomOrderViewEntity[]> {
@@ -67,10 +103,6 @@ export class CustomOrderViewService {
       throw new ForbiddenException("Cannot modify another user's view");
     }
 
-    if (dto.isDefault) {
-      await this.repository.clearDefaults(userId);
-    }
-
     const data: Partial<CustomOrderViewEntity> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.columns !== undefined)
@@ -82,7 +114,36 @@ export class CustomOrderViewService {
     if (dto.groupId !== undefined) data.groupId = dto.groupId ?? null;
     if (dto.tabOrder !== undefined) data.tabOrder = dto.tabOrder;
 
-    const updated = await this.repository.update(id, data);
+    // BE-013: clearDefaults + update must be atomic when promoting to default.
+    if (!dto.isDefault) {
+      const updated = await this.repository.update(id, data);
+      if (!updated) {
+        throw new NotFoundException(
+          `Failed to update custom order view with ID "${id}"`,
+        );
+      }
+      return updated;
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      await queryRunner.manager.update(
+        CustomOrderViewEntity,
+        { userId, isDefault: true },
+        { isDefault: false },
+      );
+      await queryRunner.manager.update(CustomOrderViewEntity, { id }, data);
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+
+    const updated = await this.repository.findById(id);
     if (!updated) {
       throw new NotFoundException(
         `Failed to update custom order view with ID "${id}"`,

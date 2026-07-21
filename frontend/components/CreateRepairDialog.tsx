@@ -62,8 +62,16 @@ export function CreateRepairDialog({ sourceOrderId, sourceDisplayOrderId, onClos
   const [saving, setSaving] = useState(false);
 
   // Search for orders
+  // FE-025: raise min length to 3 for non-numeric input; add AbortController to cancel
+  // in-flight requests when searchTerm changes before the debounce fires.
   useEffect(() => {
-    if (phase !== 'search' || searchTerm.length < 2) {
+    const trimmed = searchTerm.trim();
+    const isNumeric = /^\d+$/.test(trimmed);
+
+    // Numeric (order ID) search still starts at 1 character; text search requires 3+
+    const minLength = isNumeric ? 1 : 3;
+
+    if (phase !== 'search' || trimmed.length < minLength) {
       // TODO(react-hooks): guard reset — clears stale results when below the minimum
       // search length; a single synchronous clear that cannot cascade because it only
       // runs when the condition is false (no subsequent setState in this branch).
@@ -72,19 +80,21 @@ export function CreateRepairDialog({ sourceOrderId, sourceDisplayOrderId, onClos
       return;
     }
 
+    const controller = new AbortController();
+
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
         // Smart detection: if input is all digits, search by order ID filter
         // (searchTerm only does ILIKE on text fields, not on o.id)
-        const trimmed = searchTerm.trim();
-        const isNumeric = /^\d+$/.test(trimmed);
-
         const response = await getEnrichedOrders(
           isNumeric
             ? { filters: { orderId: trimmed }, page: 1 }
-            : { searchTerm, page: 1, filters: {} },
+            : { searchTerm: trimmed, page: 1, filters: {} },
         );
+
+        // Bail out if this request was superseded
+        if (controller.signal.aborted) return;
 
         const members = response['hydra:member'] || [];
         const results: OrderSearchResult[] = members.slice(0, 15).map((order: Record<string, unknown>) => ({
@@ -100,14 +110,20 @@ export function CreateRepairDialog({ sourceOrderId, sourceDisplayOrderId, onClos
 
         setSearchResults(results);
       } catch (err) {
+        if (controller.signal.aborted) return;
         logger.warn('Order search failed:', err);
         setSearchResults([]);
       } finally {
-        setSearching(false);
+        if (!controller.signal.aborted) {
+          setSearching(false);
+        }
       }
     }, 400);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [searchTerm, phase]);
 
   // Load order detail when entering Phase 2
@@ -345,7 +361,11 @@ export function CreateRepairDialog({ sourceOrderId, sourceDisplayOrderId, onClos
               </div>
             )}
 
-            {searchTerm.length >= 2 && !searching && searchResults.length === 0 && (
+            {searchTerm.trim().length > 0 && searchTerm.trim().length < (/^\d+$/.test(searchTerm.trim()) ? 1 : 3) && (
+              <p className="text-sm text-gray-400 text-center py-4">Enter at least 3 characters to search</p>
+            )}
+
+            {searchTerm.trim().length >= (/^\d+$/.test(searchTerm.trim()) ? 1 : 3) && !searching && searchResults.length === 0 && (
               <p className="text-sm text-gray-500 text-center py-4">No orders found matching &quot;{searchTerm}&quot;</p>
             )}
           </div>
