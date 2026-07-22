@@ -415,6 +415,11 @@ jobs:
           PORT: 3001
           # BE-007: MailService.onModuleInit rejects undefined/malformed URL.
           FRONTEND_DOMAIN: http://localhost:3000
+          # BE-028: cookie `secure` defaults to true in non-development envs, but
+          # this job serves the backend over plain http://localhost:3001, so a
+          # Secure cookie would never be resent by Playwright's cookie jar and
+          # every authed follow-up would 401 through the RLS guard (issue #90).
+          COOKIE_SECURE: 'false'
           FILE_DRIVER: local
           AUTH_JWT_SECRET: ci-test-jwt-secret
           AUTH_JWT_TOKEN_EXPIRES_IN: 15m

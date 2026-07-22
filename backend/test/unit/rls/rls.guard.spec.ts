@@ -7,7 +7,6 @@ import {
   createMockExecutionContext,
   createMockReflector,
 } from "../helpers/test-helpers";
-import { UnauthorizedException } from "@nestjs/common";
 
 describe("RlsGuard", () => {
   let guard: RlsGuard;
@@ -197,28 +196,30 @@ describe("EnhancedRlsGuard", () => {
     );
   });
 
-  // BE-005: EnhancedRlsGuard must reject unauthenticated requests on RLS-protected endpoints
-  it("should throw UnauthorizedException when no user on non-skipped RLS endpoint", async () => {
+  // BE-005 (reverted): The guard runs BEFORE the scoped AuthGuard('jwt') that
+  // populates request.user, so it cannot enforce auth here without breaking every
+  // RLS-protected route. It now returns true when no user is present, matching
+  // the base RlsGuard, and lets the per-controller AuthGuard reject unauth
+  // requests. See TODO(BE-005) in rls.guard.ts and issue #90.
+  it("should return true when no user on non-skipped RLS endpoint", async () => {
     mockReflector.getAllAndOverride.mockReturnValue(false); // Not skipped
 
     const context = createMockExecutionContext(); // No user
 
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
+    const result = await guard.canActivate(context);
+    expect(result).toBe(true);
     expect(mockRlsService.setUserContext).not.toHaveBeenCalled();
   });
 
-  it("should throw UnauthorizedException when user has no id on non-skipped RLS endpoint", async () => {
+  it("should return true when user has no id on non-skipped RLS endpoint", async () => {
     mockReflector.getAllAndOverride.mockReturnValue(false); // Not skipped
 
     const context = createMockExecutionContext({
       user: { role: { id: RoleEnum.admin } }, // user present but no id
     });
 
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
+    const result = await guard.canActivate(context);
+    expect(result).toBe(true);
     expect(mockRlsService.setUserContext).not.toHaveBeenCalled();
   });
 
