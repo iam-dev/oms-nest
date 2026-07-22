@@ -450,8 +450,12 @@ jobs:
         done
 
     - name: Create E2E test users on staging
-      # WF-003/WF-012: script extracted to file; passwords passed via --env so they
-      # are not interpolated into the shell command line (not visible in /proc/*/cmdline).
+      # WF-003/WF-012 (revised): `kubectl exec` does not accept `--env` — that flag
+      # only exists on `kubectl run` / `kubectl set env` (see kubectl exec --help).
+      # Instead, prepend `process.env.X = "…"` assignments to the piped script.
+      # The values are emitted via `node -e` reading its own process env, so the
+      # raw passwords never appear on any process's argv (not on the runner, not
+      # inside the pod) — same threat model as the original comment.
       working-directory: .
       env:
         E2E_ADMIN_PASSWORD: ${{ steps.e2e-creds.outputs.E2E_ADMIN_PASSWORD }}
@@ -468,12 +472,16 @@ jobs:
           exit 1
         fi
         echo "Using backend pod: $POD"
-        # Pipe the script via stdin (-i) so it never appears on the process command line.
-        # Passwords are forwarded as env vars — not shell-interpolated into the script text.
-        kubectl exec -n "$K8S_NS" "$POD" -i \
-          --env="E2E_ADMIN_PASSWORD=$E2E_ADMIN_PASSWORD" \
-          --env="E2E_FITTER_PASSWORD=$E2E_FITTER_PASSWORD" \
-          -- node - < .github/workflows/scripts/e2e-create-users.js
+        # Compose: env-var prelude (read from runner env, JSON-encoded for safe JS
+        # embedding) + the create-users script itself. All via stdin — argv stays
+        # clean. `kubectl exec … -i -- node -` runs node reading from stdin.
+        {
+          node -e 'const q = s => JSON.stringify(s); process.stdout.write(
+            "process.env.E2E_ADMIN_PASSWORD=" + q(process.env.E2E_ADMIN_PASSWORD) + ";\n" +
+            "process.env.E2E_FITTER_PASSWORD=" + q(process.env.E2E_FITTER_PASSWORD) + ";\n"
+          );'
+          cat .github/workflows/scripts/e2e-create-users.js
+        } | kubectl exec -n "$K8S_NS" "$POD" -i -- node -
 
     - name: Run E2E tests
       # NOTE: Staging E2E tests are smoke/readonly only (enforced by playwright.config.ts grep filter)
