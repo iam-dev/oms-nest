@@ -4,7 +4,6 @@ import {
   ExecutionContext,
   Logger,
   SetMetadata,
-  UnauthorizedException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { RlsService } from "./rls.service";
@@ -89,10 +88,20 @@ export const SkipRlsContext = () => SetMetadata("skipRlsContext", true);
  * Enhanced RLS Guard that respects SkipRlsContext decorator
  * on both handler (method) and class (controller) levels.
  *
- * BE-005: endpoints not marked @SkipRlsContext must have an authenticated user
- * (i.e. the JWT guard must have run first). If user or user.id is absent and
- * the endpoint is RLS-protected, throw UnauthorizedException rather than silently
- * passing through.
+ * BE-005 (reverted): this guard is registered as APP_GUARD, and Nest builds the
+ * guard chain as [...globalGuards, ...classGuards, ...methodGuards] — so this
+ * guard runs BEFORE the scoped `AuthGuard('jwt')` that would populate
+ * `request.user`. Throwing UnauthorizedException here when `!request.user` was
+ * therefore reachable on EVERY authenticated request, breaking every
+ * RLS-protected route (see issue #90). The base `RlsGuard.canActivate` already
+ * returns true when no user is present; auth enforcement is handled by the
+ * per-controller `AuthGuard('jwt')` that runs after this guard.
+ *
+ * TODO(BE-005): To restore fail-safe rejection of unauth requests on
+ * RLS-protected endpoints, promote `AuthGuard('jwt')` to a global APP_GUARD
+ * registered BEFORE this one, and add a `@Public()` decorator for opt-out
+ * endpoints (login, register, health, docs, etc.). Only then can this guard
+ * assume `request.user` is set.
  */
 @Injectable()
 export class EnhancedRlsGuard extends RlsGuard {
@@ -104,14 +113,6 @@ export class EnhancedRlsGuard extends RlsGuard {
 
     if (skipRls) {
       return true;
-    }
-
-    // BE-005: For RLS-protected endpoints, require an authenticated user.
-    const request = context.switchToHttp().getRequest();
-    if (!request.user || !request.user.id) {
-      throw new UnauthorizedException(
-        "Authentication required for RLS-protected endpoint",
-      );
     }
 
     return super.canActivate(context);
