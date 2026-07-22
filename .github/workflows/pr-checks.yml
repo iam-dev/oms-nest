@@ -170,6 +170,8 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
           PORT: 3001
+          # BE-007: MailService.onModuleInit rejects undefined/malformed URL.
+          FRONTEND_DOMAIN: http://localhost:3000
           FILE_DRIVER: local
           AUTH_JWT_SECRET: ci-test-jwt-secret
           AUTH_JWT_TOKEN_EXPIRES_IN: 15m
@@ -281,6 +283,8 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
           PORT: 3001
+          # BE-007: MailService.onModuleInit rejects undefined/malformed URL.
+          FRONTEND_DOMAIN: http://localhost:3000
           FILE_DRIVER: local
           AUTH_JWT_SECRET: ci-test-jwt-secret
           AUTH_JWT_TOKEN_EXPIRES_IN: 15m
