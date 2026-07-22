@@ -2,15 +2,19 @@
  * e2e-create-users.js
  *
  * Creates E2E test users in the staging database.
- * Run inside the backend pod via:
+ * `kubectl exec` has no --env flag; env vars are injected by prepending
+ * `process.env.X = "…"` assignments to the piped script. Invoked via:
  *
- *   kubectl exec -n <ns> <pod> -i \
- *     --env=E2E_ADMIN_PASSWORD="$E2E_ADMIN_PASSWORD" \
- *     --env=E2E_FITTER_PASSWORD="$E2E_FITTER_PASSWORD" \
- *     -- node - < .github/workflows/scripts/e2e-create-users.js
+ *   {
+ *     node -e 'const q = s => JSON.stringify(s); process.stdout.write(
+ *       "process.env.E2E_ADMIN_PASSWORD=" + q(process.env.E2E_ADMIN_PASSWORD) + ";\n" +
+ *       "process.env.E2E_FITTER_PASSWORD=" + q(process.env.E2E_FITTER_PASSWORD) + ";\n"
+ *     );'
+ *     cat .github/workflows/scripts/e2e-create-users.js
+ *   } | kubectl exec -n <ns> <pod> -i -- node -
  *
- * Passwords are read from environment variables — never interpolated into
- * the script source so they are not visible in process listings (/proc).
+ * Passwords traverse only stdin and process.env — never argv on the runner
+ * or inside the pod — so they do not appear in /proc/*/cmdline anywhere.
  */
 
 'use strict';
