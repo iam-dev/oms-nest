@@ -212,6 +212,9 @@ jobs:
         run: npx jest --config ./test/e2e-api/jest.e2e-api.config.js --testPathPatterns='api-endpoints'
         env:
           NODE_ENV: test
+          # BE-007: MailService.onModuleInit fails hard on undefined/malformed
+          # frontendDomain. dotenv only fills unset vars, so set it explicitly.
+          FRONTEND_DOMAIN: http://localhost:3002
           E2E_DATABASE_HOST: localhost
           E2E_DATABASE_PORT: "5432"
           E2E_DATABASE_USERNAME: oms
