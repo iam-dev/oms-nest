@@ -44,7 +44,7 @@ spec:
 
       containers:
       - name: oms-backend
-        image: ghcr.io/YOUR_ORG/oms-backend:latest  # Will be overridden by CI/CD
+        image: ghcr.io/iam-dev/oms-nest-backend:staging-latest
         imagePullPolicy: Always
 
         ports:
