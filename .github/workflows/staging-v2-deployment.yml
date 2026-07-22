@@ -304,20 +304,6 @@ jobs:
           fi
         done
 
-    # WF-020: replaced sed-based manifest patching with kubectl set image to avoid
-    # brittle string-substitution that breaks when placeholder values drift.
-    - name: Set backend image tag
-      run: |
-        kubectl set image deployment/oms-backend \
-          oms-backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:staging-latest \
-          -n ${{ env.K8S_NAMESPACE }}
-
-    - name: Set frontend image tag
-      run: |
-        kubectl set image deployment/oms-frontend \
-          oms-frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:staging-latest \
-          -n ${{ env.K8S_NAMESPACE }}
-
     - name: Deploy Redis cache
       run: kubectl apply -f kubernetes/staging-v2/database-deployment.yaml
 
