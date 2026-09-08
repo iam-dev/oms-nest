@@ -41,6 +41,13 @@ MAIL_DEFAULT_NAME=Api
 MAIL_CLIENT_PORT=1080
 
 AUTH_JWT_SECRET=secret
+
+# Parent domain for the session cookie, e.g. ".ordermysaddle.com".
+# Required when the frontend and API are served from DIFFERENT hosts, so that
+# the Next.js middleware on the frontend host receives the cookie.
+# Leave EMPTY for local development (same host) — a leading-dot domain is
+# invalid for localhost and would stop the cookie being set at all.
+COOKIE_DOMAIN=
 AUTH_JWT_TOKEN_EXPIRES_IN=10h
 AUTH_REFRESH_SECRET=secret_for_refresh
 AUTH_REFRESH_TOKEN_EXPIRES_IN=3650d
