@@ -44,6 +44,10 @@ spec:
               value: {{ .Values.global.environment }}
             - name: APP_PORT
               value: {{ .Values.backend.port | quote }}
+            # Session cookie must be scoped to the parent domain shared by the
+            # frontend and API hosts, or the Next.js middleware never sees it.
+            - name: COOKIE_DOMAIN
+              value: {{ .Values.cookieDomain | default ".ordermysaddle.com" | quote }}
           resources:
             requests:
               cpu: 100m

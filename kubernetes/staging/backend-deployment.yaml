@@ -46,6 +46,12 @@ spec:
         env:
         - name: PORT
           value: "3001"
+        # BE-029: frontend and API are on different hosts under the same parent
+        # domain. Without this the session cookie is host-only to the API host,
+        # never reaches the Next.js middleware on the frontend host, and every
+        # login ends on a blank page.
+        - name: COOKIE_DOMAIN
+          value: ".ordermysaddle.com"
 
         # Secrets from Kubernetes secrets (NO hardcoded values)
         # NODE_ENV is set in oms-app-secrets sealed secret

@@ -44,11 +44,25 @@ const cookieSecure: boolean =
     ? process.env.COOKIE_SECURE === "true"
     : process.env.NODE_ENV !== "development";
 
+// BE-029: the frontend and API are served from two different hosts
+// (next-staging.ordermysaddle.com vs api-nest-staging.ordermysaddle.com).  A
+// cookie set without an explicit `Domain` is HOST-ONLY, so the session cookie
+// was stored against the API host and never sent to the frontend host.  The
+// Next.js middleware runs on the frontend host and reads this cookie, so it
+// saw no token on every request and bounced every protected route to /login —
+// which renders as a blank page once the client already believes it is logged
+// in.  COOKIE_DOMAIN must be the shared parent (e.g. ".ordermysaddle.com").
+//
+// Leave COOKIE_DOMAIN unset for localhost, where both run on the same host and
+// a host-only cookie is correct (and where a leading-dot domain is invalid).
+const cookieDomain: string | undefined = process.env.COOKIE_DOMAIN || undefined;
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: cookieSecure,
   sameSite: "lax" as const,
   path: "/",
+  domain: cookieDomain,
   maxAge: 10 * 60 * 60 * 1000, // 10 hours
 };
 
@@ -57,6 +71,7 @@ const REFRESH_COOKIE_OPTIONS = {
   secure: cookieSecure,
   sameSite: "lax" as const,
   path: "/api/v1/auth/refresh",
+  domain: cookieDomain,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
@@ -198,8 +213,14 @@ export class AuthController {
     await this.service.logout({
       sessionId: request.user.sessionId,
     });
-    res.clearCookie("token", { path: "/" });
-    res.clearCookie("refreshToken", { path: "/api/v1/auth/refresh" });
+    // Domain must match the one used when setting the cookie, otherwise the
+    // browser keeps the original cookie and logout silently leaves the session
+    // active.
+    res.clearCookie("token", { path: "/", domain: cookieDomain });
+    res.clearCookie("refreshToken", {
+      path: "/api/v1/auth/refresh",
+      domain: cookieDomain,
+    });
   }
 
   @ApiCookieAuth("token")
