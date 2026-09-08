@@ -38,6 +38,23 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      # Nothing used to validate the helper scripts that the deploy workflow
+      # pipes into `kubectl exec`, so a syntax error in one of them silently
+      # broke every staging deploy (the deploy applied, E2E user creation died,
+      # and the rollback step reverted the release). Parse them on every PR.
+      - name: Validate workflow helper scripts
+        run: |
+          rc=0
+          for f in .github/workflows/scripts/*.js; do
+            [ -e "$f" ] || continue
+            if node --check "$f"; then echo "  OK   $f"; else echo "::error file=$f::JavaScript syntax error"; rc=1; fi
+          done
+          for f in .github/workflows/scripts/*.sh; do
+            [ -e "$f" ] || continue
+            if bash -n "$f"; then echo "  OK   $f"; else echo "::error file=$f::shell syntax error"; rc=1; fi
+          done
+          exit $rc
+
       - name: Backend linting
         working-directory: backend
         run: npm run lint
