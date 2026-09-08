@@ -32,7 +32,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Fetch full history for security scanning
           fetch-depth: 0
@@ -67,10 +67,10 @@ jobs:
     name: 📦 Dependency & License Audit
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -88,16 +88,19 @@ jobs:
           critical=$(echo "$audit_json" | jq '.metadata.vulnerabilities.critical // 0')
           high=$(echo "$audit_json" | jq '.metadata.vulnerabilities.high // 0')
           echo "Production vulnerabilities — critical: $critical, high: $high"
+          # Generate the dependency report BEFORE the gate below. The gate
+          # `exit 1`s, so writing the report after it meant the report was
+          # never produced on precisely the runs that failed — and the upload
+          # step then warned "No files were found". The report is the artifact
+          # you most want when the audit fails, so write it unconditionally.
+          # `npm list` exits non-zero on any peer/version mismatch anywhere in
+          # the tree, so soft-fail it the same way as `npm audit`: still write
+          # the JSON (which will include a `problems` field), but don't fail CI.
+          npm list --all --json > dependency-report.json || true
           if [ "$((critical + high))" -gt 0 ]; then
             echo "::error::Found $critical critical and $high high severity production vulnerabilities"
             exit 1
           fi
-          # Generate dependency report — `npm list` exits non-zero on any
-          # peer/version mismatch anywhere in the tree, even when the audit
-          # gate above passed. Match the soft-fail pattern used for
-          # `npm audit`: still write the JSON (which will include a
-          # `problems` field), but don't fail CI on it.
-          npm list --all --json > dependency-report.json || true
 
       - name: 📦 Frontend Dependency Audit
         working-directory: frontend
@@ -128,13 +131,15 @@ jobs:
           fi
 
       - name: 📊 Upload Dependency Reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-reports
-          path: |
-            backend/dependency-report.json
-            security-report.json
+          # NOTE: `security-report.json` was listed here but no step in this
+          # workflow ever produced it, which is why the upload warned about
+          # missing files. Only list paths that are actually generated.
+          path: backend/dependency-report.json
+          if-no-files-found: warn
 
   # Backend testing (NestJS)
   test-backend:
@@ -169,10 +174,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -261,10 +266,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -330,10 +335,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -498,7 +503,7 @@ jobs:
           E2E_API_URL: http://localhost:3001
 
       - name: 📊 Upload E2E test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-test-results-${{ matrix.project }}
@@ -509,7 +514,7 @@ jobs:
           retention-days: 7
 
       - name: 📊 Upload HTML reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report-${{ matrix.project }}
@@ -554,7 +559,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set build variables
         id: vars

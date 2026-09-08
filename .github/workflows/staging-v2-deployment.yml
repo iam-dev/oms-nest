@@ -38,7 +38,7 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0 (Docker action; later versions require setup-trivy@v0.2.x which is missing upstream — WF-007/WF-010)
@@ -66,10 +66,10 @@ jobs:
         working-directory: ./backend
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: '22'
         cache: 'npm'
@@ -140,10 +140,10 @@ jobs:
         working-directory: ./frontend
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: '22'
         cache: 'npm'
@@ -208,7 +208,7 @@ jobs:
       url: https://next-staging.ordermysaddle.com
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup Kubernetes CLI
       uses: azure/setup-kubectl@v3
@@ -399,10 +399,10 @@ jobs:
         working-directory: ./e2e
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: '22'
         cache: 'npm'
@@ -515,7 +515,7 @@ jobs:
           -- node - < .github/workflows/scripts/e2e-delete-users.js
 
     - name: Upload E2E test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: e2e-test-results-v2
