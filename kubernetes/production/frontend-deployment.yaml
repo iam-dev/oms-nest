@@ -52,6 +52,14 @@ spec:
           value: "https://api-nest-production.ordermysaddle.com"
         - name: NEXTAUTH_URL
           value: "https://nest-production.ordermysaddle.com"
+        # Frontend middleware verifies the httpOnly `token` cookie with JWT_SECRET.
+        # It must be the SAME secret the backend signs with (AUTH_JWT_SECRET), or
+        # middleware fails closed and every protected route bounces to /login.
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oms-app-secrets
+              key: AUTH_JWT_SECRET
 
         # Secrets from Kubernetes secrets (NO hardcoded values)
         envFrom:
