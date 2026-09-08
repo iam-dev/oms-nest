@@ -14,7 +14,12 @@
  *   } | kubectl exec -n <ns> <pod> -i -- node -
  *
  * Passwords traverse only stdin and process.env — never argv on the runner
- * or inside the pod — so they do not appear in /proc/*/cmdline anywhere.
+ * or inside the pod — so they do not appear in the process command line
+ * (proc/<pid>/cmdline) anywhere.
+ *
+ * NOTE: do not write that proc path with a star wildcard here. The
+ * star-slash sequence would terminate this block comment early and turn
+ * the rest of the prose into code, breaking the entire script.
  */
 
 'use strict';
