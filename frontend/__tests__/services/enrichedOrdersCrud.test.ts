@@ -1,4 +1,4 @@
-import { createOrderFromPayload, updateOrder, fetchOrderDetail } from '@/services/enrichedOrders';
+import { createOrderFromPayload, updateOrder, fetchOrderDetail, deleteOrder } from '@/services/enrichedOrders';
 
 // Mock fetch for testing
 global.fetch = jest.fn();
@@ -184,6 +184,43 @@ describe('Enriched Orders CRUD Operations', () => {
 
       const callArgs = (fetch as jest.Mock).mock.calls[0][1];
       expect(callArgs.credentials).toBe('include');
+    });
+  });
+
+  describe('deleteOrder', () => {
+    it('should DELETE /api/v1/orders/{id} with credentials', async () => {
+      (fetch as jest.Mock).mockResolvedValue({ ok: true, status: 204 });
+
+      await deleteOrder(100);
+
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:3001/api/v1/orders/100',
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({ 'Accept': 'application/json' }),
+          credentials: 'include',
+        })
+      );
+    });
+
+    it('should throw error with server message on failure', async () => {
+      (fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: jest.fn().mockResolvedValue({ message: 'Order not found' }),
+      });
+
+      await expect(deleteOrder(999)).rejects.toThrow('Order not found');
+    });
+
+    it('should throw fallback error when server returns no message', async () => {
+      (fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: jest.fn().mockRejectedValue(new Error('Not JSON')),
+      });
+
+      await expect(deleteOrder(100)).rejects.toThrow('Failed to delete order: 500');
     });
   });
 });

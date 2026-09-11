@@ -418,6 +418,26 @@ export async function updateOrder(
   return response.json();
 }
 
+/**
+ * Soft-delete an order via the orders API (sets deleted_at on the backend).
+ * The backend also clears the enriched-orders cache so the order disappears
+ * from the Orders page and Reports.
+ */
+export async function deleteOrder(orderId: number): Promise<void> {
+  logger.log('Deleting order:', orderId);
+
+  const response = await fetch(`${API_URL}/api/v1/orders/${orderId}`, {
+    method: 'DELETE',
+    headers: { 'Accept': 'application/json' },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to delete order: ${response.status}`);
+  }
+}
+
 // ========== SINGLE ORDER DETAIL ==========
 
 export interface OrderDetailData {

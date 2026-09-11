@@ -13,6 +13,8 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { OrderSearchMessage } from './OrderSearchMessage';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { fetchCompleteOrderData } from '../utils/orderProcessing';
+import { deleteOrder } from '@/services/enrichedOrders';
+import { toast } from 'sonner';
 import type { Order as OrderDomainType } from '@/types/Order';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -190,8 +192,19 @@ export default function Orders() {
     logger.log('Approve order', order);
   };
 
-  const handleDeleteOrder = (order: Order) => {
-    logger.log('Delete order', order);
+  const handleDeleteOrder = async (order: Order) => {
+    const label = order.orderId ?? order.id;
+    if (!window.confirm(`Are you sure you want to delete order #${label}?`)) return;
+
+    try {
+      await deleteOrder(order.id);
+      toast.success(`Order #${label} deleted`);
+    } catch (err) {
+      logger.error('Error deleting order:', err);
+      toast.error(`Failed to delete order #${label}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+    // Refetch with cache-bust so the deleted order drops out of the table
+    fetchAndSetOrders(true);
   };
 
   const handleCloseEdit = () => {

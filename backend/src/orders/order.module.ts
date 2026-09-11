@@ -6,6 +6,7 @@ import { OrderController } from "./order.controller";
 import { OrderRelationalPersistenceModule } from "./infrastructure/persistence/relational/relational-persistence.module";
 import { OrderMapper } from "./mappers/order-dto.mapper";
 import { OrderEntity } from "./infrastructure/persistence/relational/entities/order.entity";
+import { EnrichedOrdersModule } from "../enriched-orders/enriched-orders.module";
 
 /**
  * Order Module
@@ -18,6 +19,7 @@ import { OrderEntity } from "./infrastructure/persistence/relational/entities/or
   imports: [
     OrderRelationalPersistenceModule,
     TypeOrmModule.forFeature([OrderEntity]),
+    EnrichedOrdersModule,
   ],
   controllers: [OrderController],
   providers: [OrderService, OrderSearchService, OrderMapper],

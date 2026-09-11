@@ -145,6 +145,37 @@ describe("EnrichedOrdersService", () => {
       expect(queryRunner.connect).toHaveBeenCalled();
       expect(queryRunner.release).toHaveBeenCalled();
     });
+
+    it("should exclude soft-deleted orders from both the count and data queries", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config call
+        .mockResolvedValueOnce([{ total: "0" }]) // Count query
+        .mockResolvedValueOnce([]); // Data query
+
+      await service.getEnrichedOrders({ page: 1, limit: 10 });
+
+      const countSql: string = queryRunner.query.mock.calls[1][0];
+      const dataSql: string = queryRunner.query.mock.calls[2][0];
+      expect(countSql).toMatch(/WHERE[\s\S]*o\.deleted_at IS NULL/);
+      expect(dataSql).toMatch(/WHERE[\s\S]*o\.deleted_at IS NULL/);
+    });
+
+    it("should keep the soft-delete filter when other filters are applied", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ total: "0" }])
+        .mockResolvedValueOnce([]);
+
+      await service.getEnrichedOrders({
+        page: 1,
+        limit: 10,
+        urgent: true,
+      } as any);
+
+      const dataSql: string = queryRunner.query.mock.calls[2][0];
+      expect(dataSql).toMatch(/o\.deleted_at IS NULL/);
+      expect(dataSql).toMatch(/o\.rushed = \$1/);
+    });
   });
 
   describe("Configuration", () => {
