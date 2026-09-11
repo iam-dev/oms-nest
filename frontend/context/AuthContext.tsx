@@ -29,6 +29,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * The server answered the session probe and said no. Distinct from a
+ * transport failure, where we learned nothing about the session at all.
+ */
+class AuthCheckRejectedError extends Error {
+  constructor(public readonly status: number) {
+    super(`Auth check failed: ${status}`);
+    this.name = 'AuthCheckRejectedError';
+  }
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   logger.log('AuthProvider: initializing');
 
@@ -51,7 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     if (!userResponse.ok) {
-      throw new Error(`Auth check failed: ${userResponse.status}`);
+      throw new AuthCheckRejectedError(userResponse.status);
     }
 
     const member = await userResponse.json();
@@ -90,6 +101,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    let cancelled = false;
+
     const checkAuth = async () => {
       logger.log('AuthContext: Starting checkAuth...');
       setLoadingAction(true);
@@ -97,15 +110,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Verify session with backend (cookie sent automatically)
         await fetchUserData();
         logger.log('AuthContext: Session verified via /auth/me');
-      } catch {
-        logger.log('AuthContext: no valid session, clearing auth state');
-        logoutAction();
+      } catch (error) {
+        // A transport failure tells us nothing about the session — the cookie
+        // may well still be valid — so retry once before tearing it down.
+        // React StrictMode fires this effect twice in dev, racing two probes,
+        // and a dropped one used to log a perfectly good session out and
+        // bounce the page to /login. Real users hit the same thing when the
+        // network blips during a refresh. An HTTP response IS an answer, so
+        // don't retry that.
+        const serverAnswered = error instanceof AuthCheckRejectedError;
+        if (!serverAnswered && !cancelled) {
+          try {
+            await fetchUserData();
+            logger.log('AuthContext: Session verified via /auth/me (after retry)');
+            return;
+          } catch {
+            logger.log('AuthContext: /auth/me still unreachable after retry');
+          }
+        }
+        if (!cancelled) {
+          logger.log('AuthContext: no valid session, clearing auth state');
+          logoutAction();
+        }
       } finally {
-        setLoadingAction(false);
+        if (!cancelled) {
+          setLoadingAction(false);
+        }
       }
     };
 
     checkAuth();
+
+    return () => {
+      // Stop a torn-down run (StrictMode's first pass) from clobbering the
+      // state that the live one is establishing.
+      cancelled = true;
+    };
   // TODO(react-hooks): intentionally empty — this effect must run exactly once on mount
   // to restore an existing session. Adding fetchUserData/user/isLoading/logoutAction/
   // setLoadingAction as deps would trigger re-auth on every state change, causing an
