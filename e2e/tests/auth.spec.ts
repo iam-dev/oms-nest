@@ -175,8 +175,12 @@ test.describe('Authentication Flow @critical @smoke @readonly', () => {
         sessionStorage.clear();
       });
 
-      // Try to access protected route
-      await page.goto('/orders');
+      // Try to access protected route. The bounce to /login is the behaviour
+      // under test, and when it fires before the navigation settles — WebKit
+      // is quick enough to do this — goto() rejects with "interrupted by
+      // another navigation". That is the expected outcome, not a failure, so
+      // let the URL assertion below be the judge.
+      await page.goto('/orders').catch(() => {});
 
       // Should redirect to login
       await page.waitForURL(/login/, { timeout: 10000 }).catch(() => {});
