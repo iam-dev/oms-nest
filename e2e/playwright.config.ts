@@ -1,8 +1,22 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
+import * as path from 'path';
 
 // Load environment variables from .env file
 dotenv.config();
+
+/**
+ * The frontend middleware verifies the session cookie with JWT_SECRET, which
+ * has to be the same secret the backend signs tokens with (AUTH_JWT_SECRET).
+ * The backend reads that from backend/.env when started by webServer below, so
+ * read it from there too rather than requiring it to be exported by hand.
+ */
+const frontendJwtSecret =
+  process.env.JWT_SECRET ||
+  process.env.AUTH_JWT_SECRET ||
+  dotenv.config({ path: path.join(__dirname, '..', 'backend', '.env'), processEnv: {} })
+    .parsed?.AUTH_JWT_SECRET ||
+  '';
 
 // Environment configuration
 const ENVIRONMENT = process.env.ENVIRONMENT || 'local';
@@ -240,6 +254,11 @@ export default defineConfig({
         NEXT_PUBLIC_API_URL: config.apiURL.replace(/\/api$/, ''),
         NEXTAUTH_URL: config.baseURL,
         PORT: '3000',
+        // The middleware verifies the session cookie with JWT_SECRET and fails
+        // closed when it is unset, redirecting every protected route to /login.
+        // It must be the secret the backend signs with, so default it to the
+        // backend's AUTH_JWT_SECRET rather than leaving it blank.
+        JWT_SECRET: frontendJwtSecret,
       },
       stdout: 'pipe',
       stderr: 'pipe',
