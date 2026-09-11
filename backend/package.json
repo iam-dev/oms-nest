@@ -64,7 +64,7 @@
     "@nestjs/axios": "^4.0.1",
     "@nestjs/bullmq": "^11.0.3",
     "@nestjs/cache-manager": "^3.1.0",
-    "@nestjs/common": "11.1.6",
+    "@nestjs/common": "11.2.3",
     "@nestjs/config": "4.0.2",
     "@nestjs/core": "11.1.19",
     "@nestjs/cqrs": "^11.0.3",
@@ -75,7 +75,7 @@
     "@nestjs/swagger": "^11.2.3",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/throttler": "^6.5.0",
-    "@nestjs/typeorm": "11.0.0",
+    "@nestjs/typeorm": "11.0.3",
     "@types/multer-s3": "3.0.3",
     "axios": "^1.16.0",
     "bcryptjs": "3.0.2",
@@ -103,7 +103,7 @@
     "source-map-support": "0.5.21",
     "swagger-ui-express": "5.0.1",
     "handlebars": "^4.7.9",
-    "typeorm": "0.3.31",
+    "typeorm": "1.1.1",
     "uuid": "^14.0.0"
   },
   "devDependencies": {
