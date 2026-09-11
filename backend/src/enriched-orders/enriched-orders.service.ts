@@ -548,6 +548,10 @@ export class EnrichedOrdersService {
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Soft-deleted orders (DELETE /orders/:id sets deleted_at) must never
+    // appear in the Orders page or Reports, regardless of other filters.
+    conditions.push(`o.deleted_at IS NULL`);
+
     // Filter by order ID: match exact ID or fitter_reference containing the number (e.g. "6365" matches SN6365)
     const orderId = query.id || query.orderId;
     if (orderId) {

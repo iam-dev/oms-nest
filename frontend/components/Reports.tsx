@@ -30,7 +30,8 @@ import { getFitterName, getCustomerName, getSupplierName, getStatus, getUrgent, 
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { seatSizes, statuses, orderStatuses } from '../utils/orderConstants';
 import { logger } from '@/utils/logger';
-import { getEnrichedOrders, getFilterOptions } from '../services/enrichedOrders';
+import { getEnrichedOrders, getFilterOptions, deleteOrder } from '../services/enrichedOrders';
+import { toast } from 'sonner';
 import type { FilterOptions } from '../services/enrichedOrders';
 import { extractDynamicFactories, extractDynamicSeatSizes, extractSeatSizes } from '../utils/orderProcessing';
 import { fetchEntities } from '../services/api';
@@ -1103,7 +1104,18 @@ export default function Reports() {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onApproveOrder: (order: any) => logger.log('Approve order:', order),
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              onDeleteOrder: (order: any) => logger.log('Delete order:', order),
+              onDeleteOrder: async (order: any) => {
+                const label = order.orderId ?? order.id;
+                if (!window.confirm(`Are you sure you want to delete order #${label}?`)) return;
+                try {
+                  await deleteOrder(Number(order.id));
+                  toast.success(`Order #${label} deleted`);
+                } catch (err) {
+                  logger.error('Error deleting order:', err);
+                  toast.error(`Failed to delete order #${label}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                }
+                setRefreshKey(k => k + 1);
+              },
               seatSizes,
               statuses,
               fitters: fittersList.map(f => f.label),

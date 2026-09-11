@@ -4,6 +4,7 @@ import { Repository, IsNull } from "typeorm";
 import { NotFoundException } from "@nestjs/common";
 import { OrderService } from "../../../src/orders/order.service";
 import { OrderEntity } from "../../../src/orders/infrastructure/persistence/relational/entities/order.entity";
+import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 import { CreateOrderDto } from "../../../src/orders/dto/create-order.dto";
 import { UpdateOrderDto } from "../../../src/orders/dto/update-order.dto";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -12,6 +13,7 @@ import { OrderDto } from "../../../src/orders/dto/order.dto";
 describe("OrderService", () => {
   let service: OrderService;
   let repository: jest.Mocked<Repository<OrderEntity>>;
+  let enrichedOrdersService: { invalidateCache: jest.Mock };
 
   const mockOrderEntity: OrderEntity = {
     id: 12345,
@@ -100,12 +102,20 @@ describe("OrderService", () => {
       },
     };
 
+    enrichedOrdersService = {
+      invalidateCache: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrderService,
         {
           provide: getRepositoryToken(OrderEntity),
           useValue: mockRepository,
+        },
+        {
+          provide: EnrichedOrdersService,
+          useValue: enrichedOrdersService,
         },
       ],
     }).compile();
@@ -386,6 +396,15 @@ describe("OrderService", () => {
       expect(repository.softDelete).toHaveBeenCalledWith(orderId);
     });
 
+    it("should invalidate the enriched-orders cache so the order disappears from lists and reports", async () => {
+      repository.findOne.mockResolvedValue(mockOrderEntity);
+      repository.softDelete.mockResolvedValue({ affected: 1 } as any);
+
+      await service.remove(12345);
+
+      expect(enrichedOrdersService.invalidateCache).toHaveBeenCalledTimes(1);
+    });
+
     it("should throw NotFoundException when order not found", async () => {
       // Arrange
       const orderId = 99999;
@@ -394,6 +413,7 @@ describe("OrderService", () => {
       // Act & Assert
       await expect(service.remove(orderId)).rejects.toThrow(NotFoundException);
       expect(repository.softDelete).not.toHaveBeenCalled();
+      expect(enrichedOrdersService.invalidateCache).not.toHaveBeenCalled();
     });
   });
 

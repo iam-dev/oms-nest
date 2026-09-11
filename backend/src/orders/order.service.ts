@@ -5,6 +5,7 @@ import { OrderEntity } from "./infrastructure/persistence/relational/entities/or
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 import { OrderDto } from "./dto/order.dto";
+import { EnrichedOrdersService } from "../enriched-orders/enriched-orders.service";
 
 /**
  * Order Application Service
@@ -17,6 +18,7 @@ export class OrderService {
   constructor(
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
+    private readonly enrichedOrdersService: EnrichedOrdersService,
   ) {}
 
   /**
@@ -212,6 +214,10 @@ export class OrderService {
     }
 
     await this.orderRepository.softDelete(id);
+
+    // The Orders page and Reports read from the cached enriched-orders
+    // query; drop that cache so the deleted order disappears immediately.
+    await this.enrichedOrdersService.invalidateCache();
   }
 
   /**
