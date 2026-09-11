@@ -1,6 +1,8 @@
 import { chromium, FullConfig } from '@playwright/test';
 import axios from 'axios';
 
+import { establishAuthState } from '../shared/establish-auth-state';
+
 /**
  * 🚀 Global E2E Test Setup
  * 🔐 Security-first approach with environment preparation
@@ -39,6 +41,11 @@ async function globalSetup(config: FullConfig) {
 
   // Create test data if needed
   await createTestData(apiURL);
+
+  // Log in once per role and cache the sessions on disk. Every spec reuses
+  // these instead of logging in from its own hooks, which is what keeps the
+  // run under the throttle on POST /api/v1/auth/email/login.
+  await establishAuthState(apiURL);
 
   console.log(`✅ E2E test environment setup complete for ${environment}`);
 }

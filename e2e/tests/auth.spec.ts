@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { authStatePath } from '../shared/auth-state';
 
 /**
  * Authentication E2E Tests
@@ -154,19 +155,21 @@ test.describe('Authentication Flow @critical @smoke @readonly', () => {
     }
   });
 
-  test('should handle session expiration @critical @readonly', async () => {
-    // Login first
-    await page.goto('/login');
-    await fillLoginForm(
-      page,
-      process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-      process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-    );
+  /**
+   * These three only need an existing session; the login form itself is
+   * covered above. Replaying the session captured once in globalSetup keeps
+   * them off the login route, which is throttled to 60 requests/hour.
+   */
+  test.describe('with an existing session', () => {
+    test.use({ storageState: authStatePath('admin') });
 
-    const isLoggedIn = await submitLoginAndWait(page);
+    test('should handle session expiration @critical @readonly', async ({ context }) => {
+      await page.goto('/dashboard');
+      await expect(page).toHaveURL(/dashboard/);
 
-    if (isLoggedIn) {
-      // Simulate expired session by clearing storage
+      // Simulate an expired session. The session lives in an httpOnly cookie,
+      // so clearing web storage alone would leave the user logged in.
+      await context.clearCookies();
       await page.evaluate(() => {
         localStorage.clear();
         sessionStorage.clear();
@@ -178,21 +181,12 @@ test.describe('Authentication Flow @critical @smoke @readonly', () => {
       // Should redirect to login
       await page.waitForURL(/login/, { timeout: 10000 }).catch(() => {});
       await expect(page).toHaveURL(/login/);
-    }
-  });
+    });
 
-  test('should successfully logout @smoke @readonly', async () => {
-    // Login first
-    await page.goto('/login');
-    await fillLoginForm(
-      page,
-      process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-      process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-    );
+    test('should successfully logout @smoke @readonly', async () => {
+      await page.goto('/dashboard');
+      await expect(page).toHaveURL(/dashboard/);
 
-    const isLoggedIn = await submitLoginAndWait(page);
-
-    if (isLoggedIn) {
       // Look for logout button
       const logoutSelectors = [
         'button:has-text("Logout")',
@@ -215,39 +209,30 @@ test.describe('Authentication Flow @critical @smoke @readonly', () => {
           continue;
         }
       }
-    }
+    });
+
+    test('should handle concurrent sessions @security @readonly', async ({ browser }) => {
+      // Two contexts replaying the same stored session, rather than two more
+      // trips through the throttled login route.
+      const storageState = authStatePath('admin');
+      const context1 = await browser.newContext({ storageState });
+      const context2 = await browser.newContext({ storageState });
+
+      const page1 = await context1.newPage();
+      const page2 = await context2.newPage();
+
+      try {
+        await page1.goto('/dashboard');
+        await page2.goto('/dashboard');
+
+        // Both sessions should remain active or show concurrent session warning
+        await expect(page1).toHaveURL(/dashboard/);
+        await expect(page2).toHaveURL(/dashboard/);
+      } finally {
+        await context1.close();
+        await context2.close();
+      }
+    });
   });
 
-  test('should handle concurrent sessions @security @readonly', async ({ browser }) => {
-    const context1 = await browser.newContext();
-    const context2 = await browser.newContext();
-
-    const page1 = await context1.newPage();
-    const page2 = await context2.newPage();
-
-    try {
-      // Login in first session
-      await page1.goto('/login');
-      await fillLoginForm(
-        page1,
-        process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-        process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-      );
-      await submitLoginAndWait(page1);
-
-      // Login in second session with same user
-      await page2.goto('/login');
-      await fillLoginForm(
-        page2,
-        process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-        process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-      );
-      await submitLoginAndWait(page2);
-
-      // Both sessions should remain active or show concurrent session warning
-    } finally {
-      await context1.close();
-      await context2.close();
-    }
-  });
 });
