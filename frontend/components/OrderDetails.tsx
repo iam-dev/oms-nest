@@ -833,14 +833,18 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
         </div>
       </DialogContent>
 
+      {/* Mount the editor only while open: Radix keeps non-Content children
+          mounted on close, which would preserve unsaved wizard edits after Cancel. */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <ComprehensiveEditOrder
-          order={{ id: String(orderId), orderId: Number(displayOrderId) }}
-          onClose={() => {
-            setIsEditOpen(false);
-            onOrderChanged?.();
-          }}
-        />
+        {isEditOpen && (
+          <ComprehensiveEditOrder
+            order={{ id: String(orderId), orderId: Number(displayOrderId) }}
+            onClose={() => {
+              setIsEditOpen(false);
+              onOrderChanged?.();
+            }}
+          />
+        )}
       </Dialog>
 
       <Dialog open={isDuplicateOpen} onOpenChange={(open) => {

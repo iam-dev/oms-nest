@@ -236,7 +236,7 @@ export default function RepairsPage() {
 
       {/* Edit order dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        {selectedOrder && (
+        {isEditOpen && selectedOrder && (
           <ComprehensiveEditOrder
             order={{
               id: String(selectedOrder.id),
