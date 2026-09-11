@@ -19,6 +19,22 @@ on:
         default: false
         type: boolean
 
+# Only one staging deploy at a time. This workflow creates shared E2E users
+# (e2e-admin@test.com / e2e-fitter@test.com), runs tests as them, then deletes
+# them in an `if: always()` step. Two overlapping runs share one namespace and
+# one database, so the finishing run's cleanup deletes the users out from under
+# the other run's tests — which is exactly what happened on 2026-09-11, when
+# several PRs merged within seconds of each other: one run logged admin in
+# successfully at 21:42:19, and by 21:42:26 every request was 401 because the
+# other run had just deleted the user. That failure then tripped the automatic
+# rollback and reverted a perfectly good deploy.
+#
+# cancel-in-progress is deliberately false: cancelling a run mid-test would
+# skip its cleanup and leave the shared users behind. Queue instead.
+concurrency:
+  group: deploy-staging-v2
+  cancel-in-progress: false
+
 # Restrict permissions to the minimum required
 permissions:
   contents: read
