@@ -478,4 +478,56 @@ describe("EnrichedOrdersService", () => {
       expect(logCall[1][2]).toBe("Order updated.");
     });
   });
+  describe("getOrderDetail - customer fields round-trip with updateOrder", () => {
+    // Regression: the Edit Order form's "Customer information" inputs are saved by
+    // updateOrder into the orders row (orders.name/address/city/...), but the detail
+    // read that feeds the form and the details view returned those fields straight
+    // from the customers table.  Every customer-info edit therefore looked lost on
+    // the very next open, even though the UPDATE had succeeded.
+    //
+    // The detail read must prefer the order's own snapshot and fall back to the
+    // customer record only when the snapshot is empty (legacy rows).
+
+    const detailSelectSql = (): string => {
+      const call = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" &&
+          c[0].includes('o.fitter_reference as "fitterReference"'),
+      );
+      return call ? (call[0] as string) : "";
+    };
+
+    const snapshotColumns: Array<[string, string]> = [
+      ["name", "customerName"],
+      ["email", "customerEmail"],
+      ["address", "customerAddress"],
+      ["city", "customerCity"],
+      ["state", "customerState"],
+      ["zipcode", "customerZipcode"],
+      ["country", "customerCountry"],
+      ["phone_no", "customerPhone"],
+      ["cell_no", "customerCell"],
+    ];
+
+    it.each(snapshotColumns)(
+      "should read orders.%s before customers.%s for %s",
+      async (column, alias) => {
+        queryRunner.query
+          .mockResolvedValueOnce([]) // RLS set_config
+          .mockResolvedValueOnce([{ id: 1, currency: 1, fitterCurrency: 1 }]) // detail row
+          .mockResolvedValue([]); // saddle specs, log, comments
+
+        await service.getOrderDetail(1);
+
+        const sql = detailSelectSql();
+        expect(sql).not.toBe("");
+        // Whitespace-insensitive match on the exact expression.
+        const normalised = sql.replace(/\s+/g, " ");
+        expect(normalised).toContain(
+          `COALESCE(NULLIF(o.${column}, ''), c.${column}) as "${alias}"`,
+        );
+        expect(normalised).not.toContain(`c.${column} as "${alias}"`);
+      },
+    );
+  });
 });

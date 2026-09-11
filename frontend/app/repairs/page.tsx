@@ -220,9 +220,12 @@ export default function RepairsPage() {
         />
       </div>
 
-      {/* Order details dialog */}
+      {/* Order details dialog.  Mount only while open: Radix keeps non-Content
+          children mounted on close, and OrderDetails only refetches when the
+          orderId changes, so reopening the same order would show the snapshot
+          it loaded before the last edit was saved. */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        {selectedOrder && (
+        {isDetailsOpen && selectedOrder && (
           <OrderDetails
             order={selectedOrder}
             onClose={() => setIsDetailsOpen(false)}

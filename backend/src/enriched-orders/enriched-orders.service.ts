@@ -1290,17 +1290,21 @@ export class EnrichedOrdersService {
           st.name as "orderStatus",
           o.order_status as "statusId",
 
-          -- Customer fields
+          -- Customer fields.  updateOrder writes the Edit Order form's customer
+          -- inputs to the orders row (the per-order snapshot), so read them back
+          -- from there first; fall back to the customers record for legacy rows
+          -- whose snapshot was never filled.  Reading c.* alone made every
+          -- customer-info edit look lost on the next open.
           c.id as "customerId",
-          c.name as "customerName",
-          c.email as "customerEmail",
-          c.address as "customerAddress",
-          c.city as "customerCity",
-          c.state as "customerState",
-          c.zipcode as "customerZipcode",
-          c.country as "customerCountry",
-          c.phone_no as "customerPhone",
-          c.cell_no as "customerCell",
+          COALESCE(NULLIF(o.name, ''), c.name) as "customerName",
+          COALESCE(NULLIF(o.email, ''), c.email) as "customerEmail",
+          COALESCE(NULLIF(o.address, ''), c.address) as "customerAddress",
+          COALESCE(NULLIF(o.city, ''), c.city) as "customerCity",
+          COALESCE(NULLIF(o.state, ''), c.state) as "customerState",
+          COALESCE(NULLIF(o.zipcode, ''), c.zipcode) as "customerZipcode",
+          COALESCE(NULLIF(o.country, ''), c.country) as "customerCountry",
+          COALESCE(NULLIF(o.phone_no, ''), c.phone_no) as "customerPhone",
+          COALESCE(NULLIF(o.cell_no, ''), c.cell_no) as "customerCell",
 
           -- Fitter fields
           f.id as "fitterId",

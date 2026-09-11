@@ -702,6 +702,63 @@ describe('ComprehensiveEditOrder component', () => {
   });
 
   // =========================================================================
+  // 8b. Save as Draft
+  // =========================================================================
+  describe('Save as Draft', () => {
+    // Regression: the footer's "Save as Draft" button had no onClick at all, so
+    // edits made on steps 1-3 and "saved" with it were silently dropped when the
+    // dialog was closed.  It must persist the current form values from any step.
+
+    it('saves the current form values from step 2 without walking to step 4', async () => {
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+      const onClose = jest.fn();
+
+      await renderAndWaitForLoad({ isDuplicate: false, onClose });
+      await navigateToStep(2);
+
+      // Edit the reference on step 2, then Save as Draft right there.
+      const referenceInput = screen.getByDisplayValue('REF-001');
+      fireEvent.change(referenceInput, { target: { value: 'REF-DRAFT-9' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const [id, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(id).toBe(100);
+      expect(payload.orderReference).toBe('REF-DRAFT-9');
+      // Untouched status is still never resubmitted.
+      expect(payload.orderStatus).toBeUndefined();
+      expect(toast.success).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      // Still on step 2 — Save as Draft must not advance the wizard.
+      expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();
+    });
+
+    it('is disabled while a save is in flight', async () => {
+      let resolveSave: (v: unknown) => void = () => {};
+      (updateOrder as jest.Mock).mockReturnValue(
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        })
+      );
+
+      await renderAndWaitForLoad({ isDuplicate: false });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      expect(screen.getByRole('button', { name: /save as draft/i })).toBeDisabled();
+
+      await act(async () => {
+        resolveSave({ success: true, orderId: 100 });
+      });
+    });
+  });
+
+  // =========================================================================
   // 9. Error handling on submit
   // =========================================================================
   describe('error handling on submit', () => {
