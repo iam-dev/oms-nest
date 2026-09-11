@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { authStatePath } from '../shared/auth-state';
 
 /**
  * Cross-Entity User Journey E2E Tests
@@ -218,15 +219,21 @@ test.describe('User Journey @journey @smoke @readonly', () => {
     expect(page.url()).toContain('/dashboard');
   });
 
-  test('session persistence: login -> navigate -> refresh -> still logged in', async ({ page }) => {
-    // Step 1: Login
-    const isLoggedIn = await loginAsAdmin(page);
-    if (!isLoggedIn) {
-      console.log('Login failed - skipping session persistence test');
-      test.skip();
-      return;
-    }
+});
 
+/**
+ * The remaining journeys only need to *be* signed in, so they replay the
+ * session captured once in globalSetup instead of driving the login form.
+ * Logging in per test cost one login apiece — and another on each retry —
+ * against a login route throttled to 60/hour. The journey above still covers
+ * the real login flow.
+ */
+test.describe('User Journey (pre-authenticated) @journey @smoke @readonly', () => {
+  test.use({ storageState: authStatePath('admin') });
+
+  test('session persistence: navigate -> refresh -> still logged in', async ({ page }) => {
+    // Step 1: Arrive already signed in via the stored session
+    await page.goto('/dashboard');
     await expect(page).toHaveURL(/dashboard/);
 
     // Step 2: Navigate to a protected page
@@ -248,15 +255,7 @@ test.describe('User Journey @journey @smoke @readonly', () => {
   });
 
   test('cross-entity navigation: orders page shows customer and fitter references', async ({ page }) => {
-    // Login
-    const isLoggedIn = await loginAsAdmin(page);
-    if (!isLoggedIn) {
-      console.log('Login failed - skipping cross-entity test');
-      test.skip();
-      return;
-    }
-
-    // Navigate to orders
+    // Navigate to orders (already signed in via the stored session)
     await page.goto('/orders');
     await waitForContentLoad(page);
 
@@ -288,15 +287,7 @@ test.describe('User Journey @journey @smoke @readonly', () => {
   });
 
   test('multi-page data consistency: entity counts remain stable across navigations', async ({ page }) => {
-    // Login
-    const isLoggedIn = await loginAsAdmin(page);
-    if (!isLoggedIn) {
-      console.log('Login failed - skipping data consistency test');
-      test.skip();
-      return;
-    }
-
-    // Visit customers page and count rows
+    // Visit customers page and count rows (already signed in)
     await page.goto('/customers');
     await waitForContentLoad(page);
 

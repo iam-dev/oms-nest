@@ -58,6 +58,8 @@ playwright-report/
 playwright/.cache/
 e2e/test-output/
 test-output/
+# Session cookies captured by the E2E globalSetup — credentials, never commit
+e2e/.auth/
 
 # Logs
 logs/

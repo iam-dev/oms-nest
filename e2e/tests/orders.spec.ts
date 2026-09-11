@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { authStatePath } from '../shared/auth-state';
 
 /**
  * Order Management E2E Tests
@@ -10,62 +11,18 @@ import { test, expect, Page } from '@playwright/test';
  * what is available.
  */
 
-/**
- * Wait for the login form to render.
- * The login page shows "Loading..." while AuthContext initializes.
- * Webkit on CI is slower to resolve this, so we must explicitly wait.
- */
-async function waitForLoginForm(target: Page): Promise<void> {
-  await target.locator('form').waitFor({ state: 'visible', timeout: 30000 });
-}
-
-/** Fill login form using resilient type-based selectors */
-async function fillLoginForm(
-  target: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await waitForLoginForm(target);
-
-  const emailInput = target.locator('input[type="email"], input[type="text"]').first();
-  const passwordInput = target.locator('input[type="password"]');
-
-  await emailInput.waitFor({ state: 'visible' });
-  await emailInput.fill(email);
-  await passwordInput.fill(password);
-}
-
-/** Submit the login form and wait for navigation away from /login */
-async function submitLoginAndWait(target: Page): Promise<boolean> {
-  await waitForLoginForm(target);
-  await target.locator('button[type="submit"]').click();
-
-  await Promise.race([
-    target.waitForURL(/.*(?<!\/login)$/, { timeout: 10000 }),
-    target.locator('.text-destructive').waitFor({ state: 'visible', timeout: 10000 }),
-  ]).catch(() => {});
-
-  return !target.url().includes('/login');
-}
-
 test.describe('Order Management Flow @critical @smoke @readonly', () => {
   let page: Page;
 
+  // Start every test already authenticated. Driving the login form in
+  // beforeEach cost one login per test (and one more per retry), which is a
+  // large share of what used to exhaust the throttle on /auth/email/login.
+  // The session is a plain httpOnly cookie, so replaying it is equivalent to
+  // having logged in; auth.spec.ts still covers the login form itself.
+  test.use({ storageState: authStatePath('admin') });
+
   test.beforeEach(async ({ page: testPage }) => {
     page = testPage;
-
-    // Login as admin user before each test
-    await page.goto('/login');
-    await fillLoginForm(
-      page,
-      process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-      process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-    );
-
-    const isLoggedIn = await submitLoginAndWait(page);
-    if (!isLoggedIn) {
-      console.log('Login may have failed - continuing with test');
-    }
   });
 
   test.afterEach(async () => {
@@ -204,26 +161,15 @@ test.describe('Order Management Flow @critical @smoke @readonly', () => {
   });
 
   test('should handle concurrent order access @security @readonly', async ({ browser }) => {
-    const context1 = await browser.newContext();
-    const context2 = await browser.newContext();
+    // Both contexts replay the stored session instead of logging in twice.
+    const storageState = authStatePath('admin');
+    const context1 = await browser.newContext({ storageState });
+    const context2 = await browser.newContext({ storageState });
 
     const page1 = await context1.newPage();
     const page2 = await context2.newPage();
 
     try {
-      // Login both users sequentially to avoid race conditions
-      for (const testPage of [page1, page2]) {
-        await testPage.goto('/login', { waitUntil: 'domcontentloaded' });
-        await testPage.waitForLoadState('domcontentloaded');
-
-        await fillLoginForm(
-          testPage,
-          process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-          process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-        );
-        await submitLoginAndWait(testPage);
-      }
-
       // Both users access orders page concurrently
       const [response1, response2] = await Promise.all([
         page1.goto('/orders', { waitUntil: 'domcontentloaded' }),

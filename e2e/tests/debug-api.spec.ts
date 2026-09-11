@@ -1,26 +1,19 @@
-import { test, expect, request } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import {
+  API_CONTEXT_HEADERS,
+  ROLE_CREDENTIALS,
+  resolveApiUrl,
+} from '../shared/auth-state';
+import { loginApiWithRetry } from '../shared/api-login';
 
-const getApiUrl = () => {
-  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
-    return process.env.STAGING_API_URL;
-  }
-  if (process.env.E2E_API_URL) {
-    return process.env.E2E_API_URL.replace(/\/api$/, '');
-  }
-  return 'http://localhost:3001';
-};
-
-const API_URL = getApiUrl();
+const API_URL = resolveApiUrl();
 
 test.describe('Debug API Tests @smoke @readonly', () => {
 
   test('should authenticate with absolute URLs', async ({ playwright }) => {
     // Create API request context with no baseURL
     const apiContext = await playwright.request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      extraHTTPHeaders: { ...API_CONTEXT_HEADERS },
       ignoreHTTPSErrors: true,
     });
 
@@ -31,12 +24,12 @@ test.describe('Debug API Tests @smoke @readonly', () => {
 
     // Test login with absolute URL
     console.log('Testing login...');
-    const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
-      }
-    });
+    const loginResponse = await loginApiWithRetry(
+      apiContext,
+      API_URL,
+      ROLE_CREDENTIALS.admin.email,
+      ROLE_CREDENTIALS.admin.password,
+    );
 
     console.log('Login status:', loginResponse.status());
     if (!loginResponse.ok()) {

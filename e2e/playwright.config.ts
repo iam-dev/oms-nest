@@ -1,8 +1,22 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
+import * as path from 'path';
 
 // Load environment variables from .env file
 dotenv.config();
+
+/**
+ * The frontend middleware verifies the session cookie with JWT_SECRET, which
+ * has to be the same secret the backend signs tokens with (AUTH_JWT_SECRET).
+ * The backend reads that from backend/.env when started by webServer below, so
+ * read it from there too rather than requiring it to be exported by hand.
+ */
+const frontendJwtSecret =
+  process.env.JWT_SECRET ||
+  process.env.AUTH_JWT_SECRET ||
+  dotenv.config({ path: path.join(__dirname, '..', 'backend', '.env'), processEnv: {} })
+    .parsed?.AUTH_JWT_SECRET ||
+  '';
 
 // Environment configuration
 const ENVIRONMENT = process.env.ENVIRONMENT || 'local';
@@ -81,13 +95,13 @@ export default defineConfig({
     /* Environment-based base URL */
     baseURL: config.baseURL,
 
-    /* Security headers for testing */
-    extraHTTPHeaders: {
-      'X-API-Base-URL': config.apiURL,
-      'X-Test-Environment': ENVIRONMENT,
-      'X-Test-Runner': 'Playwright',
-      'User-Agent': 'OMS-E2E-Tests/1.0.0'
-    },
+    /* NOTE: do NOT set extraHTTPHeaders here. Browser contexts attach them to
+       every request the page makes, including the cross-origin fetches the
+       frontend sends to the API. Custom headers are not CORS-safelisted, so
+       each one must appear in the backend's Access-Control-Allow-Headers or
+       the preflight fails and every client-side API call dies — which silently
+       logs the app out mid-test. API request contexts set their own headers
+       (see shared/auth-state.ts), where CORS does not apply. */
 
     /* Tracing configuration for debugging */
     trace: 'retain-on-failure',
@@ -121,10 +135,6 @@ export default defineConfig({
           name: 'chromium',
           use: {
             ...devices['Desktop Chrome'],
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Chrome'
-            },
           },
         },
       ]
@@ -133,10 +143,6 @@ export default defineConfig({
           name: 'chromium',
           use: {
             ...devices['Desktop Chrome'],
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Chrome'
-            },
           },
         },
 
@@ -144,10 +150,6 @@ export default defineConfig({
           name: 'firefox',
           use: {
             ...devices['Desktop Firefox'],
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Firefox'
-            },
           },
         },
 
@@ -155,10 +157,6 @@ export default defineConfig({
           name: 'webkit',
           use: {
             ...devices['Desktop Safari'],
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Safari'
-            },
           },
         },
 
@@ -166,10 +164,6 @@ export default defineConfig({
           name: 'Mobile Chrome',
           use: {
             ...devices['Pixel 5'],
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Mobile-Chrome'
-            },
           },
         },
 
@@ -177,10 +171,6 @@ export default defineConfig({
           name: 'Mobile Safari',
           use: {
             ...devices['iPhone 12'],
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Mobile-Safari'
-            },
           },
         },
 
@@ -189,10 +179,6 @@ export default defineConfig({
           use: {
             ...devices['Desktop Edge'],
             channel: 'msedge',
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Edge'
-            },
           },
         },
 
@@ -201,10 +187,6 @@ export default defineConfig({
           use: {
             ...devices['Desktop Chrome'],
             channel: 'chrome',
-            extraHTTPHeaders: {
-              'X-Test-Environment': ENVIRONMENT,
-              'X-Browser': 'Chrome-Stable'
-            },
           },
         },
       ],
@@ -240,6 +222,11 @@ export default defineConfig({
         NEXT_PUBLIC_API_URL: config.apiURL.replace(/\/api$/, ''),
         NEXTAUTH_URL: config.baseURL,
         PORT: '3000',
+        // The middleware verifies the session cookie with JWT_SECRET and fails
+        // closed when it is unset, redirecting every protected route to /login.
+        // It must be the secret the backend signs with, so default it to the
+        // backend's AUTH_JWT_SECRET rather than leaving it blank.
+        JWT_SECRET: frontendJwtSecret,
       },
       stdout: 'pipe',
       stderr: 'pipe',

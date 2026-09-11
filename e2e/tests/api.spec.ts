@@ -1,4 +1,12 @@
 import { test, expect, request } from '@playwright/test';
+import {
+  ROLE_CREDENTIALS,
+  apiContextOptions,
+  authFailureReason,
+  isAuthenticated,
+  resolveApiUrl,
+} from '../shared/auth-state';
+import { loginApiWithRetry } from '../shared/api-login';
 
 /**
  * API E2E Tests
@@ -6,47 +14,16 @@ import { test, expect, request } from '@playwright/test';
  * Direct API validation without UI layer
  */
 
-const getApiUrl = () => {
-  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
-    return process.env.STAGING_API_URL;
-  }
-  if (process.env.E2E_API_URL) {
-    return process.env.E2E_API_URL.replace(/\/api$/, '');
-  }
-  return 'http://localhost:3001';
-};
-
-const API_URL = getApiUrl();
+const API_URL = resolveApiUrl();
 
 test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   let apiContext: any;
 
   test.beforeAll(async ({ playwright }) => {
-    // Create a single context — Playwright manages cookies automatically.
-    // After login, the Set-Cookie header from the server is stored internally
-    // and sent with all subsequent requests (no manual Cookie header needed).
-    apiContext = await playwright.request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'OMS-E2E-Tests/1.0.0'
-      },
-      ignoreHTTPSErrors: true,
-    });
-
-    const loginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
-      }
-    });
-
-    if (!loginResponse.ok()) {
-      console.log('Login failed. Status:', loginResponse.status());
-      console.log('Response text:', await loginResponse.text());
-    }
-
-    expect(loginResponse.ok()).toBeTruthy();
+    // Reuse the admin session established once in globalSetup. This hook runs
+    // per worker and again on every retry, so logging in here would multiply
+    // login requests and trip the throttle on /auth/email/login.
+    apiContext = await playwright.request.newContext(apiContextOptions('admin'));
   });
 
   test.afterAll(async () => {
@@ -67,27 +44,28 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   });
 
   test('should handle authentication correctly @critical @api', async () => {
-    // Test successful login
-    const validLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-        password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!'
-      }
-    });
+    // This is deliberately the one spec that still exercises the login route
+    // end to end; everywhere else reuses the session from globalSetup.
+    const validLoginResponse = await loginApiWithRetry(
+      apiContext,
+      API_URL,
+      ROLE_CREDENTIALS.admin.email,
+      ROLE_CREDENTIALS.admin.password,
+    );
 
     expect(validLoginResponse.ok()).toBeTruthy();
     const loginData = await validLoginResponse.json();
     expect(loginData).toHaveProperty('token');
     expect(loginData).toHaveProperty('user');
-    expect(loginData.user.email).toBe(process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com');
+    expect(loginData.user.email).toBe(ROLE_CREDENTIALS.admin.email);
 
     // Test invalid credentials
-    const invalidLoginResponse = await apiContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: 'invalid@test.com',
-        password: 'wrongpassword'
-      }
-    });
+    const invalidLoginResponse = await loginApiWithRetry(
+      apiContext,
+      API_URL,
+      'invalid@test.com',
+      'wrongpassword',
+    );
 
     expect(invalidLoginResponse.status()).toBe(422);
   });
@@ -848,30 +826,10 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
   });
 
   test('should enforce role-based access control @security @api', async () => {
-    // Create a fresh context for fitter — let Playwright manage cookies automatically
-    const fitterContext = await request.newContext({
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'OMS-E2E-Tests/1.0.0'
-      },
-      ignoreHTTPSErrors: true,
-    });
+    test.skip(!isAuthenticated('fitter'), authFailureReason('fitter'));
 
-    // Login as fitter user — Playwright stores the Set-Cookie automatically
-    const fitterLoginResponse = await fitterContext.post(`${API_URL}/api/v1/auth/email/login`, {
-      data: {
-        email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
-        password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!'
-      }
-    });
-
-    if (!fitterLoginResponse.ok()) {
-      console.log('Fitter login failed. Status:', fitterLoginResponse.status());
-      console.log('Response text:', await fitterLoginResponse.text());
-    }
-
-    expect(fitterLoginResponse.ok()).toBeTruthy();
+    // Reuse the fitter session from globalSetup rather than logging in again.
+    const fitterContext = await request.newContext(apiContextOptions('fitter'));
 
     // Fitter should not access admin-only endpoints (500 also acceptable — internal error in staging)
     const adminResponse = await fitterContext.get(`${API_URL}/api/v1/users`);

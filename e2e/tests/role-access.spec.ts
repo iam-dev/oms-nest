@@ -1,4 +1,10 @@
 import { test, expect, request, APIRequestContext } from '@playwright/test';
+import {
+  ROLES,
+  apiContextOptions,
+  isAuthenticated,
+  resolveApiUrl,
+} from '../shared/auth-state';
 
 /**
  * Role-Based Access Control E2E Tests
@@ -9,41 +15,7 @@ import { test, expect, request, APIRequestContext } from '@playwright/test';
  * Tags: @security @api @readonly
  */
 
-const getApiUrl = () => {
-  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
-    return process.env.STAGING_API_URL;
-  }
-  if (process.env.E2E_API_URL) {
-    return process.env.E2E_API_URL.replace(/\/api$/, '');
-  }
-  return 'http://localhost:3001';
-};
-
-const API_URL = getApiUrl();
-
-/** Credentials for each role (matching backend seed data) */
-const ROLE_CREDENTIALS: Record<string, { email: string; password: string }> = {
-  admin: {
-    email: process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-    password: process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
-  },
-  supervisor: {
-    email: process.env.TEST_SUPERVISOR_EMAIL || 'supervisor@omsaddle.com',
-    password: process.env.TEST_SUPERVISOR_PASSWORD || 'SupervisorPass123!',
-  },
-  fitter: {
-    email: process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
-    password: process.env.TEST_FITTER_PASSWORD || 'FitterPass123!',
-  },
-  factory: {
-    email: process.env.TEST_FACTORY_EMAIL || 'factory-test@omsaddle.com',
-    password: process.env.TEST_FACTORY_PASSWORD || 'FactoryPass123!',
-  },
-  user: {
-    email: process.env.TEST_USER_EMAIL || 'testuser',
-    password: process.env.TEST_USER_PASSWORD || 'TestUser123!',
-  },
-};
+const API_URL = resolveApiUrl();
 
 /**
  * Endpoint access matrix.
@@ -152,50 +124,24 @@ test.describe('Role-Based Access Control @security @api @readonly', () => {
   const loginFailures: string[] = [];
 
   test.beforeAll(async ({ playwright }) => {
-    // Login sequentially for all roles to avoid throttle (5 req/60s on login endpoint).
-    // Each role gets its own context — Playwright manages cookies automatically
-    // after the login POST receives a Set-Cookie response.
-    for (const [role, creds] of Object.entries(ROLE_CREDENTIALS)) {
-      const ctx = await playwright.request.newContext({
-        extraHTTPHeaders: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'OMS-E2E-Tests/1.0.0',
-        },
-        ignoreHTTPSErrors: true,
-      });
-
-      try {
-        const loginResponse = await ctx.post(
-          `${API_URL}/api/v1/auth/email/login`,
-          { data: { email: creds.email, password: creds.password } },
-        );
-
-        if (!loginResponse.ok()) {
-          const body = await loginResponse.text().catch(() => '(no body)');
-          console.log(`Login failed for ${role} (${creds.email}): ${loginResponse.status()} - ${body.slice(0, 200)}`);
-          loginFailures.push(role);
-          await ctx.dispose();
-          continue;
-        }
-
-        // Playwright automatically stores the Set-Cookie from the login response.
-        // Subsequent requests via this context will include Cookie: token=xxx.
-        contexts[role] = ctx;
-        loggedInRoles.add(role);
-      } catch (err) {
-        console.log(`Login error for ${role}: ${err}`);
+    // Sessions were established once in globalSetup. This file alone holds 111
+    // tests, and with fullyParallel + retries this hook runs many times per
+    // run — logging in here for all 5 roles is what used to exhaust the
+    // hourly window on /auth/email/login.
+    for (const role of ROLES) {
+      if (!isAuthenticated(role)) {
         loginFailures.push(role);
-        await ctx.dispose();
+        continue;
       }
-
-      // Small delay between logins to avoid throttling
-      await new Promise((r) => setTimeout(r, 1500));
+      contexts[role] = await playwright.request.newContext(
+        apiContextOptions(role),
+      );
+      loggedInRoles.add(role);
     }
 
     console.log(`Logged in roles: ${[...loggedInRoles].join(', ')}`);
     if (loginFailures.length > 0) {
-      console.log(`Failed logins: ${loginFailures.join(', ')} (tests for these roles will be skipped)`);
+      console.log(`Unavailable roles: ${loginFailures.join(', ')} (tests for these roles will be skipped)`);
     }
   });
 

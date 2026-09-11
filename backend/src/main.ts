@@ -17,6 +17,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { ResolvePromisesInterceptor } from "./utils/serializer.interceptor";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { configureTrustProxy } from "./common/configure-trust-proxy";
 
 async function bootstrap() {
   const debugLog = process.env.DEBUG_LOG === "true";
@@ -44,6 +45,9 @@ async function bootstrap() {
       ],
     },
   });
+  // Must run before any IP-sensitive middleware/guard (ThrottlerGuard) so that
+  // req.ip is the real client rather than the ingress controller pod.
+  configureTrustProxy(app);
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);
 

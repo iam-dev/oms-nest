@@ -1,5 +1,10 @@
 import { test, expect, request } from '@playwright/test';
-import { loginApiWithRetry } from '../shared/api-login';
+import {
+  apiContextOptions,
+  authFailureReason,
+  isAuthenticated,
+  resolveApiUrl,
+} from '../shared/auth-state';
 
 /**
  * Saddle Stock API E2E Tests
@@ -7,60 +12,25 @@ import { loginApiWithRetry } from '../shared/api-login';
  * Validates paginated response format
  */
 
-const getApiUrl = () => {
-  if (process.env.STAGING_API_URL && process.env.ENVIRONMENT === 'staging') {
-    return process.env.STAGING_API_URL;
-  }
-  if (process.env.E2E_API_URL) {
-    return process.env.E2E_API_URL.replace(/\/api$/, '');
-  }
-  return 'http://localhost:3001';
-};
-
-const API_URL = getApiUrl();
+const API_URL = resolveApiUrl();
 
 test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   let adminContext: any;
   let fitterContext: any;
 
   test.beforeAll(async ({ playwright }) => {
-    // Create separate contexts per role — Playwright manages cookies automatically
-    // after each login POST receives a Set-Cookie response.
-    const defaultHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'User-Agent': 'OMS-E2E-Tests/1.0.0'
-    };
-
-    // Admin context + login
-    adminContext = await playwright.request.newContext({
-      extraHTTPHeaders: defaultHeaders,
-      ignoreHTTPSErrors: true,
-    });
-
-    const adminLoginResponse = await loginApiWithRetry(
-      adminContext,
-      API_URL,
-      process.env.TEST_ADMIN_EMAIL || 'admin@omsaddle.com',
-      process.env.TEST_ADMIN_PASSWORD || 'AdminPass123!',
+    // Sessions come from globalSetup — this hook runs once per worker and
+    // again on every retry, so logging in here would burn through the
+    // throttle on /auth/email/login.
+    adminContext = await playwright.request.newContext(
+      apiContextOptions('admin'),
     );
 
-    expect(adminLoginResponse.ok()).toBeTruthy();
-
-    // Fitter context + login
-    fitterContext = await playwright.request.newContext({
-      extraHTTPHeaders: defaultHeaders,
-      ignoreHTTPSErrors: true,
-    });
-
-    const fitterLoginResponse = await loginApiWithRetry(
-      fitterContext,
-      API_URL,
-      process.env.TEST_FITTER_EMAIL || 'sarah.thompson@fitters.com',
-      process.env.TEST_FITTER_PASSWORD || 'FitterPass123!',
-    );
-
-    expect(fitterLoginResponse.ok()).toBeTruthy();
+    if (isAuthenticated('fitter')) {
+      fitterContext = await playwright.request.newContext(
+        apiContextOptions('fitter'),
+      );
+    }
   });
 
   test.afterAll(async () => {
@@ -132,6 +102,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   // ==================== Fitter Access (type=my) ====================
 
   test('should return fitter own stock @fitter @api', async () => {
+    test.skip(!isAuthenticated('fitter'), authFailureReason('fitter'));
     const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock?type=my&page=1&limit=10`);
     const status = response.status();
 
@@ -155,6 +126,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   });
 
   test('should return available stock for fitter @fitter @api', async () => {
+    test.skip(!isAuthenticated('fitter'), authFailureReason('fitter'));
     const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock?type=available&page=1&limit=10`);
     const status = response.status();
 
@@ -179,6 +151,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   // ==================== Access Control ====================
 
   test('should restrict type=all for fitters @security @api', async () => {
+    test.skip(!isAuthenticated('fitter'), authFailureReason('fitter'));
     const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock?type=all&page=1&limit=10`);
 
     // Fitters should not be able to access type=all (admin/supervisor only)
@@ -223,6 +196,7 @@ test.describe('Saddle Stock API @api @saddle-stock @smoke @readonly', () => {
   // ==================== Default Parameters ====================
 
   test('should use default type=my when no type specified @api', async () => {
+    test.skip(!isAuthenticated('fitter'), authFailureReason('fitter'));
     const response = await fitterContext.get(`${API_URL}/api/v1/saddle-stock`);
     const status = response.status();
 

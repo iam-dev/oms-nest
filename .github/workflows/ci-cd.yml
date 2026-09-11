@@ -467,6 +467,12 @@ jobs:
           NEXTAUTH_URL: http://localhost:3000
           NODE_ENV: test
           PORT: 3000
+          # The middleware verifies the httpOnly `token` cookie with JWT_SECRET
+          # and fails closed when it is unset, bouncing every protected route to
+          # /login even for a valid session. It must match the secret the
+          # backend signs with (AUTH_JWT_SECRET above). Staging wires this the
+          # same way in kubernetes/staging-v2/frontend-deployment.yaml.
+          JWT_SECRET: ci-test-jwt-secret
 
       - name: 🔍 Verify services are running
         run: |

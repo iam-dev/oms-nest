@@ -9,10 +9,13 @@ interface ApiLoginOptions {
  * POST /api/v1/auth/email/login with retry-on-429 (Too Many Requests).
  *
  * Staging applies a ThrottlerGuard to the login endpoint (5/sec, 20/min,
- * 60/hour). With Playwright's fullyParallel mode the suite easily bursts
- * past the per-second window, so the first hit may be 429 even with valid
- * credentials. Back off and retry; everything else (200, 401, 422, …) is
- * returned to the caller as-is.
+ * 60/hour). Backing off only helps against the per-second window — nothing
+ * here can wait out the hourly one — so this is a guard against bursts, not
+ * a licence to log in freely. Keeping the suite's total login count low is
+ * what actually keeps it under the limit; see shared/auth-state.ts.
+ *
+ * Everything other than 429 (200, 401, 422, …) is returned to the caller
+ * as-is.
  */
 export async function loginApiWithRetry(
   context: APIRequestContext,
