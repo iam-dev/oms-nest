@@ -285,33 +285,37 @@ export default function Orders() {
         setIsEditOpen(false);
         setOrderDataError(null);
       }}>
-        {selectedOrder ? (
-          useComprehensiveEdit ? (
-            <ComprehensiveEditOrder
-              order={{
-                id: String(selectedOrder.id),
-                orderId: Number(selectedOrder.orderId || selectedOrder.id)
-              }}
-              onClose={handleCloseEdit}
-            />
+        {/* Mount the editor only while open: Radix keeps non-Content children
+            mounted on close, which would preserve unsaved wizard edits after Cancel. */}
+        {isEditOpen && (
+          selectedOrder ? (
+            useComprehensiveEdit ? (
+              <ComprehensiveEditOrder
+                order={{
+                  id: String(selectedOrder.id),
+                  orderId: Number(selectedOrder.orderId || selectedOrder.id)
+                }}
+                onClose={handleCloseEdit}
+              />
+            ) : (
+              <EditOrder
+                order={{
+                  id: String(selectedOrder.id),
+                  orderId: Number(selectedOrder.orderId || selectedOrder.id)
+                }}
+                isLoading={isLoadingOrderData}
+                error={orderDataError}
+                onClose={handleCloseEdit}
+              />
+            )
           ) : (
             <EditOrder
-              order={{
-                id: String(selectedOrder.id),
-                orderId: Number(selectedOrder.orderId || selectedOrder.id)
-              }}
-              isLoading={isLoadingOrderData}
-              error={orderDataError}
+              order={undefined}
+              isLoading={false}
+              error={null}
               onClose={handleCloseEdit}
             />
           )
-        ) : (
-          <EditOrder
-            order={undefined}
-            isLoading={false}
-            error={null}
-            onClose={handleCloseEdit}
-          />
         )}
       </Dialog>
     </div>

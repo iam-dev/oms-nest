@@ -1143,7 +1143,7 @@ export default function Reports() {
 
       {/* Edit order dialog */}
       <Dialog open={isEditOpen} onOpenChange={() => setIsEditOpen(false)}>
-        {selectedOrder && (
+        {isEditOpen && selectedOrder && (
           <ComprehensiveEditOrder
             order={{
               id: String(selectedOrder.id),
