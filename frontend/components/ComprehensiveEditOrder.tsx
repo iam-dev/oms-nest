@@ -286,7 +286,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         });
         if (res.ok) {
           const data = await res.json();
-          setCustomerSearchResults(data['hydra:member'] || []);
+          // GET /api/v1/customers returns the paginated NestJS shape { data, total, pages }.
+          // This raw fetch bypasses fetchEntities' Hydra normalisation, so read `data` directly.
+          setCustomerSearchResults(data.data || data['hydra:member'] || []);
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;

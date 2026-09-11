@@ -1007,6 +1007,75 @@ describe('ComprehensiveEditOrder component', () => {
 
       expect(screen.getByText('Your order reference')).toBeInTheDocument();
     });
+
+    it('populates customer search results from the paginated { data } response', async () => {
+      await renderAndWaitForLoad();
+      await navigateToStep(2);
+
+      // Backend GET /api/v1/customers returns { data, total, pages } (not Hydra).
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/api/v1/customers?search=')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                data: [{ id: 42, name: 'Jane Smith', email: 'jane@example.com' }],
+                total: 1,
+                pages: 1,
+              }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockEditOptions) });
+      });
+
+      const searchInput = screen.getByPlaceholderText('Type customer name or email...');
+      await act(async () => {
+        fireEvent.change(searchInput, { target: { value: 'Jane' } });
+      });
+
+      // Debounced 300 ms, so wait for the result row to render.
+      await waitFor(() => expect(screen.getByText('Jane Smith')).toBeInTheDocument());
+      expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/customers?search=Jane'),
+        expect.anything()
+      );
+    });
+
+    it('selects a customer from the search results and fills the customer fields', async () => {
+      await renderAndWaitForLoad();
+      await navigateToStep(2);
+
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/api/v1/customers?search=')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                data: [{ id: 42, name: 'Jane Smith', email: 'jane@example.com', city: 'Austin' }],
+                total: 1,
+                pages: 1,
+              }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockEditOptions) });
+      });
+
+      const searchInput = screen.getByPlaceholderText('Type customer name or email...');
+      await act(async () => {
+        fireEvent.change(searchInput, { target: { value: 'Jane' } });
+      });
+      const resultRow = await screen.findByText('Jane Smith');
+
+      await act(async () => {
+        fireEvent.click(resultRow);
+      });
+
+      // Result list collapses and the selected customer's details populate the form.
+      expect(screen.queryByText('jane@example.com')).not.toBeInTheDocument();
+      expect(screen.getByDisplayValue('Austin')).toBeInTheDocument();
+      expect(screen.getAllByDisplayValue('Jane Smith').length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   // =========================================================================
