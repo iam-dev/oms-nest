@@ -337,12 +337,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     };
   }, [fitterSearchTerm]);
 
-  const handleSubmit = async () => {
-    if (currentStep < 4) {
-      setCurrentStep(currentStep + 1);
-      return;
-    }
-
+  // Persist the current form values.  Shared by the final-step submit button and
+  // by "Save as Draft", which must work from any step without advancing the wizard.
+  const saveOrder = async () => {
     setSaving(true);
     try {
       // Build saddle options array from current selections merged with original specs
@@ -455,6 +452,14 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    if (currentStep < 4) {
+      setCurrentStep(currentStep + 1);
+      return;
+    }
+    await saveOrder();
   };
 
   const handleBack = () => {
@@ -1399,7 +1404,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
           {currentStep === 1 ? 'Cancel' : 'Previous Step'}
         </Button>
         <div className="space-x-2">
-          <Button variant="outline" disabled={saving}>
+          <Button variant="outline" onClick={saveOrder} disabled={saving}>
             Save as Draft
           </Button>
           <Button
