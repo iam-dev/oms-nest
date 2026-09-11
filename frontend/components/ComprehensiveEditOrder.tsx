@@ -131,6 +131,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Form state - order overview
   const [orderReference, setOrderReference] = useState('');
   const [orderStatus, setOrderStatus] = useState('');
+  // The status this form loaded with. Sent back as `expectedStatus` so the server
+  // can reject the save if someone else moved the order on in the meantime.
+  const [loadedStatus, setLoadedStatus] = useState('');
   const [statusChanging, setStatusChanging] = useState(false);
   const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
 
@@ -240,6 +243,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       // Order overview
       setOrderReference(isDuplicate ? '' : (detail.fitterReference || ''));
       setOrderStatus(isDuplicate ? 'Unordered' : (detail.orderStatus || ''));
+      setLoadedStatus(isDuplicate ? 'Unordered' : (detail.orderStatus || ''));
       setSpecialNotes(detail.specialNotes || '');
 
       // Reset certain fields for duplicate
@@ -369,6 +373,14 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         }
       }
 
+      // Only submit order_status when the user actually touched the status control.
+      // The form snapshots the status when it opens, so resubmitting it on every save
+      // used to silently revert a status another user had changed in the meantime.
+      const isDraftUpdate = isDuplicate && !!draftOrderId;
+      const statusDirty = orderStatus !== loadedStatus;
+      // A brand-new duplicate needs its status; a draft already exists as Unordered.
+      const submitStatus = isDuplicate ? !isDraftUpdate : statusDirty;
+
       const payload: UpdateOrderPayload = {
         fitterId: fitterId ? parseInt(fitterId, 10) : undefined,
         saddleId: saddleId ? parseInt(saddleId, 10) : undefined,
@@ -398,7 +410,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         shipCountry: shipCountry || undefined,
         // Order overview
         orderReference: orderReference || undefined,
-        orderStatus: orderStatus || undefined,
+        orderStatus: submitStatus ? orderStatus || undefined : undefined,
+        expectedStatus:
+          !isDuplicate && statusDirty ? loadedStatus || undefined : undefined,
         // Pricing (as floats - server converts to cents)
         priceSaddle: parseFloat(priceSaddle) || 0,
         priceTradein: parseFloat(priceTradein) || 0,
@@ -425,9 +439,19 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       }
       onClose();
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to save order';
       logger.error('Error saving order:', error);
-      toast.error(msg);
+      // Match on name rather than instanceof: the error can cross module boundaries
+      // (bundling, test mocks) where the class identity no longer matches.
+      if (error instanceof Error && error.name === 'OrderStatusConflictError') {
+        // Someone else moved this order on while the form was open. Don't clobber
+        // their change — tell the user to reload and reapply.
+        toast.error(
+          `Order status was changed by someone else while you were editing. ` +
+            `Your changes were not saved. Reload the order and try again.`,
+        );
+      } else {
+        toast.error(error instanceof Error ? error.message : 'Failed to save order');
+      }
     } finally {
       setSaving(false);
     }
@@ -458,6 +482,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         const body = await response.text().catch(() => '');
         throw new Error(`Failed to update status (${response.status}): ${body || response.statusText}`);
       }
+      // The dedicated endpoint already persisted this, so a later save must not
+      // treat it as a pending change.
+      setLoadedStatus(orderStatus);
       toast.success(`Order status changed to "${orderStatus}"`);
     } catch (err) {
       logger.error('Failed to change order status:', err);

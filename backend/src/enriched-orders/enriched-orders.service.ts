@@ -1,4 +1,10 @@
-import { Injectable, Inject, Logger, ForbiddenException } from "@nestjs/common";
+import {
+  Injectable,
+  Inject,
+  Logger,
+  ConflictException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
@@ -123,6 +129,9 @@ export interface UpdateOrderDto {
   // Order reference & status
   orderReference?: string;
   orderStatus?: string;
+  // Optimistic-concurrency precondition: the status the caller believes the order
+  // is currently in.  Required whenever orderStatus would change the status.
+  expectedStatus?: string;
   // Pricing (in dollars, converted to cents server-side)
   priceSaddle?: number;
   priceTradein?: number;
@@ -1883,17 +1892,45 @@ export class EnrichedOrdersService {
         );
       }
 
-      // Resolve status name to integer ID if provided
+      const resolveStatusId = async (name: string): Promise<number> => {
+        const rows = await queryRunner.query(
+          `SELECT id FROM statuses WHERE name = $1`,
+          [name],
+        );
+        if (!rows || rows.length === 0) {
+          throw new Error(`Unknown status: ${name}`);
+        }
+        return rows[0].id;
+      };
+
+      // Resolve status name to integer ID if provided.
+      //
+      // The Edit Order form snapshots order_status when it opens and resubmits that
+      // snapshot on every save, so a save that only touched an unrelated field used
+      // to silently revert a status another user had changed in the meantime.  Guard
+      // the write behind an explicit precondition: the caller must state the status
+      // it believes the order is in, and that belief must still hold.
       let statusId: number | undefined;
       if (dto.orderStatus) {
-        const statusResult = await queryRunner.query(
-          `SELECT id FROM statuses WHERE name = $1`,
-          [dto.orderStatus],
-        );
-        if (!statusResult || statusResult.length === 0) {
-          throw new Error(`Unknown status: ${dto.orderStatus}`);
+        statusId = await resolveStatusId(dto.orderStatus);
+
+        if (statusId !== oldStatusId) {
+          if (!dto.expectedStatus) {
+            throw new ConflictException(
+              `Refusing to change the status of order ${orderId} without an ` +
+                `expectedStatus precondition. Use PATCH ` +
+                `/enriched_orders/update-status/${orderId} to change status directly.`,
+            );
+          }
+          const expectedStatusId = await resolveStatusId(dto.expectedStatus);
+          if (expectedStatusId !== oldStatusId) {
+            throw new ConflictException(
+              `Order ${orderId} is no longer in status '${dto.expectedStatus}'; ` +
+                `someone else changed it while this edit was open. ` +
+                `Reload the order and reapply your changes.`,
+            );
+          }
         }
-        statusId = statusResult[0].id;
       }
 
       // Convert dollar prices to cents
@@ -1994,10 +2031,33 @@ export class EnrichedOrdersService {
       // Always update changed timestamp
       setClauses.push(`changed = EXTRACT(EPOCH FROM NOW())::integer`);
 
+      const statusChanging = statusId !== undefined && statusId !== oldStatusId;
+
       if (setClauses.length > 0) {
-        const updateSql = `UPDATE orders SET ${setClauses.join(", ")} WHERE id = $${paramIdx}`;
         setParams.push(orderId);
-        await queryRunner.query(updateSql, setParams);
+        let updateSql = `UPDATE orders SET ${setClauses.join(", ")} WHERE id = $${paramIdx}`;
+        paramIdx++;
+
+        if (statusChanging) {
+          // Compare-and-swap: if another transaction moved the order to a different
+          // status between the SELECT above and this UPDATE, match no row and bail
+          // out rather than clobbering their change.
+          // IS NOT DISTINCT FROM rather than =, so legacy rows with a NULL
+          // order_status still compare correctly instead of never matching.
+          setParams.push(oldStatusId);
+          updateSql += ` AND order_status IS NOT DISTINCT FROM $${paramIdx}`;
+          paramIdx++;
+        }
+
+        updateSql += ` RETURNING id`;
+        const updated = await queryRunner.query(updateSql, setParams);
+
+        if (statusChanging && (!updated || updated.length === 0)) {
+          throw new ConflictException(
+            `Order ${orderId} status changed while this edit was being saved. ` +
+              `Reload the order and reapply your changes.`,
+          );
+        }
       }
 
       // Replace saddle options (orders_info) if provided

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { ForbiddenException } from "@nestjs/common";
+import { ConflictException, ForbiddenException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
@@ -323,6 +323,128 @@ describe("EnrichedOrdersService", () => {
       const result = await service.getFitterIdByUserId(42);
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe("updateOrder - concurrent status overwrite (P2 / issue 9)", () => {
+    // Regression: the Edit Order form loads order_status into local state when it
+    // opens and resubmits that snapshot on every save.  If another user changed the
+    // status in the meantime, the stale save silently reverted it -- producing the
+    // pair of audit-log lines seen on order 46550 ("Changed the order status to
+    // 'In Production P2'" immediately followed by "Order updated. Status changed to
+    // 'Inventory Aiken'.").  updateOrder must never write order_status without a
+    // matching expectedStatus precondition.
+
+    const setClauseFor = (): string => {
+      const call = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+      );
+      return call ? (call[0] as string) : "";
+    };
+
+    it("should leave order_status untouched when the caller omits orderStatus", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 4, fitter_id: 10 }]) // existing order
+        .mockResolvedValueOnce([{ id: 46550 }]) // UPDATE orders ... RETURNING id
+        .mockResolvedValueOnce(undefined); // audit log INSERT
+
+      const result = await service.updateOrder(46550, {
+        customerCity: "Aiken",
+      });
+
+      expect(result).toEqual({ success: true, orderId: 46550 });
+      expect(setClauseFor()).not.toContain("order_status");
+    });
+
+    it("should throw ConflictException when the submitted status is stale", async () => {
+      // Order is now 'In Production P2' (id 6); the stale form still believes
+      // it is 'Inventory Aiken' (id 4) and tries to write that back.
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 6, fitter_id: 10 }]) // current status = 6
+        .mockResolvedValueOnce([{ id: 4 }]) // resolve dto.orderStatus -> 4
+        .mockResolvedValueOnce([{ id: 4 }]); // resolve dto.expectedStatus -> 4
+
+      await expect(
+        service.updateOrder(46550, {
+          orderStatus: "Inventory Aiken",
+          expectedStatus: "Inventory Aiken",
+          customerCity: "Aiken",
+        }),
+      ).rejects.toThrow(ConflictException);
+
+      expect(setClauseFor()).toBe("");
+    });
+
+    it("should reject a status change when expectedStatus is absent", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 6, fitter_id: 10 }]) // current status = 6
+        .mockResolvedValueOnce([{ id: 4 }]); // resolve dto.orderStatus -> 4
+
+      await expect(
+        service.updateOrder(46550, { orderStatus: "Inventory Aiken" }),
+      ).rejects.toThrow(ConflictException);
+
+      expect(setClauseFor()).toBe("");
+    });
+
+    it("should apply the status change when expectedStatus matches current status", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 4, fitter_id: 10 }]) // current status = 4
+        .mockResolvedValueOnce([{ id: 6 }]) // resolve dto.orderStatus -> 6
+        .mockResolvedValueOnce([{ id: 4 }]) // resolve dto.expectedStatus -> 4
+        .mockResolvedValueOnce([{ id: 46550 }]) // UPDATE orders ... RETURNING id
+        .mockResolvedValueOnce(undefined); // audit log INSERT
+
+      const result = await service.updateOrder(46550, {
+        orderStatus: "In Production P2",
+        expectedStatus: "Inventory Aiken",
+      });
+
+      expect(result).toEqual({ success: true, orderId: 46550 });
+      expect(setClauseFor()).toContain("order_status");
+    });
+
+    it("should throw ConflictException when the compare-and-swap UPDATE matches no row", async () => {
+      // Status changed between the SELECT and the UPDATE inside the transaction.
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 4, fitter_id: 10 }]) // current status = 4
+        .mockResolvedValueOnce([{ id: 6 }]) // resolve dto.orderStatus -> 6
+        .mockResolvedValueOnce([{ id: 4 }]) // resolve dto.expectedStatus -> 4
+        .mockResolvedValueOnce([]); // UPDATE matched no row
+
+      await expect(
+        service.updateOrder(46550, {
+          orderStatus: "In Production P2",
+          expectedStatus: "Inventory Aiken",
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it("should not log a status change when the submitted status equals the current one", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 4, fitter_id: 10 }]) // current status = 4
+        .mockResolvedValueOnce([{ id: 4 }]) // resolve dto.orderStatus -> 4
+        .mockResolvedValueOnce([{ id: 46550 }]) // UPDATE orders ... RETURNING id
+        .mockResolvedValueOnce(undefined); // audit log INSERT
+
+      await service.updateOrder(46550, {
+        orderStatus: "Inventory Aiken",
+        customerCity: "Aiken",
+      });
+
+      const logCall = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("INSERT INTO log"),
+      );
+      expect(logCall).toBeDefined();
+      expect(logCall[1][2]).toBe("Order updated.");
     });
   });
 });

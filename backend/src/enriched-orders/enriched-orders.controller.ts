@@ -13,6 +13,7 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
+  ConflictException,
   ForbiddenException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
@@ -351,7 +352,8 @@ export class EnrichedOrdersController {
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof ForbiddenException
+        error instanceof ForbiddenException ||
+        error instanceof ConflictException
       ) {
         throw error;
       }
