@@ -285,6 +285,12 @@ export interface UpdateOrderPayload {
   shipCountry?: string;
   orderReference?: string;
   orderStatus?: string;
+  /**
+   * Optimistic-concurrency precondition sent alongside `orderStatus`: the status the
+   * order was in when the edit form loaded. The server rejects the update with 409
+   * if the order has since moved to a different status.
+   */
+  expectedStatus?: string;
   priceSaddle?: number;
   priceTradein?: number;
   priceDeposit?: number;
@@ -372,6 +378,17 @@ export async function bulkCreateDraftOrders(
   return response.json();
 }
 
+/**
+ * Thrown when the server rejects an update because the order's status moved on
+ * while the edit form was open (HTTP 409).
+ */
+export class OrderStatusConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrderStatusConflictError';
+  }
+}
+
 export async function updateOrder(
   orderId: number,
   payload: UpdateOrderPayload,
@@ -390,6 +407,11 @@ export async function updateOrder(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    if (response.status === 409) {
+      throw new OrderStatusConflictError(
+        errorData.message || 'This order was changed by someone else.',
+      );
+    }
     throw new Error(errorData.message || `Failed to update order: ${response.status}`);
   }
 

@@ -722,6 +722,33 @@ describe('ComprehensiveEditOrder component', () => {
       expect(toast.error).toHaveBeenCalledWith('Server rejected the payload');
     });
 
+    it('does not resubmit an untouched status, and shows a reload prompt on 409', async () => {
+      // Regression (P2 / issue 9): the form used to resubmit the status it loaded
+      // with on every save, silently reverting a status another user had changed.
+      const conflict = new Error(
+        "Order 46550 is no longer in status 'Inventory Aiken'"
+      );
+      conflict.name = 'OrderStatusConflictError';
+      (updateOrder as jest.Mock).mockRejectedValue(conflict);
+
+      await renderAndWaitForLoad({ isDuplicate: false });
+      await navigateToStep(4);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /update order/i }));
+      });
+
+      // The status control was never touched, so no status is sent at all.
+      const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(payload.orderStatus).toBeUndefined();
+      expect(payload.expectedStatus).toBeUndefined();
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('changed by someone else')
+      );
+    });
+
     it('shows toast.error with generic message when updateOrder rejects with a non-Error value', async () => {
       (updateOrder as jest.Mock).mockRejectedValue('unexpected string');
 
