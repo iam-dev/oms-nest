@@ -339,7 +339,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
   // Persist the current form values.  Shared by the final-step submit button and
   // by "Save as Draft", which must work from any step without advancing the wizard.
-  const saveOrder = async () => {
+  // "Save as Draft" keeps the dialog open (closeAfterSave = false) so the user can
+  // carry on editing; the final-step submit closes it.
+  const saveOrder = async ({ closeAfterSave = true }: { closeAfterSave?: boolean } = {}) => {
     setSaving(true);
     try {
       // Build saddle options array from current selections merged with original specs
@@ -434,7 +436,17 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         await updateOrder(orderId, payload);
         toast.success(`Order #${orderId} updated successfully`);
       }
-      onClose();
+      // A brand-new duplicate has no id to keep editing against, so it always closes;
+      // otherwise honour the caller's choice.
+      if (closeAfterSave || (isDuplicate && !draftOrderId)) {
+        onClose();
+        return;
+      }
+      // Staying open: the status just saved is now the server's status, so refresh the
+      // conflict-detection snapshot or the next save would send a stale expectedStatus.
+      if (submitStatus && orderStatus) {
+        setLoadedStatus(orderStatus);
+      }
     } catch (error) {
       logger.error('Error saving order:', error);
       // Match on name rather than instanceof: the error can cross module boundaries
@@ -1404,7 +1416,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
           {currentStep === 1 ? 'Cancel' : 'Previous Step'}
         </Button>
         <div className="space-x-2">
-          <Button variant="outline" onClick={saveOrder} disabled={saving}>
+          <Button variant="outline" onClick={() => saveOrder({ closeAfterSave: false })} disabled={saving}>
             Save as Draft
           </Button>
           <Button
