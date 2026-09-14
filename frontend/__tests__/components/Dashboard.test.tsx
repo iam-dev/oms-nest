@@ -127,11 +127,21 @@ jest.mock("@/components/EditOrder", () => ({
     order ? <div data-testid="edit-order">Edit Order</div> : null,
 }));
 
-// Mock ComprehensiveEditOrder component
+// Mock ComprehensiveEditOrder component.  The close button lets tests drive the
+// real editor's post-save exit, which is when the host must refresh its table.
 jest.mock("@/components/ComprehensiveEditOrder", () => ({
-  ComprehensiveEditOrder: ({ order }: { order?: unknown }) =>
+  ComprehensiveEditOrder: ({
+    order,
+    onClose,
+  }: {
+    order?: unknown;
+    onClose?: () => void;
+  }) =>
     order ? (
-      <div data-testid="comprehensive-edit-order">Comprehensive Edit</div>
+      <div data-testid="comprehensive-edit-order">
+        Comprehensive Edit
+        <button onClick={() => onClose?.()}>Saved And Close Editor</button>
+      </div>
     ) : null,
 }));
 
@@ -157,8 +167,15 @@ jest.mock("@/services/api", () => ({
 
 // Mock status cards component
 jest.mock("@/components/DashboardOrderStatusFlow", () => {
-  const MockDashboardOrderStatusFlow = ({ onStatusClick }: { onStatusClick: (status: string) => void }) => (
+  const MockDashboardOrderStatusFlow = ({
+    onStatusClick,
+    refreshKey,
+  }: {
+    onStatusClick: (status: string) => void;
+    refreshKey?: number;
+  }) => (
     <div data-testid="status-cards">
+      <div data-testid="status-cards-refresh-key">{refreshKey}</div>
       <button onClick={() => onStatusClick("pending")}>Pending</button>
       <button onClick={() => onStatusClick("approved")}>Approved</button>
       <button onClick={() => onStatusClick("completed")}>Completed</button>
@@ -660,6 +677,55 @@ describe("Dashboard Component", () => {
           screen.getByTestId("comprehensive-edit-order"),
         ).toBeInTheDocument();
       });
+    });
+
+    it("refreshes the orders table after the Edit Order dialog closes", async () => {
+      // Regression: editing an order from the dashboard (e.g. changing its status)
+      // and saving left the table rendering the row fetched before the edit, so the
+      // STATUS column disagreed with the status the editor had just persisted.
+      const user = userEvent.setup();
+      renderWithAuth(<Dashboard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("orders-table")).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders).toHaveBeenCalled();
+      });
+
+      // Read this before opening the editor: the dashboard replaces its whole
+      // body with the editor dialog, so the cards are unmounted while it is open.
+      const refreshKeyBeforeEdit = Number(
+        screen.getByTestId("status-cards-refresh-key").textContent,
+      );
+
+      await user.click(screen.getByText("Edit First Order"));
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("comprehensive-edit-order"),
+        ).toBeInTheDocument();
+      });
+
+      const callsBeforeClose = mockGetEnrichedOrders.mock.calls.length;
+      await user.click(screen.getByText("Saved And Close Editor"));
+
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders.mock.calls.length).toBeGreaterThan(
+          callsBeforeClose,
+        );
+      });
+      // The status cards read the same trigger, so the counts above the table
+      // can't keep showing the buckets the order was in before the edit.
+      expect(
+        Number(screen.getByTestId("status-cards-refresh-key").textContent),
+      ).toBeGreaterThan(refreshKeyBeforeEdit);
+      // Cache-busted, or the backend's 5-minute list cache can hand back the
+      // pre-edit page and the table stays stale anyway.
+      const lastCall =
+        mockGetEnrichedOrders.mock.calls[
+          mockGetEnrichedOrders.mock.calls.length - 1
+        ][0];
+      expect(lastCall.bustCache).toBe(true);
     });
 
     it("opens order approval modal when approve action is triggered", async () => {

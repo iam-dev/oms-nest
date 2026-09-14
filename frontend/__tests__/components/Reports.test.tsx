@@ -60,6 +60,7 @@ interface MockOrdersTableProps {
   pagination?: { totalItems?: number; itemsPerPage?: number; totalPages?: number };
   loading?: boolean;
   error?: string;
+  onEditOrder?: (order: unknown) => void;
 }
 
 // Mock OrdersTable component
@@ -74,6 +75,7 @@ jest.mock('@/components/shared/OrdersTable', () => ({
     pagination,
     loading,
     error,
+    onEditOrder,
   }: MockOrdersTableProps) => (
     <div data-testid="orders-table">
       <input
@@ -118,11 +120,23 @@ jest.mock('@/components/shared/OrdersTable', () => ({
       <div data-testid="total-pages">
         Pages: {pagination?.totalPages ?? 0}
       </div>
+      <button onClick={() => onEditOrder?.(orders?.[0])}>Edit First Order</button>
       {error && (
         <div data-testid="error-state">
           Error: {error}
         </div>
       )}
+    </div>
+  ),
+}));
+
+// Mock ComprehensiveEditOrder.  The close button lets tests drive the real
+// editor's post-save exit, which is when the host must refresh its table.
+jest.mock('@/components/ComprehensiveEditOrder', () => ({
+  ComprehensiveEditOrder: ({ onClose }: { onClose?: () => void }) => (
+    <div data-testid="comprehensive-edit-order">
+      Comprehensive Edit
+      <button onClick={() => onClose?.()}>Saved And Close Editor</button>
     </div>
   ),
 }));
@@ -441,6 +455,39 @@ describe('Reports Component', () => {
         expect(lastCall.order).toBe('desc');
         expect(lastCall.filters.fitterName).toBeDefined();
       });
+    });
+  });
+
+  describe('Edit Order integration', () => {
+    it('refreshes the orders table after the Edit Order dialog closes', async () => {
+      // Regression: editing an order from Reports (e.g. changing its status) and
+      // saving left the table rendering the row fetched before the edit, so the
+      // STATUS column disagreed with the status Edit Order had just persisted.
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders).toHaveBeenCalled();
+      });
+
+      await user.click(screen.getByText('Edit First Order'));
+      await waitFor(() => {
+        expect(screen.getByTestId('comprehensive-edit-order')).toBeInTheDocument();
+      });
+
+      const callsBeforeClose = mockGetEnrichedOrders.mock.calls.length;
+      await user.click(screen.getByText('Saved And Close Editor'));
+
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders.mock.calls.length).toBeGreaterThan(callsBeforeClose);
+      });
+      // Cache-busted, or the backend's 5-minute list cache can hand back the
+      // pre-edit page and the table stays stale anyway.
+      const lastCall = mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
+      expect(lastCall.bustCache).toBe(true);
     });
   });
 
