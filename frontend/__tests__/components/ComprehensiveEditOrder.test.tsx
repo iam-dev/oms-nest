@@ -731,9 +731,37 @@ describe('ComprehensiveEditOrder component', () => {
       // Untouched status is still never resubmitted.
       expect(payload.orderStatus).toBeUndefined();
       expect(toast.success).toHaveBeenCalledTimes(1);
-      expect(onClose).toHaveBeenCalledTimes(1);
+      // Save as Draft keeps the dialog open so the user can carry on editing.
+      expect(onClose).not.toHaveBeenCalled();
       // Still on step 2 — Save as Draft must not advance the wizard.
       expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();
+    });
+
+    it('keeps the dialog open after changing the customer and saving as draft', async () => {
+      // Regression: edit order > change customer > Save as Draft closed the whole
+      // Edit Order dialog. It must persist and leave the user where they were.
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+      const onClose = jest.fn();
+
+      await renderAndWaitForLoad({ isDuplicate: false, onClose });
+      await navigateToStep(2);
+
+      // Both the search box and the Name field show the loaded customer name;
+      // the Name field is the one after the search box in DOM order.
+      const nameInput = screen.getAllByDisplayValue('John Doe')[1];
+      fireEvent.change(nameInput, { target: { value: 'Jane Roe' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(payload.customerName).toBe('Jane Roe');
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();
+      // The edited value is still on screen for further editing.
+      expect(screen.getByDisplayValue('Jane Roe')).toBeInTheDocument();
     });
 
     it('is disabled while a save is in flight', async () => {
