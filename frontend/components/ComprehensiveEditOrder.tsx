@@ -30,7 +30,7 @@ interface EditFormOptions {
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
   leatherTypes: Array<{ id: number; name: string }>;
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null }>;
-  optionItems: Array<{ id: number; name: string; optionId: number }>;
+  optionItems: Array<{ id: number; name: string; optionId: number; userColor?: number; userLeather?: number }>;
   statuses: Array<{ id: number; name: string }>;
   presets: Array<{ id: number; name: string; sequence: number }>;
   presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
@@ -38,6 +38,20 @@ interface EditFormOptions {
 
 // Leather option IDs - these use leather_types instead of options_items
 const LEATHER_OPTION_IDS = [5, 6, 10, 11, 12, 13, 14, 21, 22];
+
+// Legacy sentinel: orders_info.option_item_id = 0 means "Customized by fitter",
+// with the fitter's free text stored in orders_info.custom.
+const CUSTOMIZED_BY_FITTER_ID = '0';
+const CUSTOMIZED_BY_FITTER_LABEL = 'Customized by fitter';
+
+// Which text boxes an option needs, derived from the selected item the same way
+// the legacy form does it: the sentinel item asks for free text, and items
+// flagged options_items.user_color / user_leather ask for a colour / leather.
+interface SpecInputs {
+  custom: boolean;
+  color: boolean;
+  leather: boolean;
+}
 
 interface ComprehensiveEditOrderProps {
   order?: {
@@ -88,7 +102,10 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
   // Saddle option selections: optionId -> selected value
   const [optionSelections, setOptionSelections] = useState<Record<number, string>>({});
+  // Free-text answers per option, one map per legacy orders_info column
   const [optionCustom, setOptionCustom] = useState<Record<number, string>>({});
+  const [optionColor, setOptionColor] = useState<Record<number, string>>({});
+  const [optionLeather, setOptionLeather] = useState<Record<number, string>>({});
 
   // Form state - pricing
   const [priceSaddle, setPriceSaddle] = useState('0.00');
@@ -188,14 +205,18 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       // Populate saddle option selections
       const selections: Record<number, string> = {};
       const customs: Record<number, string> = {};
+      const colors: Record<number, string> = {};
+      const leathers: Record<number, string> = {};
       for (const spec of detail.saddleSpecs) {
         selections[spec.optionId] = String(spec.optionItemId);
-        if (spec.custom) {
-          customs[spec.optionId] = spec.custom;
-        }
+        customs[spec.optionId] = spec.custom || '';
+        colors[spec.optionId] = spec.color || '';
+        leathers[spec.optionId] = spec.leatherType || '';
       }
       setOptionSelections(selections);
       setOptionCustom(customs);
+      setOptionColor(colors);
+      setOptionLeather(leathers);
 
       // Pricing
       setPriceSaddle(String(detail.priceSaddle ?? '0.00'));
@@ -342,6 +363,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // "Save as Draft" keeps the dialog open (closeAfterSave = false) so the user can
   // carry on editing; the final-step submit closes it.
   const saveOrder = async ({ closeAfterSave = true }: { closeAfterSave?: boolean } = {}) => {
+    if (!validateSpecifications()) return;
     setSaving(true);
     try {
       // Build saddle options array from current selections merged with original specs
@@ -359,16 +381,21 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         for (const optId of allOptionIds) {
           const selectedItemId = optionSelections[optId];
           const originalSpec = orderDetail.saddleSpecs.find(s => s.optionId === optId);
-          const itemId = selectedItemId
+          // 0 is a valid item id ("Customized by fitter"), so test for presence, not truthiness
+          const itemId = selectedItemId !== undefined
             ? parseInt(selectedItemId, 10)
             : originalSpec?.optionItemId;
-          if (itemId) {
-            saddleOptions.push({
-              optionId: optId,
-              optionItemId: itemId,
-              custom: optionCustom[optId] || originalSpec?.custom || '',
-            });
-          }
+          if (itemId === undefined || Number.isNaN(itemId)) continue;
+          // Only send the text the selected item actually asks for; this also
+          // clears stale values legacy left behind after switching items.
+          const inputs = getSpecInputs(optId, String(itemId));
+          saddleOptions.push({
+            optionId: optId,
+            optionItemId: itemId,
+            custom: inputs.custom ? (optionCustom[optId] ?? '') : '',
+            color: inputs.color ? (optionColor[optId] ?? '') : '',
+            leatherType: inputs.leather ? (optionLeather[optId] ?? '') : '',
+          });
         }
       }
 
@@ -468,6 +495,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
   const handleSubmit = async () => {
     if (currentStep < 4) {
+      if (currentStep === 1 && !validateSpecifications()) return;
       setCurrentStep(currentStep + 1);
       return;
     }
@@ -522,11 +550,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     return spec ? String(spec.optionItemId) : '';
   };
 
-  const getOptionCustom = (optionId: number): string => {
-    const spec = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
-    return spec?.custom || '';
-  };
-
   // Get available items for a given option
   const getItemsForOption = (optionId: number): Array<{ id: number; name: string }> => {
     if (!editOptions) return [];
@@ -536,11 +559,75 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     return editOptions.optionItems.filter(i => i.optionId === optionId);
   };
 
-  // Check if an option has custom input (Tree Size or certain options with custom text)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const hasCustomInput = (optionId: number): boolean => {
-    const spec = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
-    return !!(spec?.custom);
+  // Which item is currently chosen for an option: the user's pick, else the saved one
+  const getSelectedItemId = (optionId: number): string =>
+    optionSelections[optionId] ?? getOptionItemId(optionId);
+
+  const getSpecInputs = (optionId: number, selectedItemId: string): SpecInputs => {
+    if (selectedItemId === CUSTOMIZED_BY_FITTER_ID) {
+      return { custom: true, color: false, leather: false };
+    }
+    const item = editOptions?.optionItems.find(
+      i => i.optionId === optionId && String(i.id) === selectedItemId,
+    );
+    if (item) {
+      // Legacy orders.js also shows the colour box when the item name mentions
+      // "color"/"Color" (case-sensitive), regardless of the user_color flag.
+      const nameAsksColor = item.name.includes('color') || item.name.includes('Color');
+      return { custom: false, color: !!item.userColor || nameAsksColor, leather: !!item.userLeather };
+    }
+    // Item not in this saddle's list (e.g. an option no longer linked to the
+    // saddle): keep whatever the saved row already carries rather than blanking it.
+    const saved = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
+    const isSavedItem = saved && String(saved.optionItemId) === selectedItemId;
+    return {
+      custom: false,
+      color: !!(isSavedItem && saved.color),
+      leather: !!(isSavedItem && saved.leatherType),
+    };
+  };
+
+  // Option names whose required specification text is still empty
+  const getMissingSpecifications = (): string[] => {
+    const missing: string[] = [];
+    for (const opt of sortedOptions) {
+      const selectedItemId = getSelectedItemId(opt.optionId);
+      if (!selectedItemId) continue;
+      const inputs = getSpecInputs(opt.optionId, selectedItemId);
+      const blank = (v?: string) => !v || v.trim() === '';
+      if (
+        (inputs.custom && blank(optionCustom[opt.optionId])) ||
+        (inputs.color && blank(optionColor[opt.optionId])) ||
+        (inputs.leather && blank(optionLeather[opt.optionId]))
+      ) {
+        missing.push(opt.optionName);
+      }
+    }
+    return missing;
+  };
+
+  const validateSpecifications = (): boolean => {
+    const missing = getMissingSpecifications();
+    if (missing.length === 0) return true;
+    toast.error(`Please fill in the required specification for: ${missing.join(', ')}`);
+    return false;
+  };
+
+  // Text shown for an option in the preview, in the same shape as the saved displayValue
+  const getSpecSummary = (optionId: number): string => {
+    const selectedItemId = getSelectedItemId(optionId);
+    if (!selectedItemId) return '';
+    const inputs = getSpecInputs(optionId, selectedItemId);
+    if (inputs.custom) {
+      return `${CUSTOMIZED_BY_FITTER_LABEL}: ${optionCustom[optionId] ?? ''}`;
+    }
+    const base =
+      getItemsForOption(optionId).find(i => String(i.id) === selectedItemId)?.name ||
+      getOptionDisplayValue(optionId);
+    if (!base) return '';
+    const color = inputs.color && optionColor[optionId] ? ` | Color: ${optionColor[optionId]}` : '';
+    const leather = inputs.leather && optionLeather[optionId] ? ` | Leather: ${optionLeather[optionId]}` : '';
+    return `${base}${color}${leather}`;
   };
 
   // Sorted options by sequence
@@ -600,7 +687,10 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   className={`flex items-center ${
                     currentStep >= step.id ? 'text-[#8B0000]' : 'text-gray-400'
                   }`}
-                  onClick={() => setCurrentStep(step.id)}
+                  onClick={() => {
+                    if (currentStep === 1 && step.id > 1 && !validateSpecifications()) return;
+                    setCurrentStep(step.id);
+                  }}
                 >
                   <div className={`
                     w-8 h-8 rounded-full flex items-center justify-center border-2
@@ -725,6 +815,8 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       setSaddleId(val);
                       setOptionSelections({});
                       setOptionCustom({});
+                      setOptionColor({});
+                      setOptionLeather({});
                       const newOptions = await fetchEditOptions(val);
                       if (newOptions) setEditOptions(newOptions);
                     }}>
@@ -809,11 +901,18 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                   {sortedOptions.map(opt => {
                     const currentItemId = getOptionItemId(opt.optionId);
                     const currentDisplay = getOptionDisplayValue(opt.optionId);
-                    const currentCustom = getOptionCustom(opt.optionId);
                     const items = getItemsForOption(opt.optionId);
 
                     // Skip options that are not in the order's specs and have no items
                     if (!currentItemId && items.length === 0) return null;
+
+                    const selectedItemId = getSelectedItemId(opt.optionId);
+                    const inputs = getSpecInputs(opt.optionId, selectedItemId);
+                    const specInputs: Array<{ key: keyof SpecInputs; label: string; values: Record<number, string>; set: React.Dispatch<React.SetStateAction<Record<number, string>>> }> = [
+                      { key: 'custom', label: 'Please specify:', values: optionCustom, set: setOptionCustom },
+                      { key: 'color', label: 'Specify color:', values: optionColor, set: setOptionColor },
+                      { key: 'leather', label: 'Specify leathertype:', values: optionLeather, set: setOptionLeather },
+                    ];
 
                     return (
                       <div key={opt.optionId}>
@@ -823,7 +922,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                           </Label>
                           <div className="space-y-1">
                             <Select
-                              value={optionSelections[opt.optionId] || currentItemId}
+                              value={selectedItemId}
                               onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [opt.optionId]: val }))}
                             >
                               <SelectTrigger className="h-9">
@@ -837,28 +936,35 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                                     </SelectItem>
                                   ))
                                 ) : (
-                                  currentItemId && (
+                                  currentItemId && currentItemId !== CUSTOMIZED_BY_FITTER_ID && (
                                     <SelectItem value={currentItemId}>
                                       {currentDisplay}
                                     </SelectItem>
                                   )
                                 )}
+                                <SelectItem value={CUSTOMIZED_BY_FITTER_ID}>
+                                  {CUSTOMIZED_BY_FITTER_LABEL}
+                                </SelectItem>
                               </SelectContent>
                             </Select>
-                            {/* Custom input field */}
-                            {currentCustom && (
-                              <div className="ml-4 p-2 bg-gray-50 rounded">
-                                <div className="flex items-center gap-2">
-                                  <Label className="text-xs font-medium text-gray-600 whitespace-nowrap">Please specify:</Label>
-                                  <span className="text-red-500">*</span>
-                                  <Input
-                                    className="h-8 text-sm flex-1"
-                                    value={optionCustom[opt.optionId] || currentCustom}
-                                    onChange={(e) => setOptionCustom(prev => ({ ...prev, [opt.optionId]: e.target.value }))}
-                                  />
+                            {/* Required text boxes for the selected item */}
+                            {specInputs.filter(si => inputs[si.key]).map(si => {
+                              const inputId = `spec-${si.key}-${opt.optionId}`;
+                              return (
+                                <div key={si.key} className="ml-4 p-2 bg-gray-50 rounded">
+                                  <div className="flex items-center gap-2">
+                                    <Label htmlFor={inputId} className="text-xs font-medium text-gray-600 whitespace-nowrap">{si.label}</Label>
+                                    <span className="text-red-500">*</span>
+                                    <Input
+                                      id={inputId}
+                                      className="h-8 text-sm flex-1"
+                                      value={si.values[opt.optionId] ?? ''}
+                                      onChange={(e) => si.set(prev => ({ ...prev, [opt.optionId]: e.target.value }))}
+                                    />
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -1249,10 +1355,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       <dd className="font-medium">{editOptions?.fitters?.find(f => String(f.id) === fitterId)?.fullName || orderDetail?.fitterName || '—'}</dd>
                     </div>
                     {sortedOptions.map(opt => {
-                      const sel = optionSelections[opt.optionId];
-                      const display = sel
-                        ? getItemsForOption(opt.optionId).find(i => String(i.id) === sel)?.name || getOptionDisplayValue(opt.optionId)
-                        : getOptionDisplayValue(opt.optionId);
+                      const display = getSpecSummary(opt.optionId);
                       if (!display) return null;
                       return (
                         <div key={opt.optionId} className="grid grid-cols-[130px_1fr]">

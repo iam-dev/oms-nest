@@ -143,11 +143,16 @@ export interface UpdateOrderDto {
   priceShipping?: number;
   priceTax?: number;
   priceAdditional?: number;
-  // Saddle options (replaces orders_info rows)
+  // Saddle options (replaces orders_info rows).  Mirrors the legacy columns:
+  // `custom` is the free text behind "Customized by fitter" (optionItemId = 0),
+  // `color` / `leatherType` are the "Specify color" / "Specify leather" answers
+  // for items flagged options_items.user_color / user_leather.
   saddleOptions?: Array<{
     optionId: number;
     optionItemId: number;
     custom?: string;
+    color?: string;
+    leatherType?: string;
   }>;
   // Seat sizes for the order
   seatSizes?: string[];
@@ -1388,6 +1393,7 @@ export class EnrichedOrdersService {
             lt.name as "leatherName",
             oi.custom,
             oi.color,
+            oi.leathertype as "leatherType",
             o.sequence,
             CASE
               WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
@@ -1397,6 +1403,11 @@ export class EnrichedOrdersService {
             || CASE
               WHEN oi.color IS NOT NULL AND oi.color != ''
                 THEN ' | Color: ' || oi.color
+              ELSE ''
+            END
+            || CASE
+              WHEN oi.leathertype IS NOT NULL AND oi.leathertype != ''
+                THEN ' | Leather: ' || oi.leathertype
               ELSE ''
             END as "displayValue"
           FROM orders_info oi
@@ -1542,7 +1553,8 @@ export class EnrichedOrdersService {
         // Return ALL items for options relevant to this saddle (full lists for seat size, etc.)
         optionItems = await queryRunner.query(
           `
-          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1
+          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1,
+                 oi.user_color as "userColor", oi.user_leather as "userLeather"
           FROM options_items oi
           WHERE oi.option_id IN (
             SELECT DISTINCT soi.option_id
@@ -1561,7 +1573,8 @@ export class EnrichedOrdersService {
         `);
 
         optionItems = await queryRunner.query(`
-          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1
+          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1,
+                 oi.user_color as "userColor", oi.user_leather as "userLeather"
           FROM options_items oi
           ORDER BY oi.option_id, oi.name
         `);
@@ -2082,8 +2095,8 @@ export class EnrichedOrdersService {
               opt.optionId,
               opt.optionItemId,
               0,
-              "",
-              "",
+              opt.color || "",
+              opt.leatherType || "",
               opt.custom || "",
             ],
           );
@@ -2290,8 +2303,8 @@ export class EnrichedOrdersService {
               opt.optionId,
               opt.optionItemId,
               0,
-              "",
-              "",
+              opt.color || "",
+              opt.leatherType || "",
               opt.custom || "",
             ],
           );

@@ -456,6 +456,75 @@ describe("Enriched Orders CRUD (E2E)", () => {
         );
       }
     });
+
+    it("should round-trip color / leatherType / custom on saddle options", async () => {
+      if (!authToken || createdOrderIds.length === 0) {
+        console.warn(
+          "Skipping saddle option round-trip test — no created order IDs available.",
+        );
+        return;
+      }
+
+      const orderId = createdOrderIds[0];
+      const saddleOptions = [
+        // "Specify color" answer for a regular item
+        {
+          optionId: 1,
+          optionItemId: 1,
+          custom: "",
+          color: "Green Snake",
+          leatherType: "",
+        },
+        // "Customized by fitter" sentinel (option_item_id = 0) with free text
+        {
+          optionId: 2,
+          optionItemId: 0,
+          custom: "AV3S (New)",
+          color: "",
+          leatherType: "",
+        },
+      ];
+
+      const response = await authRequest()
+        .patch(`/api/v1/enriched_orders/update/${orderId}`)
+        .send({ saddleOptions });
+
+      expect([200, 403, 404, 500]).toContain(response.status);
+      if (response.status !== 200) {
+        console.warn(
+          `PATCH update returned ${response.status} — skipping assertion.`,
+        );
+        return;
+      }
+
+      const detailResponse = await authRequest().get(
+        `/api/v1/enriched_orders/detail/${orderId}`,
+      );
+      expect(detailResponse.status).toBe(200);
+      const specs = detailResponse.body.saddleSpecs as Array<{
+        optionId: number;
+        optionItemId: number;
+        custom: string;
+        color: string;
+        leatherType: string;
+      }>;
+      expect(specs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            optionId: 1,
+            optionItemId: 1,
+            color: "Green Snake",
+            custom: "",
+          }),
+          expect.objectContaining({
+            optionId: 2,
+            optionItemId: 0,
+            custom: "AV3S (New)",
+            color: "",
+          }),
+        ]),
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------

@@ -56,19 +56,34 @@ jest.mock('@/components/ui/label', () => ({
   Label: ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement> & { children: React.ReactNode }) => <label {...props}>{children}</label>,
 }));
 
-jest.mock('@/components/ui/select', () => ({
-  Select: ({ children, value }: { children: React.ReactNode; value?: string }) => (
-    <div data-testid="select" data-value={value}>
-      {children}
-    </div>
-  ),
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
-    <div data-value={value}>{children}</div>
-  ),
-}));
+jest.mock('@/components/ui/select', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ReactActual = require('react') as typeof React;
+  // No type annotations with identifiers here: babel-plugin-jest-hoist rejects them.
+  const ChangeContext = ReactActual.createContext(undefined as unknown);
+  return {
+    Select: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: unknown }) => (
+      <ChangeContext.Provider value={onValueChange}>
+        <div data-testid="select" data-value={value}>
+          {children}
+        </div>
+      </ChangeContext.Provider>
+    ),
+    SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+    SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    // Clicking an item fires the parent Select's onValueChange, so tests can
+    // drive selection changes without Radix's pointer-event machinery.
+    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => {
+      const onChange = ReactActual.useContext(ChangeContext);
+      return (
+        <div data-value={value} onClick={() => { if (typeof onChange === 'function') onChange(value); }}>
+          {children}
+        </div>
+      );
+    },
+  };
+});
 
 jest.mock('@/components/ui/checkbox', () => ({
   Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
@@ -1209,6 +1224,235 @@ describe('ComprehensiveEditOrder component', () => {
 
     it('renders the "Special Notes" section heading', () => {
       expect(screen.getByText('Special Notes')).toBeInTheDocument();
+    });
+  });
+  // =========================================================================
+  // 16. Saddle option "specify" text boxes (parity with legacy orders_info)
+  // =========================================================================
+  describe('saddle option specification inputs', () => {
+    // Legacy semantics:
+    //   option_item_id = 0  -> "Customized by fitter", free text in orders_info.custom
+    //   item.user_color = 1 -> "Specify color", text in orders_info.color
+    //   item.user_leather=1 -> "Specify leather", text in orders_info.leathertype
+    const OPTION_LOOPS = 7;
+    const OPTION_TREE = 17;
+    const OPTION_PANEL = 18;
+
+    const specOptions = {
+      ...mockEditOptions,
+      options: [
+        { optionId: OPTION_LOOPS, optionName: 'Loops', sequence: 1, group: null },
+        { optionId: OPTION_TREE, optionName: 'Tree Size', sequence: 2, group: null },
+        { optionId: OPTION_PANEL, optionName: 'Panel Type', sequence: 3, group: null },
+      ],
+      optionItems: [
+        { id: 701, name: 'STD - LOOPS', optionId: OPTION_LOOPS, userColor: 0, userLeather: 0 },
+        { id: 702, name: 'Aviar Solid Loop(specify color)', optionId: OPTION_LOOPS, userColor: 1, userLeather: 0 },
+        { id: 1701, name: '26cm', optionId: OPTION_TREE, userColor: 0, userLeather: 0 },
+        { id: 1801, name: 'Aviar Wool Hybrid Std', optionId: OPTION_PANEL, userColor: 0, userLeather: 1 },
+        { id: 1802, name: 'Aviar Foam - DEEP', optionId: OPTION_PANEL, userColor: 0, userLeather: 0 },
+      ],
+    };
+
+    const spec = (
+      optionId: number,
+      optionItemId: number,
+      extra: Partial<{ custom: string; color: string; leatherType: string; itemName: string | null }> = {},
+    ) => ({
+      optionId,
+      optionName: specOptions.options.find(o => o.optionId === optionId)!.optionName,
+      optionItemId,
+      itemName: specOptions.optionItems.find(i => i.id === optionItemId)?.name ?? null,
+      leatherName: null,
+      custom: '',
+      color: '',
+      leatherType: '',
+      sequence: 0,
+      displayValue: '',
+      ...extra,
+    });
+
+    const renderWithSpecs = async (saddleSpecs: ReturnType<typeof spec>[]) => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(specOptions),
+      });
+      await renderAndWaitForLoad({ isDuplicate: false });
+    };
+
+    const selectItem = async (name: string) => {
+      await act(async () => {
+        fireEvent.click(screen.getByText(name));
+      });
+    };
+
+    it('shows "Please specify" only when the selected item is "Customized by fitter"', async () => {
+      await renderWithSpecs([
+        spec(OPTION_TREE, 0, { custom: '27.5', itemName: null }),
+        spec(OPTION_LOOPS, 701),
+      ]);
+
+      expect(screen.getByText('Please specify:')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('27.5')).toBeInTheDocument();
+      expect(screen.queryByText('Specify color:')).not.toBeInTheDocument();
+    });
+
+    it('does NOT show "Please specify" for a real item that carries a stale custom value', async () => {
+      // Legacy left orders_info.custom populated after switching away from
+      // "Customized by fitter"; that text must not resurrect the box.
+      await renderWithSpecs([spec(OPTION_TREE, 1701, { custom: '26.5' })]);
+
+      expect(screen.queryByText('Please specify:')).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue('26.5')).not.toBeInTheDocument();
+    });
+
+    it('offers "Customized by fitter" in every option dropdown', async () => {
+      await renderWithSpecs([spec(OPTION_LOOPS, 701)]);
+
+      expect(screen.getAllByText('Customized by fitter')).toHaveLength(3);
+    });
+
+    it('shows "Specify color" prefilled from orders_info.color for a user_color item', async () => {
+      await renderWithSpecs([spec(OPTION_LOOPS, 702, { color: 'Green Snake' })]);
+
+      expect(screen.getByText('Specify color:')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Green Snake')).toBeInTheDocument();
+      expect(screen.queryByText('Please specify:')).not.toBeInTheDocument();
+    });
+
+    it('shows "Specify leathertype" prefilled from orders_info.leathertype for a user_leather item', async () => {
+      await renderWithSpecs([spec(OPTION_PANEL, 1801, { leatherType: 'smooth black' })]);
+
+      expect(screen.getByText('Specify leathertype:')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('smooth black')).toBeInTheDocument();
+    });
+
+    it('shows "Specify color" for an item whose name mentions color even without the user_color flag', async () => {
+      // Parity with legacy orders.js: choosecolor=1 OR name contains "color"/"Color".
+      const opts = {
+        ...specOptions,
+        optionItems: [...specOptions.optionItems, { id: 703, name: 'Contrast Color Loops', optionId: OPTION_LOOPS, userColor: 0, userLeather: 0 }],
+      };
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs: [spec(OPTION_LOOPS, 701)] });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(opts) });
+      await renderAndWaitForLoad({ isDuplicate: false });
+
+      await selectItem('Contrast Color Loops');
+      expect(screen.getByText('Specify color:')).toBeInTheDocument();
+    });
+
+    it('lets the user edit and fully clear a prefilled specification', async () => {
+      await renderWithSpecs([spec(OPTION_LOOPS, 702, { color: 'Green Snake' })]);
+
+      const input = screen.getByDisplayValue('Green Snake');
+      fireEvent.change(input, { target: { value: 'black' } });
+      expect(screen.getByDisplayValue('black')).toBeInTheDocument();
+
+      fireEvent.change(input, { target: { value: '' } });
+      expect(screen.queryByDisplayValue('Green Snake')).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue('black')).not.toBeInTheDocument();
+    });
+
+    it('swaps the text box when the selection changes and keeps the typed text per option', async () => {
+      await renderWithSpecs([spec(OPTION_LOOPS, 701)]);
+      expect(screen.queryByText('Specify color:')).not.toBeInTheDocument();
+
+      await selectItem('Aviar Solid Loop(specify color)');
+      expect(screen.getByText('Specify color:')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'brown' } });
+
+      await selectItem('STD - LOOPS');
+      expect(screen.queryByText('Specify color:')).not.toBeInTheDocument();
+
+      await selectItem('Aviar Solid Loop(specify color)');
+      expect(screen.getByDisplayValue('brown')).toBeInTheDocument();
+    });
+
+    it('blocks "Next Step" with an error while a required specification is empty', async () => {
+      await renderWithSpecs([spec(OPTION_LOOPS, 702, { color: '' })]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /next step/i }));
+      });
+
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Loops'));
+      // Still on step 1
+      expect(screen.getByText('Saddle Specifications')).toBeInTheDocument();
+    });
+
+    it('blocks "Save as Draft" while a required specification is empty', async () => {
+      await renderWithSpecs([spec(OPTION_TREE, 0, { custom: '', itemName: null })]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      expect(updateOrder).not.toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Tree Size'));
+    });
+
+    it('submits color / leatherType / custom in their own fields and drops stale custom text', async () => {
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+      await renderWithSpecs([
+        spec(OPTION_LOOPS, 702, { color: 'Green Snake', custom: 'stale' }),
+        spec(OPTION_TREE, 0, { custom: '27.5', itemName: null }),
+        spec(OPTION_PANEL, 1801, { leatherType: 'smooth black' }),
+      ]);
+
+      fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'black' } });
+
+      await navigateToStep(4);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /update order/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const payload = (updateOrder as jest.Mock).mock.calls[0][1];
+      expect(payload.saddleOptions).toEqual(expect.arrayContaining([
+        { optionId: OPTION_LOOPS, optionItemId: 702, custom: '', color: 'black', leatherType: '' },
+        { optionId: OPTION_TREE, optionItemId: 0, custom: '27.5', color: '', leatherType: '' },
+        { optionId: OPTION_PANEL, optionItemId: 1801, custom: '', color: '', leatherType: 'smooth black' },
+      ]));
+      expect(payload.saddleOptions).toHaveLength(3);
+    });
+
+    it('keeps a saved colour for an item that is not in the current item list', async () => {
+      // Option 99 is not linked to the saddle, so editOptions carries no items for it;
+      // the saved row must still round-trip instead of being blanked on save.
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+      const opts = {
+        ...specOptions,
+        options: [...specOptions.options, { optionId: 99, optionName: 'Orphan', sequence: 9, group: null }],
+      };
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({
+        ...mockOrderDetail,
+        saddleSpecs: [{ ...spec(OPTION_LOOPS, 701), optionId: 99, optionName: 'Orphan', optionItemId: 9901, itemName: 'Old item', color: 'brown' }],
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(opts) });
+      await renderAndWaitForLoad({ isDuplicate: false });
+
+      expect(screen.getByDisplayValue('brown')).toBeInTheDocument();
+
+      await navigateToStep(4);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /update order/i }));
+      });
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      expect((updateOrder as jest.Mock).mock.calls[0][1].saddleOptions).toEqual([
+        { optionId: 99, optionItemId: 9901, custom: '', color: 'brown', leatherType: '' },
+      ]);
+    });
+
+    it('shows the specification text on the preview step', async () => {
+      await renderWithSpecs([
+        spec(OPTION_LOOPS, 702, { color: 'Green Snake' }),
+        spec(OPTION_TREE, 0, { custom: '27.5', itemName: null }),
+      ]);
+      await navigateToStep(4);
+
+      expect(screen.getByText('Aviar Solid Loop(specify color) | Color: Green Snake')).toBeInTheDocument();
+      expect(screen.getByText('Customized by fitter: 27.5')).toBeInTheDocument();
     });
   });
 });
