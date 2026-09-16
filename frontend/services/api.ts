@@ -308,7 +308,14 @@ export async function fetchEntities({
 
     // Generic transformation for any entity returning NestJS format { data: [], total, pages }
     if (!result['hydra:member'] && result.data && Array.isArray(result.data)) {
-      result['hydra:member'] = result.data;
+      // Legacy tables expose `deleted` (0/1) and the DTOs add `isActive`; the
+      // table columns still read `active`, so derive it when it's missing.
+      result['hydra:member'] = result.data.map((row: Record<string, unknown>) => {
+        if (row.active !== undefined) return row;
+        if (typeof row.isActive === 'boolean') return { ...row, active: row.isActive };
+        if (row.deleted === 0 || row.deleted === 1) return { ...row, active: row.deleted === 0 };
+        return row;
+      });
       result['hydra:totalItems'] = result.total || result.data.length;
       delete result.data;
     }
