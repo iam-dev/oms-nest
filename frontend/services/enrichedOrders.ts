@@ -303,8 +303,13 @@ export interface UpdateOrderPayload {
   priceAdditional?: number;
   saddleOptions?: Array<{
     optionId: number;
+    /** 0 = "Customized by fitter" (legacy sentinel, text goes in `custom`) */
     optionItemId: number;
     custom?: string;
+    /** "Specify color" answer for items flagged user_color */
+    color?: string;
+    /** "Specify leather" answer for items flagged user_leather */
+    leatherType?: string;
   }>;
   seatSizes?: string[];
   repairSourceOrderId?: number;
@@ -547,6 +552,8 @@ export interface OrderDetailData {
     itemName: string | null;
     leatherName: string | null;
     custom: string;
+    color: string;
+    leatherType: string;
     sequence: number;
     displayValue: string;
   }>;
