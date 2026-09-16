@@ -28,21 +28,31 @@ export class SaddleOptionsItemService {
   async create(
     createDto: CreateSaddleOptionsItemDto,
   ): Promise<SaddleOptionsItemDto> {
-    // Check for existing association
+    // Check for existing association (active or soft-deleted). Legacy OMS
+    // soft-deletes these rows, so re-enabling revives the row rather than
+    // inserting a duplicate.
     const existing = await this.repository.findOne({
       where: {
         saddleId: createDto.saddleId,
         optionId: createDto.optionId,
         optionItemId: createDto.optionItemId,
         leatherId: createDto.leatherId,
-        deleted: 0,
       },
     });
 
-    if (existing) {
+    if (existing && existing.deleted === 0) {
       throw new ConflictException(
         "Saddle-option-item association already exists",
       );
+    }
+
+    if (existing) {
+      existing.deleted = 0;
+      if (createDto.sequence !== undefined) {
+        existing.sequence = createDto.sequence;
+      }
+      const revived = await this.repository.save(existing);
+      return this.toDto(revived);
     }
 
     const entity = this.repository.create({

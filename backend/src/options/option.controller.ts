@@ -69,14 +69,28 @@ export class OptionController {
   @ApiQuery({ name: "search", required: false, type: String })
   @ApiQuery({ name: "group", required: false, type: String })
   @ApiQuery({ name: "type", required: false, type: Number })
+  @ApiQuery({
+    name: "excludeType",
+    required: false,
+    type: Number,
+    description: "Exclude options of this type (e.g. 2 = extras)",
+  })
   async findAll(
     @Query("page") page?: number,
     @Query("limit") limit?: number,
     @Query("search") search?: string,
     @Query("group") group?: string,
     @Query("type") type?: number,
+    @Query("excludeType") excludeType?: number,
   ) {
-    return this.optionService.findAll(page, limit, search, group, type);
+    return this.optionService.findAll(
+      page,
+      limit,
+      search,
+      group,
+      type,
+      excludeType,
+    );
   }
 
   @Get("active")

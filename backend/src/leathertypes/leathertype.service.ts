@@ -70,10 +70,13 @@ export class LeathertypeService {
     page: number = 1,
     limit: number = 10,
     search?: string,
+    includeDeleted = false,
   ): Promise<{ data: LeathertypeDto[]; total: number; pages: number }> {
+    // Legacy option items may still reference soft-deleted leathertypes; the
+    // admin UI can ask for them so it can label those references by name.
     const queryBuilder = this.leathertypeRepository
       .createQueryBuilder("leathertype")
-      .where("leathertype.deleted = 0");
+      .where(includeDeleted ? "1 = 1" : "leathertype.deleted = 0");
 
     if (search) {
       queryBuilder.andWhere("leathertype.name ILIKE :search", {

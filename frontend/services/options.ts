@@ -28,21 +28,29 @@ export interface OptionsResponse {
 
 export async function fetchOptions({
   page = 1,
+  limit,
+  excludeType,
   searchTerm = '',
   filters = {},
   orderBy = 'sequence',
   order = 'asc'
 }: {
   page?: number;
+  /** Page size. The backend defaults to 10 when omitted. */
+  limit?: number;
+  /** Exclude options of this type server-side (2 = extras). */
+  excludeType?: number;
   searchTerm?: string;
   filters?: Record<string, string>;
   orderBy?: string;
   order?: 'asc' | 'desc';
 } = {}): Promise<OptionsResponse> {
-  logger.log('fetchOptions: Called with params:', { page, searchTerm, filters, orderBy, order });
+  logger.log('fetchOptions: Called with params:', { page, limit, excludeType, searchTerm, filters, orderBy, order });
   
   // Build filter parameters for API Platform
   const extraParams: Record<string, string | number | boolean> = {};
+  if (limit !== undefined) extraParams.limit = limit;
+  if (excludeType !== undefined) extraParams.excludeType = excludeType;
   
   // Handle individual field filters
   Object.entries(filters).forEach(([key, value]) => {

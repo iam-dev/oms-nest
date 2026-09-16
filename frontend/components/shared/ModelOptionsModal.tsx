@@ -3,9 +3,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { Model } from '@/services/models';
 import { fetchOptions, Option } from '@/services/options';
+import { fetchLeathertypes, Leathertype } from '@/services/leathertypes';
+import { fetchOptionsItemsByOptionId, OptionItem } from '@/services/optionsItems';
 import {
   fetchSaddleOptionsItemsBySaddleId,
   createSaddleOptionsItem,
@@ -20,14 +22,42 @@ interface ModelOptionsModalProps {
   onClose: () => void;
 }
 
+/**
+ * How "available options" are stored (legacy `saddle_options_items`):
+ *
+ * - option enabled on a saddle  → row (optionId, optionItemId = 0, leatherId = 0)
+ * - item enabled (custom option, type 0) → row (optionId, optionItemId = item.id, leatherId = 0)
+ * - leather enabled (leather option, type 1) → row (optionId, optionItemId = 0, leatherId = item.leatherId)
+ *
+ * Extras (type 2) use the same table but are managed in the Extra's dialog.
+ */
 interface OptionRow {
   option: Option;
-  saddleOptionsItems: SaddleOptionsItem[];
+  /** Active saddle_options_items rows for this option (header + items). */
+  links: SaddleOptionsItem[];
   checked: boolean;
+  expanded: boolean;
+  items?: OptionItem[];
+  itemsLoading?: boolean;
+}
+
+const ALL_OPTIONS_LIMIT = 500;
+const ALL_LEATHERTYPES_LIMIT = 500;
+const EXTRAS_TYPE = 2;
+const LEATHER_OPTION_TYPE = 1;
+
+const isHeaderLink = (soi: SaddleOptionsItem) => soi.optionItemId === 0 && soi.leatherId === 0;
+
+function findItemLink(row: OptionRow, item: OptionItem): SaddleOptionsItem | undefined {
+  if (row.option.type === LEATHER_OPTION_TYPE) {
+    return row.links.find(l => l.optionItemId === 0 && l.leatherId !== 0 && l.leatherId === item.leatherId);
+  }
+  return row.links.find(l => l.optionItemId === item.id);
 }
 
 export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalProps) {
   const [rows, setRows] = useState<OptionRow[]>([]);
+  const [leatherNames, setLeatherNames] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -35,9 +65,11 @@ export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalP
     if (!model) return;
     setLoading(true);
     try {
-      const [optionsRes, saddleOptionsItems] = await Promise.all([
-        fetchOptions({ page: 1, orderBy: 'sequence', order: 'asc' }),
+      const [optionsRes, saddleOptionsItems, leathertypesRes] = await Promise.all([
+        fetchOptions({ page: 1, limit: ALL_OPTIONS_LIMIT, excludeType: EXTRAS_TYPE, orderBy: 'sequence', order: 'asc' }),
         fetchSaddleOptionsItemsBySaddleId(Number(model.id)),
+        // Include deleted leathertypes: legacy option items may still point at them
+        fetchLeathertypes({ page: 1, limit: ALL_LEATHERTYPES_LIMIT, includeDeleted: true, orderBy: 'sequence', order: 'asc' }),
       ]);
 
       const options = optionsRes['hydra:member'] || [];
@@ -48,16 +80,20 @@ export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalP
         soiMap.set(soi.optionId, existing);
       });
 
-      const newRows: OptionRow[] = options.map((option: Option) => {
-        const items = soiMap.get(Number(option.id)) || [];
-        return {
-          option,
-          saddleOptionsItems: items,
-          checked: items.length > 0,
-        };
-      });
-
-      setRows(newRows);
+      setLeatherNames(
+        new Map(
+          (leathertypesRes['hydra:member'] || []).map((lt: Leathertype) => [
+            Number(lt.id),
+            lt.active === false ? `${lt.name} (deleted leathertype)` : lt.name,
+          ])
+        )
+      );
+      setRows(
+        options.map((option: Option) => {
+          const links = soiMap.get(Number(option.id)) || [];
+          return { option, links, checked: links.length > 0, expanded: false };
+        })
+      );
     } catch (error) {
       logger.error('Error loading options data:', error);
     } finally {
@@ -72,30 +108,27 @@ export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalP
     }
   }, [isOpen, model, loadData]);
 
-  const handleCheckboxToggle = async (index: number) => {
+  const updateRow = (index: number, patch: Partial<OptionRow> | ((row: OptionRow) => Partial<OptionRow>)) => {
+    setRows(prev => prev.map((r, i) => (i === index ? { ...r, ...(typeof patch === 'function' ? patch(r) : patch) } : r)));
+  };
+
+  const handleOptionToggle = async (index: number) => {
     if (!model || saving) return;
     const row = rows[index];
     setSaving(true);
     try {
-      if (row.checked && row.saddleOptionsItems.length > 0) {
-        // Delete all saddle-options-items for this option
-        await Promise.all(
-          row.saddleOptionsItems.map(soi => deleteSaddleOptionsItem(soi.id))
-        );
-        setRows(prev => prev.map((r, i) =>
-          i === index ? { ...r, checked: false, saddleOptionsItems: [] } : r
-        ));
+      if (row.checked) {
+        // Disabling an option drops all of its item links for this saddle too
+        await Promise.all(row.links.map(soi => deleteSaddleOptionsItem(soi.id)));
+        updateRow(index, { checked: false, links: [] });
       } else {
-        // Create a default saddle-options-item for this option
         const created = await createSaddleOptionsItem({
           saddleId: Number(model.id),
           optionId: Number(row.option.id),
           optionItemId: 0,
           leatherId: 0,
         });
-        setRows(prev => prev.map((r, i) =>
-          i === index ? { ...r, checked: true, saddleOptionsItems: [created] } : r
-        ));
+        updateRow(index, { checked: true, links: [created] });
       }
     } catch (error) {
       logger.error('Error toggling option association:', error);
@@ -104,11 +137,75 @@ export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalP
     }
   };
 
+  const handleExpand = async (index: number) => {
+    const row = rows[index];
+    if (row.expanded) {
+      updateRow(index, { expanded: false });
+      return;
+    }
+    updateRow(index, { expanded: true, itemsLoading: row.items === undefined });
+    if (row.items !== undefined) return;
+    try {
+      const items = await fetchOptionsItemsByOptionId(Number(row.option.id));
+      updateRow(index, { items, itemsLoading: false });
+    } catch (error) {
+      logger.error('Error loading option items:', error);
+      updateRow(index, { items: [], itemsLoading: false });
+    }
+  };
+
+  const handleItemToggle = async (index: number, item: OptionItem) => {
+    if (!model || saving) return;
+    const row = rows[index];
+    const existing = findItemLink(row, item);
+    setSaving(true);
+    try {
+      if (existing) {
+        await deleteSaddleOptionsItem(existing.id);
+        updateRow(index, r => ({ links: r.links.filter(l => l.id !== existing.id) }));
+      } else {
+        const newLinks: SaddleOptionsItem[] = [];
+        // An item can only be available if its option is; add the header link when missing
+        if (!row.links.some(isHeaderLink)) {
+          newLinks.push(
+            await createSaddleOptionsItem({
+              saddleId: Number(model.id),
+              optionId: Number(row.option.id),
+              optionItemId: 0,
+              leatherId: 0,
+            })
+          );
+        }
+        const isLeather = row.option.type === LEATHER_OPTION_TYPE;
+        newLinks.push(
+          await createSaddleOptionsItem({
+            saddleId: Number(model.id),
+            optionId: Number(row.option.id),
+            optionItemId: isLeather ? 0 : item.id,
+            leatherId: isLeather ? item.leatherId : 0,
+          })
+        );
+        updateRow(index, r => ({ checked: true, links: [...r.links, ...newLinks] }));
+      }
+    } catch (error) {
+      logger.error('Error toggling option item association:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const itemLabel = (row: OptionRow, item: OptionItem): string => {
+    if (row.option.type === LEATHER_OPTION_TYPE) {
+      return leatherNames.get(item.leatherId) || item.name || `Leather #${item.leatherId}`;
+    }
+    return item.name;
+  };
+
   if (!model) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Options</DialogTitle>
           <DialogDescription>
@@ -124,18 +221,57 @@ export function ModelOptionsModal({ model, isOpen, onClose }: ModelOptionsModalP
         ) : (
           <div className="space-y-1">
             {rows.map((row, index) => (
-              <div
-                key={row.option.id}
-                className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 border-b"
-              >
-                <input
-                  type="checkbox"
-                  checked={row.checked}
-                  onChange={() => handleCheckboxToggle(index)}
-                  disabled={saving}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm font-medium flex-1">{row.option.name}</span>
+              <div key={row.option.id} className="border-b" data-testid={`option-row-${row.option.id}`}>
+                <div className="flex items-center gap-3 p-2 rounded hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={row.checked}
+                    onChange={() => handleOptionToggle(index)}
+                    disabled={saving}
+                    className="rounded border-gray-300"
+                    aria-label={row.option.name}
+                  />
+                  <span className="text-sm font-medium flex-1">{row.option.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => handleExpand(index)}
+                    aria-label={`${row.expanded ? 'Hide' : 'Show'} items for ${row.option.name}`}
+                    aria-expanded={row.expanded}
+                  >
+                    {row.expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                {row.expanded && (
+                  <div className="ml-8 mb-2 border-l pl-3 space-y-0.5">
+                    {row.itemsLoading ? (
+                      <div className="flex items-center text-xs text-gray-500 py-1">
+                        <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                        Loading items...
+                      </div>
+                    ) : (row.items ?? []).length === 0 ? (
+                      <div className="text-xs text-gray-500 py-1">No items for this option</div>
+                    ) : (
+                      (row.items ?? []).map(item => (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2 py-0.5 text-sm text-gray-700 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!findItemLink(row, item)}
+                            onChange={() => handleItemToggle(index, item)}
+                            disabled={saving}
+                            className="rounded border-gray-300"
+                          />
+                          <span>{itemLabel(row, item)}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {rows.length === 0 && (

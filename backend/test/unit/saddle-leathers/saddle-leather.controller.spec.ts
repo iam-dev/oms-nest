@@ -149,7 +149,18 @@ describe("SaddleLeatherController", () => {
 
       // Assert
       expect(result).toEqual(associations);
-      expect(service.findBySaddleId).toHaveBeenCalledWith(saddleId);
+      expect(service.findBySaddleId).toHaveBeenCalledWith(saddleId, false);
+    });
+
+    it("should pass includeDeleted=true through to the service", async () => {
+      // Arrange
+      service.findBySaddleId.mockResolvedValue([]);
+
+      // Act
+      await controller.findBySaddleId(100, "true");
+
+      // Assert
+      expect(service.findBySaddleId).toHaveBeenCalledWith(100, true);
     });
   });
 

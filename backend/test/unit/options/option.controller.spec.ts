@@ -118,6 +118,25 @@ describe("OptionController", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+      );
+    });
+
+    it("should pass excludeType through to the service", async () => {
+      // Arrange
+      service.findAll.mockResolvedValue({ data: [], total: 0, pages: 0 });
+
+      // Act
+      await controller.findAll(1, 10, undefined, undefined, undefined, 2);
+
+      // Assert
+      expect(service.findAll).toHaveBeenCalledWith(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        2,
       );
     });
 
@@ -138,6 +157,7 @@ describe("OptionController", () => {
         1,
         10,
         "Premium",
+        undefined,
         undefined,
         undefined,
       );
@@ -162,6 +182,7 @@ describe("OptionController", () => {
         undefined,
         "Stitching",
         undefined,
+        undefined,
       );
     });
 
@@ -184,6 +205,7 @@ describe("OptionController", () => {
         undefined,
         undefined,
         1,
+        undefined,
       );
     });
 
@@ -206,6 +228,7 @@ describe("OptionController", () => {
         "Premium",
         "Stitching",
         1,
+        undefined,
       );
     });
   });

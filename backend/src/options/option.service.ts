@@ -89,6 +89,7 @@ export class OptionService {
     search?: string,
     group?: string,
     type?: number,
+    excludeType?: number,
   ): Promise<{ data: OptionDto[]; total: number; pages: number }> {
     const queryBuilder = this.optionRepository
       .createQueryBuilder("option")
@@ -106,6 +107,11 @@ export class OptionService {
 
     if (type !== undefined) {
       queryBuilder.andWhere("option.type = :type", { type });
+    }
+
+    // Extras live in this table as type = 2; the Options admin page excludes them
+    if (excludeType !== undefined) {
+      queryBuilder.andWhere("option.type <> :excludeType", { excludeType });
     }
 
     queryBuilder

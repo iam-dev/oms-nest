@@ -26,21 +26,29 @@ export interface LeathertypesResponse {
 
 export async function fetchLeathertypes({
   page = 1,
+  limit,
+  includeDeleted,
   searchTerm = '',
   filters = {},
   orderBy = 'sequence',
   order = 'asc'
 }: {
   page?: number;
+  /** Page size. The backend defaults to 10 when omitted. */
+  limit?: number;
+  /** Also return soft-deleted leathertypes (legacy option items may still reference them). */
+  includeDeleted?: boolean;
   searchTerm?: string;
   filters?: Record<string, string>;
   orderBy?: string;
   order?: 'asc' | 'desc';
 } = {}): Promise<LeathertypesResponse> {
-  logger.log('fetchLeathertypes: Called with params:', { page, searchTerm, filters, orderBy, order });
+  logger.log('fetchLeathertypes: Called with params:', { page, limit, includeDeleted, searchTerm, filters, orderBy, order });
   
   // Build filter parameters for API Platform
   const extraParams: Record<string, string | number | boolean> = {};
+  if (limit !== undefined) extraParams.limit = limit;
+  if (includeDeleted) extraParams.includeDeleted = true;
   
   // Handle individual field filters
   Object.entries(filters).forEach(([key, value]) => {

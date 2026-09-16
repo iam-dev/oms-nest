@@ -44,23 +44,27 @@ export interface ExtrasResponse {
 
 export async function fetchExtras({
   page = 1,
+  limit,
   searchTerm = '',
   filters = {},
   orderBy = 'sequence',
   order = 'asc'
 }: {
   page?: number;
+  /** Page size. The backend defaults to 10 when omitted. */
+  limit?: number;
   searchTerm?: string;
   filters?: Record<string, string>;
   orderBy?: string;
   order?: 'asc' | 'desc';
 } = {}): Promise<ExtrasResponse> {
-  logger.log('fetchExtras: Called with params:', { page, searchTerm, filters, orderBy, order });
+  logger.log('fetchExtras: Called with params:', { page, limit, searchTerm, filters, orderBy, order });
 
   // Build filter parameters — query options table with type=2 (extras)
   const extraParams: Record<string, string | number | boolean> = {
     type: 2,
   };
+  if (limit !== undefined) extraParams.limit = limit;
 
   // Handle individual field filters
   Object.entries(filters).forEach(([key, value]) => {

@@ -38,18 +38,16 @@ export default function Options() {
       logger.log('Fetching options with filters:', filters);
       const data = await fetchOptions({
         page: pagination.currentPage,
+        limit: pagination.itemsPerPage,
+        excludeType: 2, // extras live in the same table but have their own page
         searchTerm,
         filters,
         orderBy: 'sequence',
         order: 'asc'
       });
 
-      // Filter out type=2 (extras) — they have their own management page
-      const members = (data['hydra:member'] || []).filter(
-        (opt) => opt.type !== 2
-      );
-      setOptions(members);
-      setTotalItems(members.length);
+      setOptions(data['hydra:member'] || []);
+      setTotalItems(data['hydra:totalItems'] || 0);
       
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
@@ -59,7 +57,7 @@ export default function Options() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.currentPage, searchTerm, filters, setTotalItems]);
+  }, [pagination.currentPage, pagination.itemsPerPage, searchTerm, filters, setTotalItems]);
 
   // Fetch options when dependencies change
   useEffect(() => {

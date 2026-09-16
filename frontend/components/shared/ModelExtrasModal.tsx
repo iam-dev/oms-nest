@@ -7,11 +7,11 @@ import { Loader2 } from 'lucide-react';
 import { Model } from '@/services/models';
 import { fetchExtras, Extra } from '@/services/extras';
 import {
-  fetchSaddleExtrasBySaddleId,
-  createSaddleExtra,
-  deleteSaddleExtra,
-  SaddleExtra,
-} from '@/services/saddleExtras';
+  fetchSaddleOptionsItemsBySaddleId,
+  createSaddleOptionsItem,
+  deleteSaddleOptionsItem,
+  SaddleOptionsItem,
+} from '@/services/saddleOptionsItems';
 import { logger } from '@/utils/logger';
 
 interface ModelExtrasModalProps {
@@ -22,11 +22,22 @@ interface ModelExtrasModalProps {
 
 const PRICE_LABELS = ['$', '\u20AC', '\u00A3', 'C$', 'A$', 'N\u20AC', 'D\u20AC'];
 
+/**
+ * Extras are `options` rows with `type = 2`, and "extra X is available on
+ * saddle Y" is a `saddle_options_items` row with `optionItemId = 0` and
+ * `leatherId = 0` — exactly how the legacy OMS (and every existing order)
+ * references them. The separate `saddle_extras` table is not used.
+ */
 interface ExtraRow {
   extra: Extra;
-  saddleExtra: SaddleExtra | null;
+  saddleExtra: SaddleOptionsItem | null;
   checked: boolean;
 }
+
+const ALL_EXTRAS_LIMIT = 100;
+
+const isExtraLink = (soi: SaddleOptionsItem) =>
+  soi.optionItemId === 0 && soi.leatherId === 0;
 
 export function ModelExtrasModal({ model, isOpen, onClose }: ModelExtrasModalProps) {
   const [rows, setRows] = useState<ExtraRow[]>([]);
@@ -37,15 +48,15 @@ export function ModelExtrasModal({ model, isOpen, onClose }: ModelExtrasModalPro
     if (!model) return;
     setLoading(true);
     try {
-      const [extrasRes, saddleExtras] = await Promise.all([
-        fetchExtras({ page: 1, orderBy: 'sequence', order: 'asc' }),
-        fetchSaddleExtrasBySaddleId(Number(model.id)),
+      const [extrasRes, saddleOptionsItems] = await Promise.all([
+        fetchExtras({ page: 1, limit: ALL_EXTRAS_LIMIT, orderBy: 'sequence', order: 'asc' }),
+        fetchSaddleOptionsItemsBySaddleId(Number(model.id)),
       ]);
 
       const extras = extrasRes['hydra:member'] || [];
-      const seMap = new Map<number, SaddleExtra>();
-      saddleExtras.forEach((se: SaddleExtra) => {
-        seMap.set(se.extraId, se);
+      const seMap = new Map<number, SaddleOptionsItem>();
+      saddleOptionsItems.filter(isExtraLink).forEach((soi: SaddleOptionsItem) => {
+        seMap.set(soi.optionId, soi);
       });
 
       const newRows: ExtraRow[] = extras.map((extra: Extra) => {
@@ -78,14 +89,16 @@ export function ModelExtrasModal({ model, isOpen, onClose }: ModelExtrasModalPro
     setSaving(true);
     try {
       if (row.checked && row.saddleExtra) {
-        await deleteSaddleExtra(row.saddleExtra.id);
+        await deleteSaddleOptionsItem(row.saddleExtra.id);
         setRows(prev => prev.map((r, i) =>
           i === index ? { ...r, checked: false, saddleExtra: null } : r
         ));
       } else {
-        const created = await createSaddleExtra({
+        const created = await createSaddleOptionsItem({
           saddleId: Number(model.id),
-          extraId: Number(row.extra.id),
+          optionId: Number(row.extra.id),
+          optionItemId: 0,
+          leatherId: 0,
         });
         setRows(prev => prev.map((r, i) =>
           i === index ? { ...r, checked: true, saddleExtra: created } : r

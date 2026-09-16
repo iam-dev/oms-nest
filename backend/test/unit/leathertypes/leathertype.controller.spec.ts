@@ -99,6 +99,7 @@ describe("LeathertypeController", () => {
         undefined,
         undefined,
         undefined,
+        false,
       );
     });
 
@@ -115,7 +116,18 @@ describe("LeathertypeController", () => {
       await controller.findAll(2, 10);
 
       // Assert
-      expect(service.findAll).toHaveBeenCalledWith(2, 10, undefined);
+      expect(service.findAll).toHaveBeenCalledWith(2, 10, undefined, false);
+    });
+
+    it("should pass includeDeleted=true to the service", async () => {
+      // Arrange
+      service.findAll.mockResolvedValue({ data: [], total: 0, pages: 0 });
+
+      // Act
+      await controller.findAll(1, 10, undefined, "true");
+
+      // Assert
+      expect(service.findAll).toHaveBeenCalledWith(1, 10, undefined, true);
     });
 
     it("should pass search parameter to service", async () => {
@@ -131,7 +143,7 @@ describe("LeathertypeController", () => {
       await controller.findAll(1, 10, "Grain");
 
       // Assert
-      expect(service.findAll).toHaveBeenCalledWith(1, 10, "Grain");
+      expect(service.findAll).toHaveBeenCalledWith(1, 10, "Grain", false);
     });
 
     it("should return empty array when no leathertypes", async () => {

@@ -26,9 +26,16 @@ const PRICE_LABELS = ['$', '\u20AC', '\u00A3', 'C$', 'A$', 'N\u20AC', 'D\u20AC']
 
 interface LeatherRow {
   leather: Leathertype;
+  /** The saddle_leathers row, if any — possibly soft-deleted (then `checked` is false but prices are kept). */
   saddleLeather: SaddleLeather | null;
   checked: boolean;
 }
+
+/** Fetch enough to cover the whole catalogue in one go (~70 leathertypes today). */
+const ALL_LEATHERTYPES_LIMIT = 500;
+
+const isActiveRow = (sl: SaddleLeather | null | undefined): boolean =>
+  !!sl && (sl.isActive ?? sl.deleted !== 1);
 
 export function ModelPricesModal({ model, isOpen, onClose }: ModelPricesModalProps) {
   const [rows, setRows] = useState<LeatherRow[]>([]);
@@ -42,14 +49,19 @@ export function ModelPricesModal({ model, isOpen, onClose }: ModelPricesModalPro
     setLoading(true);
     try {
       const [leathertypesRes, saddleLeathers] = await Promise.all([
-        fetchLeathertypes({ page: 1, orderBy: 'sequence', order: 'asc' }),
-        fetchSaddleLeathersBySaddleId(Number(model.id)),
+        fetchLeathertypes({ page: 1, limit: ALL_LEATHERTYPES_LIMIT, orderBy: 'sequence', order: 'asc' }),
+        // Disabled leathers keep their prices in legacy; show them like production does
+        fetchSaddleLeathersBySaddleId(Number(model.id), { includeDeleted: true }),
       ]);
 
       const leathertypes = leathertypesRes['hydra:member'] || [];
       const slMap = new Map<number, SaddleLeather>();
       saddleLeathers.forEach((sl: SaddleLeather) => {
-        slMap.set(sl.leatherId, sl);
+        // Prefer the active row if both an active and a soft-deleted one exist
+        const current = slMap.get(sl.leatherId);
+        if (!current || (!isActiveRow(current) && isActiveRow(sl))) {
+          slMap.set(sl.leatherId, sl);
+        }
       });
 
       const newRows: LeatherRow[] = leathertypes.map((lt: Leathertype) => {
@@ -57,7 +69,7 @@ export function ModelPricesModal({ model, isOpen, onClose }: ModelPricesModalPro
         return {
           leather: lt,
           saddleLeather: sl,
-          checked: sl !== null,
+          checked: isActiveRow(sl),
         };
       });
 
@@ -83,11 +95,15 @@ export function ModelPricesModal({ model, isOpen, onClose }: ModelPricesModalPro
     setSaving(true);
     try {
       if (row.checked && row.saddleLeather) {
+        // Soft delete: the row (and its prices) stays, it is just disabled
         await deleteSaddleLeather(row.saddleLeather.id);
         setRows(prev => prev.map((r, i) =>
-          i === index ? { ...r, checked: false, saddleLeather: null } : r
+          i === index
+            ? { ...r, checked: false, saddleLeather: { ...r.saddleLeather!, deleted: 1, isActive: false } }
+            : r
         ));
       } else {
+        // The backend revives a soft-deleted row (keeping its prices) or inserts a new one
         const created = await createSaddleLeather({
           saddleId: Number(model.id),
           leatherId: Number(row.leather.id),
@@ -237,8 +253,11 @@ export function ModelPricesModal({ model, isOpen, onClose }: ModelPricesModalPro
                           row.saddleLeather?.price6,
                           row.saddleLeather?.price7,
                         ].map((price, pi) => (
-                          <td key={pi} className="p-2 text-right text-gray-600">
-                            {row.checked ? (price || 0) : '-'}
+                          <td
+                            key={pi}
+                            className={`p-2 text-right ${row.checked ? 'text-gray-600' : 'text-gray-400'}`}
+                          >
+                            {row.saddleLeather ? (price || 0) : '-'}
                           </td>
                         ))}
                         <td className="p-2 text-center">

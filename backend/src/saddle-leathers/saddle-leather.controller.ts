@@ -81,11 +81,18 @@ export class SaddleLeatherController {
   @Get("saddle/:saddleId")
   @ApiOperation({ summary: "Get leather associations for a saddle" })
   @ApiParam({ name: "saddleId", description: "Saddle ID (integer)" })
+  @ApiQuery({
+    name: "includeDeleted",
+    required: false,
+    type: Boolean,
+    description: "Also return soft-deleted (disabled) associations",
+  })
   @ApiResponse({ status: 200, type: [SaddleLeatherDto] })
   async findBySaddleId(
     @Param("saddleId", ParseIntPipe) saddleId: number,
+    @Query("includeDeleted") includeDeleted?: string,
   ): Promise<SaddleLeatherDto[]> {
-    return this.service.findBySaddleId(saddleId);
+    return this.service.findBySaddleId(saddleId, includeDeleted === "true");
   }
 
   @Get("leather/:leatherId")

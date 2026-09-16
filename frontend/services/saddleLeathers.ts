@@ -17,10 +17,14 @@ export interface SaddleLeather {
   isActive?: boolean;
 }
 
-export async function fetchSaddleLeathersBySaddleId(saddleId: number): Promise<SaddleLeather[]> {
-
-
-  const response = await fetch(`${API_URL}/api/v1/saddle-leathers/saddle/${saddleId}`, {
+export async function fetchSaddleLeathersBySaddleId(
+  saddleId: number,
+  { includeDeleted = false }: { includeDeleted?: boolean } = {},
+): Promise<SaddleLeather[]> {
+  // Disabled leathers keep their prices (legacy soft-delete); the admin dialog
+  // asks for them so it can show those prices greyed-out like production does.
+  const query = includeDeleted ? '?includeDeleted=true' : '';
+  const response = await fetch(`${API_URL}/api/v1/saddle-leathers/saddle/${saddleId}${query}`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',

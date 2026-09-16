@@ -39,6 +39,7 @@ export default function Leathertypes() {
       logger.log('Fetching leathertypes with filters:', filters);
       const data = await fetchLeathertypes({
         page: pagination.currentPage,
+        limit: pagination.itemsPerPage,
         searchTerm,
         filters,
         orderBy: 'name',
@@ -56,7 +57,7 @@ export default function Leathertypes() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.currentPage, searchTerm, filters, setTotalItems]);
+  }, [pagination.currentPage, pagination.itemsPerPage, searchTerm, filters, setTotalItems]);
 
   // Fetch leathertypes when dependencies change
   useEffect(() => {

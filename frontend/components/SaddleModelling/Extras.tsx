@@ -38,6 +38,7 @@ export default function Extras() {
       logger.log('Fetching extras with filters:', filters);
       const data = await fetchExtras({
         page: pagination.currentPage,
+        limit: pagination.itemsPerPage,
         searchTerm,
         filters,
         orderBy: 'name',
@@ -55,7 +56,7 @@ export default function Extras() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.currentPage, searchTerm, filters, setTotalItems]);
+  }, [pagination.currentPage, pagination.itemsPerPage, searchTerm, filters, setTotalItems]);
 
   // Fetch extras when dependencies change
   useEffect(() => {
