@@ -79,7 +79,6 @@ describe("SaddleOptionsItemService", () => {
           optionId: 10,
           optionItemId: 20,
           leatherId: 5,
-          deleted: 0,
         },
       });
       expect(repository.create).toHaveBeenCalledWith(
@@ -114,6 +113,33 @@ describe("SaddleOptionsItemService", () => {
           deleted: 0,
         }),
       );
+    });
+
+    it("should revive a soft-deleted association instead of inserting a duplicate", async () => {
+      // Arrange — legacy keeps unchecked rows with deleted=1; re-checking must reuse them
+      const createDto: CreateSaddleOptionsItemDto = {
+        saddleId: 100,
+        optionId: 10,
+        optionItemId: 20,
+        leatherId: 5,
+      };
+      const softDeleted = { ...mockSaddleOptionsItemEntity, deleted: 1 };
+      repository.findOne.mockResolvedValue(
+        softDeleted as SaddleOptionsItemEntity,
+      );
+      repository.save.mockImplementation((e) =>
+        Promise.resolve(e as SaddleOptionsItemEntity),
+      );
+
+      // Act
+      const result = await service.create(createDto);
+
+      // Assert
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1, deleted: 0 }),
+      );
+      expect(result).toMatchObject({ id: 1, deleted: 0, isActive: true });
     });
 
     it("should throw ConflictException when association already exists", async () => {

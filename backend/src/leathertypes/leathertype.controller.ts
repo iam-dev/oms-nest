@@ -84,12 +84,24 @@ export class LeathertypeController {
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
   @ApiQuery({ name: "search", required: false, type: String })
+  @ApiQuery({
+    name: "includeDeleted",
+    required: false,
+    type: Boolean,
+    description: "Also return soft-deleted leathertypes",
+  })
   async findAll(
     @Query("page") page?: number,
     @Query("limit") limit?: number,
     @Query("search") search?: string,
+    @Query("includeDeleted") includeDeleted?: string,
   ): Promise<{ data: LeathertypeDto[]; total: number; pages: number }> {
-    return this.leathertypeService.findAll(page, limit, search);
+    return this.leathertypeService.findAll(
+      page,
+      limit,
+      search,
+      includeDeleted === "true",
+    );
   }
 
   @Get("active")

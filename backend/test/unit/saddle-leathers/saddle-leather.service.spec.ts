@@ -82,7 +82,6 @@ describe("SaddleLeatherService", () => {
         where: {
           saddleId: 100,
           leatherId: 50,
-          deleted: 0,
         },
       });
       expect(repository.create).toHaveBeenCalledWith(
@@ -125,6 +124,55 @@ describe("SaddleLeatherService", () => {
       );
     });
 
+    it("should revive a soft-deleted association and keep its prices", async () => {
+      // Arrange — legacy keeps the row (with prices) when a leather is unchecked,
+      // so re-checking must restore that row instead of inserting a zero-priced copy
+      const createDto: CreateSaddleLeatherDto = {
+        saddleId: 100,
+        leatherId: 50,
+      };
+      const softDeleted = { ...mockSaddleLeatherEntity, deleted: 1 };
+      repository.findOne.mockResolvedValue(softDeleted as SaddleLeatherEntity);
+      repository.save.mockImplementation((e) =>
+        Promise.resolve(e as SaddleLeatherEntity),
+      );
+
+      // Act
+      const result = await service.create(createDto);
+
+      // Assert
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          deleted: 0,
+          price1: 1000,
+          price7: 1600,
+        }),
+      );
+      expect(result).toMatchObject({ id: 1, deleted: 0, price1: 1000 });
+    });
+
+    it("should apply supplied prices when reviving a soft-deleted association", async () => {
+      // Arrange
+      const createDto: CreateSaddleLeatherDto = {
+        saddleId: 100,
+        leatherId: 50,
+        price1: 5,
+      };
+      const softDeleted = { ...mockSaddleLeatherEntity, deleted: 1 };
+      repository.findOne.mockResolvedValue(softDeleted as SaddleLeatherEntity);
+      repository.save.mockImplementation((e) =>
+        Promise.resolve(e as SaddleLeatherEntity),
+      );
+
+      // Act
+      const result = await service.create(createDto);
+
+      // Assert
+      expect(result).toMatchObject({ deleted: 0, price1: 5, price2: 1100 });
+    });
+
     it("should throw ConflictException when association already exists", async () => {
       // Arrange
       const createDto: CreateSaddleLeatherDto = {
@@ -142,7 +190,6 @@ describe("SaddleLeatherService", () => {
         where: {
           saddleId: 100,
           leatherId: 50,
-          deleted: 0,
         },
       });
       expect(repository.create).not.toHaveBeenCalled();
@@ -270,6 +317,26 @@ describe("SaddleLeatherService", () => {
   });
 
   describe("findBySaddleId", () => {
+    it("should include soft-deleted associations when includeDeleted is true", async () => {
+      // Arrange
+      const softDeleted = { ...mockSaddleLeatherEntity, id: 2, deleted: 1 };
+      repository.find.mockResolvedValue([
+        mockSaddleLeatherEntity,
+        softDeleted as SaddleLeatherEntity,
+      ]);
+
+      // Act
+      const result = await service.findBySaddleId(100, true);
+
+      // Assert
+      expect(repository.find).toHaveBeenCalledWith({
+        where: { saddleId: 100 },
+        order: { sequence: "ASC" },
+      });
+      expect(result).toHaveLength(2);
+      expect(result[1]).toMatchObject({ id: 2, deleted: 1, isActive: false });
+    });
+
     it("should find all associations for a saddle", async () => {
       // Arrange
       const saddleId = 100;

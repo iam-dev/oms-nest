@@ -207,6 +207,21 @@ describe("LeathertypeService", () => {
       );
     });
 
+    it("should include soft-deleted leathertypes when includeDeleted is true", async () => {
+      // Arrange
+      mockQueryBuilder.getCount.mockResolvedValue(1);
+      mockQueryBuilder.getMany.mockResolvedValue([mockLeathertypeEntity]);
+
+      // Act
+      await service.findAll(1, 10, undefined, true);
+
+      // Assert
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith("1 = 1");
+      expect(mockQueryBuilder.where).not.toHaveBeenCalledWith(
+        "leathertype.deleted = 0",
+      );
+    });
+
     it("should search by name", async () => {
       // Arrange
       mockQueryBuilder.getCount.mockResolvedValue(1);

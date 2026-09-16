@@ -188,6 +188,17 @@ describe("OptionService", () => {
       expect(result).toBeDefined();
       expect(repository.createQueryBuilder).toHaveBeenCalled();
     });
+
+    it("should exclude a type when excludeType is given (e.g. extras = type 2)", async () => {
+      // Act
+      await service.findAll(1, 10, undefined, undefined, undefined, 2);
+
+      // Assert
+      const qb = repository.createQueryBuilder("option");
+      expect(qb.andWhere).toHaveBeenCalledWith("option.type <> :excludeType", {
+        excludeType: 2,
+      });
+    });
   });
 
   describe("update", () => {

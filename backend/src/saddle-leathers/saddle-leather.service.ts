@@ -23,20 +23,39 @@ export class SaddleLeatherService {
   ) {}
 
   /**
-   * Create a new saddle-leather association
+   * Create a new saddle-leather association.
+   *
+   * Legacy OMS never hard-deletes these rows: unchecking a leather on a saddle
+   * only flags it `deleted = 1` and keeps its prices. Re-enabling therefore
+   * revives the existing row (prices intact) instead of inserting a zero-priced
+   * duplicate. Prices passed in the DTO override the stored ones.
    */
   async create(createDto: CreateSaddleLeatherDto): Promise<SaddleLeatherDto> {
-    // Check for existing association
+    // Check for existing association (active or soft-deleted)
     const existing = await this.repository.findOne({
       where: {
         saddleId: createDto.saddleId,
         leatherId: createDto.leatherId,
-        deleted: 0,
       },
     });
 
-    if (existing) {
+    if (existing && existing.deleted === 0) {
       throw new ConflictException("Saddle-leather association already exists");
+    }
+
+    if (existing) {
+      existing.deleted = 0;
+      for (const tier of [1, 2, 3, 4, 5, 6, 7] as const) {
+        const key = `price${tier}` as const;
+        if (createDto[key] !== undefined) {
+          existing[key] = createDto[key];
+        }
+      }
+      if (createDto.sequence !== undefined) {
+        existing.sequence = createDto.sequence;
+      }
+      const revived = await this.repository.save(existing);
+      return this.toDto(revived);
     }
 
     const entity = this.repository.create({
@@ -109,11 +128,17 @@ export class SaddleLeatherService {
   }
 
   /**
-   * Find by saddle ID
+   * Find by saddle ID.
+   *
+   * `includeDeleted` also returns soft-deleted rows so the admin UI can show the
+   * (still stored) prices of leathers that are currently disabled for a saddle.
    */
-  async findBySaddleId(saddleId: number): Promise<SaddleLeatherDto[]> {
+  async findBySaddleId(
+    saddleId: number,
+    includeDeleted = false,
+  ): Promise<SaddleLeatherDto[]> {
     const items = await this.repository.find({
-      where: { saddleId, deleted: 0 },
+      where: includeDeleted ? { saddleId } : { saddleId, deleted: 0 },
       order: { sequence: "ASC" },
     });
 
