@@ -9,7 +9,6 @@ import { useTableFilters, usePagination } from '@/hooks';
 import { getModelTableColumns, type ModelRow } from '@/utils/modelTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { fetchModels, updateModel, deleteModel, createModel, type Model } from '@/services/models';
-import { ModelDetailModal } from '@/components/shared/ModelDetailModal';
 import { ModelEditModal } from '@/components/shared/ModelEditModal';
 import { ModelAddModal } from '@/components/shared/ModelAddModal';
 import { ModelPricesModal } from '@/components/shared/ModelPricesModal';
@@ -25,7 +24,6 @@ export default function Models() {
 
   // Modal states
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPricesModal, setShowPricesModal] = useState(false);
@@ -76,12 +74,6 @@ export default function Models() {
   const handleFilterChange = (key: string, value: string) => {
     updateFilter(key, value);
     setPage(1); // Reset to page 1 when filters change
-  };
-
-  // Handle view model details
-  const handleViewModel = (model: Model) => {
-    setSelectedModel(model);
-    setShowDetailModal(true);
   };
 
   // Handle edit model
@@ -140,7 +132,6 @@ export default function Models() {
 
   // Handle close modals
   const handleCloseModals = () => {
-    setShowDetailModal(false);
     setShowEditModal(false);
     setShowAddModal(false);
     setShowPricesModal(false);
@@ -149,16 +140,12 @@ export default function Models() {
     setSelectedModel(null);
   };
 
-  // Handle edit from detail modal
-  const handleEditFromDetail = () => {
-    setShowDetailModal(false);
-    setShowEditModal(true);
-  };
-
   // Action button handlers
+  // "Info" mirrors the legacy "Manage information" page, which is an edit form —
+  // open the editor directly instead of a read-only detail step.
   const handleInfoClick = (model: Model) => {
     setSelectedModel(model);
-    setShowDetailModal(true);
+    setShowEditModal(true);
   };
 
   const handleExtrasClick = (model: Model) => {
@@ -212,17 +199,9 @@ export default function Models() {
         loading={loading}
         error={error}
         entityType="saddle"
-        onView={handleViewModel}
+        actionButtons={{ view: false, edit: true, delete: true }}
         onEdit={handleEditModel}
         onDelete={handleDeleteModel}
-      />
-
-      {/* Model Detail Modal */}
-      <ModelDetailModal
-        model={selectedModel}
-        isOpen={showDetailModal}
-        onClose={handleCloseModals}
-        onEdit={handleEditFromDetail}
       />
 
       {/* Model Edit Modal */}
