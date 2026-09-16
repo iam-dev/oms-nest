@@ -11,6 +11,10 @@ import { AlertTriangle } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { fetchModels, Model } from '@/services/models';
 
+// Radix Select reserves "" for "nothing selected", so "No Model" needs a real
+// sentinel value; it is mapped back to an empty modelId on change.
+const NO_MODEL = '__none__';
+
 interface PresetEditModalProps {
   preset: Preset | null;
   isOpen: boolean;
@@ -128,15 +132,15 @@ export function PresetEditModal({ preset, isOpen, onClose, onSave }: PresetEditM
           <div>
             <label className="block font-semibold text-sm text-gray-600 mb-1">Model:</label>
             <Select
-              value={editedPreset.modelId || ''}
-              onValueChange={(value) => handleChange('modelId', value)}
+              value={editedPreset.modelId || NO_MODEL}
+              onValueChange={(value) => handleChange('modelId', value === NO_MODEL ? '' : value)}
               disabled={loadingModels}
             >
               <SelectTrigger>
                 <SelectValue placeholder={loadingModels ? "Loading models..." : "Select model (optional)"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No Model</SelectItem>
+                <SelectItem value={NO_MODEL}>No Model</SelectItem>
                 {models.map((model) => (
                   <SelectItem key={model.id} value={model.id}>
                     {model.name}
