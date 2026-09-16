@@ -253,10 +253,15 @@ jobs:
           MAIL_REQUIRE_TLS: "false"
 
       - name: Upload backend test coverage
-        uses: codecov/codecov-action@v3 # TODO(WF-010): pin to commit SHA once SHA for v3 is verified
+        # Coverage upload is informational: a flaky codecov.io connection
+        # (e.g. ECONNRESET inside the action) must not fail a green test run.
+        uses: codecov/codecov-action@v5 # TODO(WF-010): pin to commit SHA
+        continue-on-error: true
         with:
           directory: backend/coverage
           flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # Frontend testing (Next.js)
   test-frontend:
@@ -292,10 +297,15 @@ jobs:
         run: npm run build
 
       - name: Upload frontend test coverage
-        uses: codecov/codecov-action@v3 # TODO(WF-010): pin to commit SHA once SHA for v3 is verified
+        # Coverage upload is informational: a flaky codecov.io connection
+        # (e.g. ECONNRESET inside the action) must not fail a green test run.
+        uses: codecov/codecov-action@v5 # TODO(WF-010): pin to commit SHA
+        continue-on-error: true
         with:
           directory: frontend/coverage
           flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # 🎭 Comprehensive End-to-End Testing with Playwright
   test-e2e:
