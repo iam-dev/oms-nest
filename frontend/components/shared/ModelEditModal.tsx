@@ -19,6 +19,32 @@ interface ModelEditModalProps {
   onSave: (updatedModel: Partial<Model>) => Promise<void>;
 }
 
+/**
+ * Legacy "Manage information" form: one label/control row per field, in the
+ * same order as production so admins recognise it. Declared at module scope —
+ * defining it inside the component would remount the inputs on every render.
+ */
+function FieldRow({ label, htmlFor, required, children }: {
+  label: string;
+  htmlFor: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-4">
+      <label
+        htmlFor={htmlFor}
+        data-testid="field-label"
+        className="w-40 shrink-0 text-sm text-gray-700"
+      >
+        {label}
+        {required && <span className="ml-1 text-red-700">*</span>}
+      </label>
+      <div className="w-72">{children}</div>
+    </div>
+  );
+}
+
 export function ModelEditModal({ model, isOpen, onClose, onSave }: ModelEditModalProps) {
   const [editedModel, setEditedModel] = useState<Partial<Model>>({});
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -143,85 +169,107 @@ export function ModelEditModal({ model, isOpen, onClose, onSave }: ModelEditModa
   if (!model) return null;
 
   const isLoading = loadingBrands || loadingFactories;
+  const brandListId = `model-brand-suggestions-${model.id}`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Saddle {model.id}</DialogTitle>
+          <DialogTitle>
+            Manage information for {model.brandName} {model.name}
+          </DialogTitle>
           <DialogDescription>
-            Update the saddle model information below.
+            Factories per region, brand, model, type and status of this saddle.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-4 mt-4">
-          <div>
-            <label className="block font-semibold text-sm text-gray-600 mb-1">
-              Model Name: <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={editedModel.name || ''}
-              onChange={(e) => handleChange('name', e.target.value)}
-              placeholder="Model Name"
-              required
-            />
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading...
           </div>
+        ) : (
+          <div className="mt-2 space-y-3 rounded border border-dashed border-gray-300 p-4">
+            {FACTORY_REGION_KEYS.map((key) => {
+              const id = `saddle-${key}`;
+              return (
+                <FieldRow key={key} label={`Factory for ${FACTORY_REGIONS[key]}:`} htmlFor={id} required>
+                  <Select
+                    value={String(editedModel[key as keyof Model] ?? 0)}
+                    onValueChange={(value) => handleFactoryChange(key, value)}
+                    aria-label={`Factory for ${FACTORY_REGIONS[key]}:`}
+                  >
+                    <SelectTrigger id={id} className="h-9">
+                      <SelectValue placeholder="- Choose factory -" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">- Choose factory -</SelectItem>
+                      {factories.map((factory) => (
+                        <SelectItem key={factory.id} value={String(factory.id)}>
+                          {factory.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
+              );
+            })}
 
-          <div>
-            <label className="block font-semibold text-sm text-gray-600 mb-1">
-              Brand: <span className="text-red-500">*</span>
-            </label>
-            <Select
-              value={editedModel.brandName || ''}
-              onValueChange={(value) => handleChange('brandName', value)}
-              disabled={loadingBrands}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={loadingBrands ? "Loading brands..." : "Select brand"} />
-              </SelectTrigger>
-              <SelectContent>
-                {loadingBrands ? (
-                  <div className="flex items-center justify-center py-2">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Loading...
-                  </div>
-                ) : brands.length === 0 ? (
-                  <div className="py-2 px-3 text-gray-500 text-sm">
-                    No brands available
-                  </div>
-                ) : (
-                  brands.map((brand) => (
-                    <SelectItem key={brand.id} value={brand.name}>
-                      {brand.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-sm text-gray-600 mb-1">
-                Sequence: <span className="text-red-500">*</span>
-              </label>
+            <FieldRow label="Brand:" htmlFor="saddle-brand" required>
+              {/* Free text like production: saddles use brands that are not in the brands table */}
               <Input
-                type="number"
-                min="0"
-                value={editedModel.sequence || ''}
-                onChange={(e) => handleChange('sequence', parseInt(e.target.value) || 0)}
-                placeholder="Display Order"
+                id="saddle-brand"
+                aria-label="Brand:"
+                list={brandListId}
+                value={editedModel.brandName || ''}
+                onChange={(e) => handleChange('brandName', e.target.value)}
+                className="h-9"
                 required
               />
-            </div>
+              <datalist id={brandListId}>
+                {brands.map((brand) => (
+                  <option key={brand.id} value={brand.name} />
+                ))}
+              </datalist>
+            </FieldRow>
 
-            <div>
-              <label className="block font-semibold text-sm text-gray-600 mb-1">Status:</label>
+            <FieldRow label="Model:" htmlFor="saddle-model" required>
+              <Input
+                id="saddle-model"
+                aria-label="Model:"
+                value={editedModel.name || ''}
+                onChange={(e) => handleChange('name', e.target.value)}
+                className="h-9"
+                required
+              />
+            </FieldRow>
+
+            <FieldRow label="Type:" htmlFor="saddle-type" required>
+              <Select
+                value={String(editedModel.type ?? 0)}
+                onValueChange={(value) => handleChange('type', parseInt(value, 10))}
+                aria-label="Type:"
+              >
+                <SelectTrigger id="saddle-type" className="h-9">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SADDLE_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+
+            <FieldRow label="Status:" htmlFor="saddle-status" required>
               <Select
                 value={editedModel.active ? 'true' : 'false'}
                 onValueChange={(value) => handleChange('active', value === 'true')}
+                aria-label="Status:"
               >
-                <SelectTrigger>
+                <SelectTrigger id="saddle-status" className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -229,67 +277,9 @@ export function ModelEditModal({ model, isOpen, onClose, onSave }: ModelEditModa
                   <SelectItem value="false">Inactive</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </FieldRow>
           </div>
-
-          {/* Saddle Type */}
-          <div>
-            <label className="block font-semibold text-sm text-gray-600 mb-1">Type:</label>
-            <Select
-              value={String(editedModel.type ?? 0)}
-              onValueChange={(value) => handleChange('type', parseInt(value, 10))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {SADDLE_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={String(option.value)}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Factory Assignments Section */}
-          <div>
-            <label className="block font-semibold text-sm text-gray-600 mb-2">Factory Assignments:</label>
-            {loadingFactories ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading factories...
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {FACTORY_REGION_KEYS.map((key) => (
-                  <div key={key}>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      {FACTORY_REGIONS[key]}
-                    </label>
-                    <Select
-                      value={String(editedModel[key as keyof Model] ?? 0)}
-                      onValueChange={(value) => handleFactoryChange(key, value)}
-                      disabled={loadingFactories}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">None</SelectItem>
-                        {factories.map((factory) => (
-                          <SelectItem key={factory.id} value={String(factory.id)}>
-                            {factory.displayName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
         {error && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -309,14 +299,14 @@ export function ModelEditModal({ model, isOpen, onClose, onSave }: ModelEditModa
             onClick={onClose}
             disabled={saving}
           >
-            Back to saddles
+            Cancel
           </Button>
           <Button
             onClick={handleSave}
             disabled={saving || isLoading}
             className="bg-[#7b2326] hover:bg-[#8b2329] text-white"
           >
-            {saving ? 'Saving...' : 'Save saddle'}
+            {saving ? 'Saving...' : 'Save information'}
           </Button>
         </div>
       </DialogContent>

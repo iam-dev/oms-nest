@@ -31,6 +31,7 @@ export function getModelTableColumns(
     title: React.ReactNode;
     render: (v: unknown, row?: ModelRow) => React.ReactNode;
     maxWidth: string;
+    width?: string;
   }> = [
     {
       key: 'id',
@@ -109,57 +110,44 @@ export function getModelTableColumns(
   ];
 
   if (actionCallbacks) {
+    // Same compact pill buttons as the legacy "Manage Saddles" list, kept on
+    // one line: the column gets a fixed width so the text columns can't
+    // squeeze the buttons onto a second row (or under the cell's truncation).
+    const actionButtonClass =
+      'h-7 px-2 text-xs font-medium text-[#7b2326] bg-gray-50 border-gray-300 hover:bg-gray-100 hover:text-[#7b2326]';
+    const actions: Array<{ key: keyof ModelActionCallbacks; label: React.ReactNode }> = [
+      { key: 'onInfo', label: 'Info' },
+      { key: 'onExtras', label: <>Extra&apos;s</> },
+      { key: 'onOptions', label: 'Options' },
+      { key: 'onPrices', label: 'Prices' },
+    ];
     columns.push({
       key: '_actions',
       title: (<span className="text-xs font-medium text-gray-500">ACTIONS</span>),
       render: (_v: unknown, row?: ModelRow) => {
         if (!row) return null;
         return (
-          <div className="flex gap-1 flex-wrap">
-            {actionCallbacks.onInfo && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={(e) => { e.stopPropagation(); actionCallbacks.onInfo!(row); }}
-              >
-                Info
-              </Button>
-            )}
-            {actionCallbacks.onExtras && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={(e) => { e.stopPropagation(); actionCallbacks.onExtras!(row); }}
-              >
-                Extra&apos;s
-              </Button>
-            )}
-            {actionCallbacks.onOptions && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={(e) => { e.stopPropagation(); actionCallbacks.onOptions!(row); }}
-              >
-                Options
-              </Button>
-            )}
-            {actionCallbacks.onPrices && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={(e) => { e.stopPropagation(); actionCallbacks.onPrices!(row); }}
-              >
-                Prices
-              </Button>
-            )}
+          <div className="flex flex-nowrap gap-1 whitespace-nowrap">
+            {actions.map(({ key, label }) => {
+              const callback = actionCallbacks[key];
+              if (!callback) return null;
+              return (
+                <Button
+                  key={key}
+                  variant="outline"
+                  size="sm"
+                  className={actionButtonClass}
+                  onClick={(e) => { e.stopPropagation(); callback(row); }}
+                >
+                  {label}
+                </Button>
+              );
+            })}
           </div>
         );
       },
-      maxWidth: '280px',
+      maxWidth: 'none',
+      width: '270px',
     });
   }
 
