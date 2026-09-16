@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Fitter } from '@/services/fitters';
+import { Fitter, FITTER_CURRENCIES } from '@/services/fitters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -43,6 +43,7 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
         zipcode: fitter.zipcode || '',
         phoneNo: fitter.phoneNo || '',
         cellNo: fitter.cellNo || '',
+        currency: fitter.currency ?? 1,
         enabled: fitter.enabled ?? true,
       });
     } else if (isOpen) {
@@ -58,6 +59,7 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
         zipcode: '',
         phoneNo: '',
         cellNo: '',
+        currency: 1,
         enabled: true,
       });
     }
@@ -141,7 +143,7 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
     }
   };
 
-  const handleChange = (field: keyof Fitter, value: string | boolean) => {
+  const handleChange = (field: keyof Fitter, value: string | boolean | number) => {
     setEditedFitter((prev) => ({
       ...prev,
       [field]: value
@@ -168,6 +170,8 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
               onChange={(e) => handleChange('username', e.target.value)}
               placeholder="Username"
               required
+              disabled={!isCreateMode}
+              title={isCreateMode ? undefined : 'The login name cannot be changed after the account is created'}
             />
           </div>
 
@@ -208,22 +212,47 @@ export function FitterEditModal({ fitter, isOpen, onClose, onSave }: FitterEditM
             />
           </div>
 
-          <div>
-            <label className="block font-semibold text-sm text-gray-600 mb-1">
-              Status: <span className="text-red-500">*</span>
-            </label>
-            <Select
-              value={editedFitter.enabled ? 'true' : 'false'}
-              onValueChange={(value) => handleChange('enabled', value === 'true')}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="true">Enabled</SelectItem>
-                <SelectItem value="false">Disabled</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">
+                Status: <span className="text-red-500">*</span>
+              </label>
+              <Select
+                name="status"
+                value={editedFitter.enabled ? 'true' : 'false'}
+                onValueChange={(value) => handleChange('enabled', value === 'true')}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="true">Enabled</SelectItem>
+                  <SelectItem value="false">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">
+                Currency: <span className="text-red-500">*</span>
+              </label>
+              <Select
+                name="currency"
+                value={String(editedFitter.currency ?? 1)}
+                onValueChange={(value) => handleChange('currency', Number(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FITTER_CURRENCIES.map(({ id, code }) => (
+                    <SelectItem key={id} value={String(id)}>
+                      {code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

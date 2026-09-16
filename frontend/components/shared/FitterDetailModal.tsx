@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Fitter } from '@/services/fitters';
+import { Fitter, FITTER_CURRENCIES } from '@/services/fitters';
 import { Button } from '@/components/ui/button';
 
 // Helper function to convert country codes to names
@@ -144,6 +144,13 @@ export function FitterDetailModal({ fitter, isOpen, onClose, onEdit }: FitterDet
                 {fitter.cellNo || '-'}
               </p>
             </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-sm text-gray-600 mb-1">Currency</label>
+            <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
+              {FITTER_CURRENCIES.find((c) => c.id === fitter.currency)?.code || '-'}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

@@ -173,7 +173,8 @@ export class FitterService {
       }
     }
 
-    return this.toDto(savedFitter);
+    const [dto] = await this.attachUserData([this.toDto(savedFitter)]);
+    return dto;
   }
 
   async findOne(id: number): Promise<FitterDto> {
@@ -181,7 +182,8 @@ export class FitterService {
     if (!fitter) {
       throw new NotFoundException("Fitter not found");
     }
-    return this.toDto(fitter);
+    const [dto] = await this.attachUserData([this.toDto(fitter)]);
+    return dto;
   }
 
   async findAll(
@@ -205,32 +207,9 @@ export class FitterService {
       status,
     });
 
-    const dtos = fitters.map((fitter) => this.toDto(fitter));
-
-    // Supplement DTOs with user data (name, username, enabled, lastLogin)
-    const userIds = dtos
-      .map((d) => d.userId)
-      .filter((uid): uid is number => uid !== undefined && uid !== null);
-
-    if (userIds.length > 0) {
-      const users = await this.dataSource.query(
-        `SELECT legacy_id, name, username, enabled, last_login FROM "user" WHERE legacy_id = ANY($1::int[])`,
-        [userIds],
-      );
-      const userMap = new Map<number, Record<string, unknown>>();
-      for (const u of users) {
-        userMap.set(u.legacy_id, u);
-      }
-      for (const dto of dtos) {
-        const user = dto.userId ? userMap.get(dto.userId) : undefined;
-        if (user) {
-          dto.name = user.name as string;
-          dto.username = user.username as string;
-          dto.enabled = user.enabled as boolean;
-          dto.lastLogin = user.last_login as Date;
-        }
-      }
-    }
+    const dtos = await this.attachUserData(
+      fitters.map((fitter) => this.toDto(fitter)),
+    );
 
     return {
       data: dtos,
@@ -292,8 +271,17 @@ export class FitterService {
       }
     }
 
+    // Status lives on the login account: credentials.blocked (0 = enabled, 1 = blocked)
+    if (updateFitterDto.enabled !== undefined && fitter.userId) {
+      await this.dataSource.query(
+        `UPDATE credentials SET blocked = $1 WHERE user_id = $2`,
+        [updateFitterDto.enabled ? 0 : 1, fitter.userId],
+      );
+    }
+
     const savedFitter = await this.fitterRepository.save(fitter);
-    return this.toDto(savedFitter);
+    const [dto] = await this.attachUserData([this.toDto(savedFitter)]);
+    return dto;
   }
 
   async remove(id: number): Promise<void> {
@@ -362,6 +350,40 @@ export class FitterService {
     );
 
     return { enabled: result[0]?.blocked === 0 };
+  }
+
+  /**
+   * Supplement fitter DTOs with data that lives on the linked login account
+   * (the "user" view over credentials): name, username, enabled, lastLogin.
+   * Fitters without a linked user are returned unchanged.
+   */
+  private async attachUserData(dtos: FitterDto[]): Promise<FitterDto[]> {
+    const userIds = dtos
+      .map((d) => d.userId)
+      .filter((uid): uid is number => uid !== undefined && uid !== null);
+
+    if (userIds.length === 0) {
+      return dtos;
+    }
+
+    const users = await this.dataSource.query(
+      `SELECT legacy_id, name, username, enabled, last_login FROM "user" WHERE legacy_id = ANY($1::int[])`,
+      [userIds],
+    );
+    const userMap = new Map<number, Record<string, unknown>>();
+    for (const u of users) {
+      userMap.set(u.legacy_id, u);
+    }
+    for (const dto of dtos) {
+      const user = dto.userId ? userMap.get(dto.userId) : undefined;
+      if (user) {
+        dto.name = user.name as string;
+        dto.username = user.username as string;
+        dto.enabled = user.enabled as boolean;
+        dto.lastLogin = user.last_login as Date;
+      }
+    }
+    return dtos;
   }
 
   private toDto(fitter: Fitter): FitterDto {
