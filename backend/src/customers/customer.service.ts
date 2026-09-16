@@ -75,14 +75,14 @@ export class CustomerService {
     fitterId?: number,
     search?: string,
     id?: number,
-    orderFitterId?: number,
+    scopedFitterId?: number,
   ): Promise<{ data: CustomerDto[]; total: number; pages: number }> {
     const { customers, total } = await this.customerRepository.findAllPaginated(
       {
         page,
         limit,
         fitterId,
-        orderFitterId,
+        scopedFitterId,
         name,
         email,
         country,

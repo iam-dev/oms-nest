@@ -108,6 +108,83 @@ describe("CustomerController", () => {
       expect(customerService.create).toHaveBeenCalledWith(minimalCreateDto);
     });
 
+    it("should default fitterId to the logged-in fitter when omitted", async () => {
+      // Arrange: the Customers page create modal never sends fitterId
+      const createDto: CreateCustomerDto = {
+        email: "new@example.com",
+        name: "New Customer",
+        address: "1 Street",
+        city: "Austin",
+        country: "USA",
+      };
+      customerService.create.mockResolvedValue({
+        ...mockCustomerDto,
+        fitterId: 312,
+      });
+      mockDataSource.query.mockResolvedValue([{ id: 312 }]);
+      const fitterReq = {
+        user: { legacyId: 448, role: { id: 1, name: "fitter" } },
+      };
+
+      // Act
+      await controller.create(createDto, fitterReq);
+
+      // Assert
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
+        [448],
+      );
+      expect(customerService.create).toHaveBeenCalledWith({
+        ...createDto,
+        fitterId: 312,
+      });
+    });
+
+    it("should keep an explicit fitterId (including 0) for fitter users", async () => {
+      // Arrange: fitterId 0 is the legacy "unassigned" sentinel, not "missing"
+      const createDto: CreateCustomerDto = {
+        email: "new@example.com",
+        name: "New Customer",
+        address: "1 Street",
+        city: "Austin",
+        country: "USA",
+        fitterId: 0,
+      };
+      customerService.create.mockResolvedValue(mockCustomerDto);
+      const fitterReq = {
+        user: { legacyId: 448, role: { id: 1, name: "fitter" } },
+      };
+
+      // Act
+      await controller.create(createDto, fitterReq);
+
+      // Assert
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+      expect(customerService.create).toHaveBeenCalledWith(createDto);
+    });
+
+    it("should not default fitterId for admin users", async () => {
+      // Arrange
+      const createDto: CreateCustomerDto = {
+        email: "new@example.com",
+        name: "New Customer",
+        address: "1 Street",
+        city: "Austin",
+        country: "USA",
+      };
+      customerService.create.mockResolvedValue(mockCustomerDto);
+      const adminReq = {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      };
+
+      // Act
+      await controller.create(createDto, adminReq);
+
+      // Assert
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+      expect(customerService.create).toHaveBeenCalledWith(createDto);
+    });
+
     it("should handle email conflict when creating customer", async () => {
       // Arrange
       const createDto: CreateCustomerDto = {
@@ -574,8 +651,8 @@ describe("CustomerController", () => {
     });
   });
 
-  describe("fitter auto-filtering via orders", () => {
-    it("should pass orderFitterId for fitter users", async () => {
+  describe("fitter auto-scoping (own customers or via orders)", () => {
+    it("should pass scopedFitterId for fitter users", async () => {
       // Arrange
       const paginatedResponse = { data: [mockCustomerDto], total: 1, pages: 1 };
       customerService.findAll.mockResolvedValue(paginatedResponse);
@@ -619,7 +696,7 @@ describe("CustomerController", () => {
       );
     });
 
-    it("should not pass orderFitterId for admin users", async () => {
+    it("should not pass scopedFitterId for admin users", async () => {
       // Arrange
       const paginatedResponse = { data: [mockCustomerDto], total: 1, pages: 1 };
       customerService.findAll.mockResolvedValue(paginatedResponse);
@@ -682,7 +759,7 @@ describe("CustomerController", () => {
         fitterReq,
       );
 
-      // Assert: fitterId query param preserved, orderFitterId also set
+      // Assert: fitterId query param preserved, scopedFitterId also set
       expect(customerService.findAll).toHaveBeenCalledWith(
         1,
         10,
@@ -721,7 +798,7 @@ describe("CustomerController", () => {
         fitterReq,
       );
 
-      // Assert: orderFitterId should be undefined since no fitter record found
+      // Assert: scopedFitterId should be undefined since no fitter record found
       expect(customerService.findAll).toHaveBeenCalledWith(
         undefined,
         undefined,

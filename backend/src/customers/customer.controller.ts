@@ -32,6 +32,10 @@ import { Roles } from "../roles/roles.decorator";
 import { RoleEnum } from "../roles/roles.enum";
 import { AuditLog } from "../audit-logging/decorators";
 
+type AuthenticatedRequest = {
+  user?: { legacyId?: number; role?: { id: number; name: string } };
+};
+
 /**
  * Customer REST API Controller
  *
@@ -51,6 +55,23 @@ export class CustomerController {
     private readonly customerService: CustomerService,
     private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * Resolve the fitters.id of the logged-in user when they are a fitter.
+   * Returns undefined for admins/supervisors (no scoping applies).
+   */
+  private async resolveFitterIdForUser(
+    req?: AuthenticatedRequest,
+  ): Promise<number | undefined> {
+    if (req?.user?.role?.id !== RoleEnum.fitter || !req.user.legacyId) {
+      return undefined;
+    }
+    const fitterRow = await this.dataSource.query(
+      "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
+      [req.user.legacyId],
+    );
+    return fitterRow[0]?.id || undefined;
+  }
 
   @Post()
   @AuditLog({ entity: "Customer" })
@@ -73,7 +94,16 @@ export class CustomerController {
   })
   async create(
     @Body() createCustomerDto: CreateCustomerDto,
+    @Req() req?: AuthenticatedRequest,
   ): Promise<CustomerDto> {
+    // A fitter's new customer belongs to them unless they say otherwise, so it
+    // shows up in their customer list / Edit Order search before its first order.
+    if (createCustomerDto.fitterId === undefined) {
+      const ownFitterId = await this.resolveFitterIdForUser(req);
+      if (ownFitterId !== undefined) {
+        createCustomerDto = { ...createCustomerDto, fitterId: ownFitterId };
+      }
+    }
     return this.customerService.create(createCustomerDto);
   }
 
@@ -127,20 +157,10 @@ export class CustomerController {
     @Query("city") city?: string,
     @Query("country") country?: string,
     @Query("fitterId") fitterId?: number,
-    @Req()
-    req?: { user?: { legacyId?: number; role?: { id: number; name: string } } },
+    @Req() req?: AuthenticatedRequest,
   ): Promise<{ data: CustomerDto[]; total: number; pages: number }> {
-    // Auto-filter for fitter users: show customers who have orders with this fitter
-    let orderFitterId: number | undefined;
-    if (req?.user?.role?.id === RoleEnum.fitter && req.user.legacyId) {
-      const fitterRow = await this.dataSource.query(
-        "SELECT id FROM fitters WHERE user_id = $1 LIMIT 1",
-        [req.user.legacyId],
-      );
-      if (fitterRow[0]?.id) {
-        orderFitterId = fitterRow[0].id;
-      }
-    }
+    // Auto-scope fitter users to their own customers (assigned or via orders)
+    const scopedFitterId = await this.resolveFitterIdForUser(req);
 
     return this.customerService.findAll(
       page ? +page : undefined,
@@ -152,7 +172,7 @@ export class CustomerController {
       fitterId ? +fitterId : undefined,
       search,
       id ? +id : undefined,
-      orderFitterId,
+      scopedFitterId,
     );
   }
 
