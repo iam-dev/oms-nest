@@ -155,6 +155,26 @@ describe("FitterService", () => {
       await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
       await expect(service.findOne(999)).rejects.toThrow("Fitter not found");
     });
+
+    it("should attach name/username/enabled/lastLogin from the linked user", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      dataSource.query.mockResolvedValue([
+        {
+          legacy_id: 100,
+          name: "Jane Doe",
+          username: "janedoe",
+          enabled: false,
+          last_login: 1700000000,
+        },
+      ]);
+
+      const result = await service.findOne(1);
+
+      expect(result.name).toBe("Jane Doe");
+      expect(result.username).toBe("janedoe");
+      expect(result.enabled).toBe(false);
+      expect(result.lastLogin).toBe(1700000000);
+    });
   });
 
   describe("findAll", () => {
@@ -324,6 +344,66 @@ describe("FitterService", () => {
         `UPDATE credentials SET full_name = $1 WHERE user_id = $2`,
         ["Jane Doe", mockFitter.userId],
       );
+    });
+
+    it("should set credentials.blocked = 1 when enabled is false", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      repository.save.mockResolvedValue(mockFitter);
+
+      await service.update(1, { enabled: false });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        `UPDATE credentials SET blocked = $1 WHERE user_id = $2`,
+        [1, mockFitter.userId],
+      );
+    });
+
+    it("should set credentials.blocked = 0 when enabled is true", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      repository.save.mockResolvedValue(mockFitter);
+
+      await service.update(1, { enabled: true });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        `UPDATE credentials SET blocked = $1 WHERE user_id = $2`,
+        [0, mockFitter.userId],
+      );
+    });
+
+    it("should not touch credentials.blocked when enabled is omitted", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      repository.save.mockResolvedValue(mockFitter);
+
+      await service.update(1, { city: "Boston" });
+
+      const blockedUpdates = dataSource.query.mock.calls.filter(
+        ([sql]: [string]) => sql.includes("SET blocked"),
+      );
+      expect(blockedUpdates).toHaveLength(0);
+    });
+
+    it("should return the updated fitter with linked user data attached", async () => {
+      repository.findById.mockResolvedValue(mockFitter);
+      repository.save.mockResolvedValue(mockFitter);
+      dataSource.query.mockImplementation((sql: string) =>
+        sql.startsWith("SELECT legacy_id")
+          ? Promise.resolve([
+              {
+                legacy_id: 100,
+                name: "Jane Doe",
+                username: "janedoe",
+                enabled: true,
+                last_login: 0,
+              },
+            ])
+          : Promise.resolve([]),
+      );
+
+      const result = await service.update(1, { city: "Boston" });
+
+      expect(result.name).toBe("Jane Doe");
+      expect(result.username).toBe("janedoe");
+      expect(result.enabled).toBe(true);
     });
 
     it("should not touch credentials.full_name when both names are empty", async () => {

@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger';
 
 export interface Fitter {
   id: number;
+  userId?: number;
   name: string;
   username: string;
   firstName?: string;
@@ -16,10 +17,80 @@ export interface Fitter {
   zipcode?: string;
   phoneNo?: string;
   cellNo?: string;
+  /** Legacy currency id, see FITTER_CURRENCIES */
+  currency?: number;
   enabled?: boolean;
-  lastLogin?: string;
+  lastLogin?: string | number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/**
+ * Fitter currency ids as stored in the legacy `fitters.currency` column.
+ * Order and ids match the legacy PHP edit form exactly.
+ */
+export const FITTER_CURRENCIES: ReadonlyArray<{ id: number; code: string }> = [
+  { id: 1, code: 'USD' },
+  { id: 2, code: 'EUR' },
+  { id: 3, code: 'GBP' },
+  { id: 4, code: 'CAN' },
+  { id: 5, code: 'AUD' },
+  { id: 6, code: 'NL' },
+  { id: 7, code: 'DE' },
+];
+
+/**
+ * Body accepted by POST/PATCH /fitters (mirrors the backend Create/UpdateFitterDto).
+ * Note the backend field is `emailaddress`, not `email`.
+ */
+export interface FitterApiPayload {
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  emailaddress?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  state?: string;
+  zipcode?: string;
+  phoneNo?: string;
+  cellNo?: string;
+  currency?: number;
+  enabled?: boolean;
+  password?: string;
+}
+
+/**
+ * Translate the edit/create form's Fitter shape into the backend DTO shape.
+ *
+ * The backend validation pipe runs with `whitelist: true`, so any key the DTO
+ * does not declare is dropped *silently*. Sending `email` instead of
+ * `emailaddress` therefore returns 200 while the change is lost. Funnel every
+ * save through this helper so the two field vocabularies cannot drift again.
+ * Undefined values are omitted so a PATCH never blanks untouched columns.
+ */
+export function toFitterApiPayload(
+  fitter: Partial<Fitter> & { password?: string },
+): FitterApiPayload {
+  const payload: FitterApiPayload = {
+    username: fitter.username,
+    firstName: fitter.firstName,
+    lastName: fitter.lastName,
+    emailaddress: fitter.email,
+    address: fitter.address,
+    city: fitter.city,
+    country: fitter.country,
+    state: fitter.state,
+    zipcode: fitter.zipcode,
+    phoneNo: fitter.phoneNo,
+    cellNo: fitter.cellNo,
+    currency: fitter.currency,
+    enabled: fitter.enabled,
+    password: fitter.password,
+  };
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as FitterApiPayload;
 }
 
 export interface FittersResponse {
@@ -99,14 +170,17 @@ export async function fetchFitterCountries(): Promise<string[]> {
   return response.json();
 }
 
-export async function createFitter(fitterData: Record<string, unknown>): Promise<Fitter> {
-  logger.log('Creating fitter with data:', fitterData);
+export async function createFitter(
+  fitterData: Partial<Fitter> & { password?: string },
+): Promise<Fitter> {
+  const payload = toFitterApiPayload(fitterData);
+  logger.log('Creating fitter with data:', payload);
 
   const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify(fitterData),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -120,14 +194,18 @@ export async function createFitter(fitterData: Record<string, unknown>): Promise
   return result;
 }
 
-export async function updateFitter(id: number, fitterData: Partial<Fitter>): Promise<Fitter> {
-  logger.log('Updating fitter with ID:', id, 'Data:', fitterData);
+export async function updateFitter(
+  id: number,
+  fitterData: Partial<Fitter> & { password?: string },
+): Promise<Fitter> {
+  const payload = toFitterApiPayload(fitterData);
+  logger.log('Updating fitter with ID:', id, 'Data:', payload);
 
   const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify(fitterData),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

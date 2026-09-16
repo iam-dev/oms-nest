@@ -142,6 +142,8 @@ describe('Fitter CRUD Operations', () => {
 
       const result = await createFitter(fitterData);
 
+      // The service translates the form shape to the backend DTO:
+      // `email` becomes `emailaddress`, derived `name` is dropped.
       expect(fetch).toHaveBeenCalledWith(
         'http://localhost:3001/api/v1/fitters',
         expect.objectContaining({
@@ -151,7 +153,7 @@ describe('Fitter CRUD Operations', () => {
             'Accept': 'application/json',
           }),
           credentials: 'include',
-          body: JSON.stringify(fitterData),
+          body: JSON.stringify({ username: 'testfitter', emailaddress: 'test@example.com' }),
         })
       );
 
@@ -169,11 +171,16 @@ describe('Fitter CRUD Operations', () => {
       };
       (fetch as jest.Mock).mockResolvedValue(mockResponse);
 
-      await createFitter({ name: 'Test' });
+      await createFitter({ firstName: 'Test', lastName: 'Fitter', email: 'x@example.com', currency: 2 });
 
       const requestBody = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body);
 
-      expect(requestBody).toEqual({ name: 'Test' });
+      expect(requestBody).toEqual({
+        firstName: 'Test',
+        lastName: 'Fitter',
+        emailaddress: 'x@example.com',
+        currency: 2,
+      });
     });
   });
 
@@ -187,7 +194,7 @@ describe('Fitter CRUD Operations', () => {
       };
       (fetch as jest.Mock).mockResolvedValue(mockResponse);
 
-      await updateFitter(123, { name: 'Updated Fitter' });
+      await updateFitter(123, { city: 'Boston', email: 'new@example.com', enabled: false });
 
       expect(fetch).toHaveBeenCalledWith(
         'http://localhost:3001/api/v1/fitters/123',
@@ -198,7 +205,7 @@ describe('Fitter CRUD Operations', () => {
             'Accept': 'application/json',
           }),
           credentials: 'include',
-          body: JSON.stringify({ name: 'Updated Fitter' }),
+          body: JSON.stringify({ emailaddress: 'new@example.com', city: 'Boston', enabled: false }),
         })
       );
     });

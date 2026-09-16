@@ -107,20 +107,22 @@ jest.mock('@/components/ui/select', () => {
   // referenced here due to jest.mock hoisting).
   const mockReact = jest.requireActual('react') as typeof import('react');
 
-  const mockSelectCtx = mockReact.createContext<{ value?: string; onValueChange?: (v: string) => void }>({});
+  const mockSelectCtx = mockReact.createContext<{ value?: string; onValueChange?: (v: string) => void; name?: string }>({});
 
   function Select({
     value,
     onValueChange,
     children,
+    name,
   }: {
     value?: string;
     onValueChange?: (v: string) => void;
     children: React.ReactNode;
+    name?: string;
   }) {
     return mockReact.createElement(
       mockSelectCtx.Provider,
-      { value: { value, onValueChange } },
+      { value: { value, onValueChange, name } },
       mockReact.createElement('div', { 'data-testid': 'select-root' }, children)
     );
   }
@@ -134,11 +136,11 @@ jest.mock('@/components/ui/select', () => {
   }
 
   function SelectContent({ children }: { children: React.ReactNode }) {
-    const { value, onValueChange } = mockReact.useContext(mockSelectCtx);
+    const { value, onValueChange, name } = mockReact.useContext(mockSelectCtx);
     return mockReact.createElement(
       'select',
       {
-        'data-testid': 'select-content',
+        'data-testid': name ? `select-${name}` : 'select-content',
         value: value ?? '',
         onChange: (e: { target: { value: string } }) => onValueChange?.(e.target.value),
       },
@@ -171,6 +173,7 @@ const sampleFitter: Fitter = {
   zipcode: '62701',
   phoneNo: '555-1234',
   cellNo: '555-5678',
+  currency: 3,
   enabled: true,
 };
 
@@ -351,6 +354,26 @@ describe('FitterEditModal', () => {
       expect(screen.getByTestId('input-Cell Number')).toHaveValue('555-5678');
     });
 
+    it('pre-populates the currency select from the fitter (legacy ids: 1 USD … 7 DE)', () => {
+      render(<FitterEditModal {...defaultProps} fitter={sampleFitter} />);
+
+      const currencySelect = screen.getByTestId('select-currency') as HTMLSelectElement;
+      expect(currencySelect.value).toBe('3');
+      expect(currencySelect.querySelector('option[value="3"]')).toHaveTextContent('GBP');
+    });
+
+    it('renders the username read-only in edit mode — the backend never changes a login name', () => {
+      render(<FitterEditModal {...defaultProps} fitter={sampleFitter} />);
+
+      expect(screen.getByTestId('input-Username')).toBeDisabled();
+    });
+
+    it('renders the username editable in create mode', () => {
+      render(<FitterEditModal {...defaultProps} fitter={null} />);
+
+      expect(screen.getByTestId('input-Username')).not.toBeDisabled();
+    });
+
     it('leaves password fields empty — never pre-populated from stored data', () => {
       render(<FitterEditModal {...defaultProps} fitter={sampleFitter} />);
 
@@ -528,6 +551,36 @@ describe('FitterEditModal', () => {
         cellNo: '555-5678',
         enabled: true,
       });
+    });
+
+    it('includes the chosen currency id in the save payload', async () => {
+      const user = userEvent.setup();
+      render(<FitterEditModal {...defaultProps} fitter={sampleFitter} />);
+
+      await user.selectOptions(screen.getByTestId('select-currency'), '2');
+      await user.click(screen.getByTestId('btn-Save fitter'));
+
+      await waitFor(() => {
+        expect(defaultProps.onSave).toHaveBeenCalledTimes(1);
+      });
+
+      const [savedPayload] = defaultProps.onSave.mock.calls[0] as [Record<string, unknown>];
+      expect(savedPayload.currency).toBe(2);
+    });
+
+    it('defaults currency to USD (1) for a new fitter', async () => {
+      const user = userEvent.setup();
+      render(<FitterEditModal {...defaultProps} fitter={null} />);
+
+      await fillValidCreateForm(user);
+      await user.click(screen.getByTestId('btn-Create fitter'));
+
+      await waitFor(() => {
+        expect(defaultProps.onSave).toHaveBeenCalledTimes(1);
+      });
+
+      const [savedPayload] = defaultProps.onSave.mock.calls[0] as [Record<string, unknown>];
+      expect(savedPayload.currency).toBe(1);
     });
 
     it('omits "password" key when no new password is entered in edit mode', async () => {

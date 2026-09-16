@@ -110,22 +110,8 @@ export default function Fitters() {
   // Handle create fitter save
   const handleCreateFitterSave = async (newFitter: Partial<Fitter> & { password?: string }) => {
     try {
-      // Transform frontend Fitter fields to match backend CreateFitterDto
-      const backendPayload: Record<string, unknown> = {
-        username: newFitter.username || '',
-        firstName: newFitter.firstName || '',
-        lastName: newFitter.lastName || '',
-        emailaddress: newFitter.email || '', // backend expects 'emailaddress', not 'email'
-        address: newFitter.address || '',
-        city: newFitter.city || '',
-        country: newFitter.country || '',
-        state: newFitter.state || '',
-        zipcode: newFitter.zipcode || '',
-        phoneNo: newFitter.phoneNo || '',
-        cellNo: newFitter.cellNo || '',
-        password: newFitter.password,
-      };
-      await createFitter(backendPayload);
+      // createFitter() translates form fields (email → emailaddress) to the backend DTO
+      await createFitter(newFitter);
       refetch();
       setShowCreateModal(false);
       setSelectedFitter(null);
