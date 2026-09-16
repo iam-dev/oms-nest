@@ -667,6 +667,16 @@ export default function Reports() {
     }).catch(() => setDefaultLoaded(true));
   }, [defaultLoaded, applyFilterState]);
 
+  // Leaving the editor must refetch the table. The editor persists its changes
+  // itself and the rows here were fetched before the edit, so without this the
+  // table keeps showing the pre-edit values — most visibly a STATUS column that
+  // disagrees with the status Edit Order just saved. The bumped key cache-busts
+  // the refetch, or the backend's 5-minute list cache can return the stale page.
+  const closeEditor = () => {
+    setIsEditOpen(false);
+    setRefreshKey(k => k + 1);
+  };
+
   const handleSaveFilter = async () => {
     if (!saveFilterName.trim()) {
       setSaveError('Name is required');
@@ -1157,16 +1167,14 @@ export default function Reports() {
       </Dialog>
 
       {/* Edit order dialog */}
-      <Dialog open={isEditOpen} onOpenChange={() => setIsEditOpen(false)}>
+      <Dialog open={isEditOpen} onOpenChange={() => closeEditor()}>
         {isEditOpen && selectedOrder && (
           <ComprehensiveEditOrder
             order={{
               id: String(selectedOrder.id),
               orderId: Number(selectedOrder.orderId || selectedOrder.id)
             }}
-            onClose={() => {
-              setIsEditOpen(false);
-            }}
+            onClose={closeEditor}
           />
         )}
       </Dialog>

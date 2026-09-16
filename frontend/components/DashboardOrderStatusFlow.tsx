@@ -13,6 +13,12 @@ interface DashboardOrderStatusFlowProps {
   onStatusClick?: (status: string) => void;
   onTotalOrders?: React.Dispatch<React.SetStateAction<number>>;
   selectedStatus?: string;
+  /**
+   * Bump to refetch the counts.  A status change moves an order between buckets,
+   * so counts fetched once on mount would keep showing the pre-change totals
+   * next to a table the host has already refreshed.
+   */
+  refreshKey?: number;
 }
 
 const STATUS_GROUPS = [
@@ -59,7 +65,7 @@ const STATUS_FILTER_MAPPING: Record<string, string> = {
   COMPLETED_SALE: 'Completed sale',
 };
 
-export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders, selectedStatus }: DashboardOrderStatusFlowProps) {
+export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders, selectedStatus, refreshKey = 0 }: DashboardOrderStatusFlowProps) {
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [totalOrders, setTotalOrders] = useState(0);
@@ -113,16 +119,22 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
         setStatuses(statusObj);
         setTotalOrders(total);
         onTotalOrders?.(total);
+        // Clear any error from an earlier attempt, now that refetches happen.
+        setError('');
         setLoading(false);
       })
       .catch(() => {
         setError('Failed to load order status stats');
         setLoading(false);
       });
-  }, [onTotalOrders]);
+  }, [onTotalOrders, refreshKey]);
 
-  if (loading) return <div style={{ padding: 24 }}>Loading order status...</div>;
-  if (error) return <div style={{ padding: 24, color: '#b00020' }}>{error}</div>;
+  // Only stand in for the cards before the first successful load.  On a refetch
+  // the previous counts stay on screen instead of flashing back to a placeholder,
+  // and a failed refetch leaves the last known counts rather than wiping them.
+  const hasCounts = Object.keys(statuses).length > 0;
+  if (loading && !hasCounts) return <div style={{ padding: 24 }}>Loading order status...</div>;
+  if (error && !hasCounts) return <div style={{ padding: 24, color: '#b00020' }}>{error}</div>;
 
   // 4 kolommen, aantallen klein rechtsboven, lijnen als achtergrond
   return (

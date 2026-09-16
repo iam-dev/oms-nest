@@ -311,6 +311,18 @@ export default function Dashboard() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const urgentOrdersCount = orders.filter(order => getUrgent(order)).length;
 
+  // Leaving the editor must refetch the table. The editor persists its changes
+  // itself and the rows here were fetched before the edit, so without this the
+  // table keeps showing the pre-edit values — most visibly a STATUS column that
+  // disagrees with the status Edit Order just saved. Cache-bust as well, or the
+  // backend's 5-minute list cache can hand back the same stale page.
+  const closeEditor = () => {
+    setIsEditingOrder(false);
+    setSelectedOrder(null);
+    setOrderDataError(null);
+    setDateFilterTrigger(t => t + 1);
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSaveOrder = async (updatedOrder: any) => {
     try {
@@ -439,42 +451,23 @@ export default function Dashboard() {
   // Show EditOrder component if editing
   if (isEditingOrder && selectedOrder) {
     return (
-      <Dialog open={isEditingOrder} onOpenChange={() => {
-        setIsEditingOrder(false);
-        setSelectedOrder(null);
-      }}>
+      <Dialog open={isEditingOrder} onOpenChange={() => closeEditor()}>
         {useComprehensiveEdit ? (
           <ComprehensiveEditOrder
             order={{
               id: selectedOrder.id,
               orderId: selectedOrder.orderId || selectedOrder.id
             }}
-            onClose={() => {
-              setIsEditingOrder(false);
-              setSelectedOrder(null);
-              setOrderDataError(null);
-            }}
-            onBack={() => {
-              setIsEditingOrder(false);
-              setSelectedOrder(null);
-              setOrderDataError(null);
-            }}
+            onClose={closeEditor}
+            onBack={closeEditor}
           />
         ) : (
           <EditOrder
             order={selectedOrder}
             isLoading={isLoadingOrderData}
             error={orderDataError}
-            onClose={() => {
-              setIsEditingOrder(false);
-              setSelectedOrder(null);
-              setOrderDataError(null);
-            }}
-            onBack={() => {
-              setIsEditingOrder(false);
-              setSelectedOrder(null);
-              setOrderDataError(null);
-            }}
+            onClose={closeEditor}
+            onBack={closeEditor}
           />
         )}
       </Dialog>
@@ -500,6 +493,9 @@ export default function Dashboard() {
             }}
             onTotalOrders={setTotalOrders}
             selectedStatus={headerFilters.status || ''}
+            // Same trigger as the table refetch, so the counts can't disagree
+            // with the statuses the rows below them show.
+            refreshKey={dateFilterTrigger}
           />
 
           {/* All Orders header - clickable to reset filters */}
