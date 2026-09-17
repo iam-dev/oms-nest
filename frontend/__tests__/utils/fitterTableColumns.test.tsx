@@ -1,4 +1,5 @@
 import React from 'react';
+import { format } from 'date-fns';
 import { render, screen } from '@testing-library/react';
 import { getFitterTableColumns, type FitterHeaderFilters, type SetFitterHeaderFilters } from '@/utils/fitterTableColumns';
 
@@ -210,7 +211,10 @@ describe('Fitter Table Columns', () => {
       };
 
       render(<TestComponent />);
-      expect(screen.getByTestId('last-login')).toHaveTextContent('2024-01-15T10:30:00Z');
+      // Rendered as a readable local date/time, not the raw value
+      expect(screen.getByTestId('last-login')).toHaveTextContent(
+        format(new Date('2024-01-15T10:30:00Z'), 'd MMM yyyy, HH:mm'),
+      );
     });
 
     it('handles null last login date', () => {

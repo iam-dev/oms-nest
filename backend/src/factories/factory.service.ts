@@ -1,45 +1,213 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import ms from "ms";
+import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import { FactoryEntity } from "./infrastructure/persistence/relational/entities/factory.entity";
 import { CreateFactoryDto } from "./dto/create-factory.dto";
 import { UpdateFactoryDto } from "./dto/update-factory.dto";
 import { FactoryDto } from "./dto/factory.dto";
+import { MailService } from "../mail/mail.service";
+import { AllConfigType } from "../config/config.type";
+import { RoleEnum } from "../roles/roles.enum";
 
 /**
  * Factory Application Service
  *
  * Manages factory operations with simplified schema.
  * Uses integer IDs to match PostgreSQL schema.
+ *
+ * A factory row only holds address data; name, username and blocked state
+ * live on the linked login account (`credentials`, exposed via the "user"
+ * view), so those fields are read and written through raw queries.
  */
 @Injectable()
 export class FactoryService {
+  private readonly logger = new Logger(FactoryService.name);
+
   constructor(
     @InjectRepository(FactoryEntity)
     private readonly factoryRepository: Repository<FactoryEntity>,
     private readonly dataSource: DataSource,
+    private readonly mailService: MailService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService<AllConfigType>,
   ) {}
 
   /**
-   * Create a new factory
+   * Create a new factory.
+   *
+   * `factories.user_id` is NOT NULL, so a login account must exist: either an
+   * existing `userId` is linked, or a factory-type credentials row is created
+   * from `username`. The account gets an unguessable random password and the
+   * factory receives a set-password email, mirroring the fitter flow.
    */
   async create(createFactoryDto: CreateFactoryDto): Promise<FactoryDto> {
+    let userId: number | null = createFactoryDto.userId ?? null;
+
+    if (userId === null && createFactoryDto.username) {
+      userId = await this.createLoginAccount(
+        createFactoryDto.username,
+        createFactoryDto.name,
+      );
+    }
+
+    if (userId === null) {
+      throw new BadRequestException(
+        "A username is required to create a factory account",
+      );
+    }
+
+    // Every column on the legacy `factories` table is NOT NULL: default to
+    // "" / currency 1 (USD) rather than null.
     const factory = this.factoryRepository.create({
-      userId: createFactoryDto.userId ?? null,
-      address: createFactoryDto.address ?? null,
-      zipcode: createFactoryDto.zipcode ?? null,
-      state: createFactoryDto.state ?? null,
-      city: createFactoryDto.city ?? null,
-      country: createFactoryDto.country ?? null,
-      phoneNo: createFactoryDto.phoneNo ?? null,
-      cellNo: createFactoryDto.cellNo ?? null,
-      currency: createFactoryDto.currency ?? null,
-      emailaddress: createFactoryDto.emailaddress ?? null,
+      userId,
+      address: createFactoryDto.address ?? "",
+      zipcode: createFactoryDto.zipcode ?? "",
+      state: createFactoryDto.state ?? "",
+      city: createFactoryDto.city ?? "",
+      country: createFactoryDto.country ?? "",
+      phoneNo: createFactoryDto.phoneNo ?? "",
+      cellNo: createFactoryDto.cellNo ?? "",
+      currency: createFactoryDto.currency ?? 1,
+      emailaddress: createFactoryDto.emailaddress ?? "",
       deleted: 0,
     });
 
     const savedFactory = await this.factoryRepository.save(factory);
-    return this.toDto(savedFactory);
+
+    if (createFactoryDto.username && createFactoryDto.emailaddress) {
+      await this.sendWelcomeEmail(
+        userId,
+        createFactoryDto.username,
+        createFactoryDto.emailaddress,
+      );
+    }
+
+    const [dto] = await this.attachUserData([this.toDto(savedFactory)]);
+    return dto;
+  }
+
+  /**
+   * Insert a factory-type row into `credentials` and return its user_id.
+   * The "user" entity is a VIEW on credentials, so INSERTs go to the base table.
+   */
+  private async createLoginAccount(
+    username: string,
+    name?: string,
+  ): Promise<number> {
+    const existing = await this.dataSource.query(
+      `SELECT user_id FROM credentials WHERE user_name = $1 LIMIT 1`,
+      [username],
+    );
+    if (existing.length > 0) {
+      throw new BadRequestException("Username already exists");
+    }
+
+    // The factory never sees this password; they set their own via the
+    // emailed reset link. Hash a random secret so the column is never blank.
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(
+      randomBytes(32).toString("hex"),
+      salt,
+    );
+    const fullName = name?.trim() || username;
+
+    try {
+      const result = await this.dataSource.query(
+        `INSERT INTO credentials (
+          deleted, user_type, user_name, full_name, password_hash,
+          last_login, blocked, password_reset_hash, password_reset_valid_to, supervisor
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING user_id`,
+        [
+          0, // deleted
+          RoleEnum.factory, // user_type 3
+          username,
+          fullName,
+          hashedPassword,
+          0, // last_login (unix timestamp)
+          0, // blocked = not blocked
+          "", // password_reset_hash
+          0, // password_reset_valid_to
+          0, // supervisor = no
+        ],
+      );
+      const userId: number | undefined = result[0]?.user_id;
+      if (userId === undefined) {
+        throw new Error("INSERT did not return user_id");
+      }
+      this.logger.log(
+        `Created factory credentials for "${username}" with user_id ${userId}`,
+      );
+      return userId;
+    } catch (error) {
+      this.logger.error(`Failed to create user account: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to create user account: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Email the new factory a set-password link. Failure is logged, not thrown:
+   * the account and factory already exist and an admin can trigger a reset.
+   */
+  private async sendWelcomeEmail(
+    userId: number,
+    username: string,
+    email: string,
+  ): Promise<void> {
+    try {
+      const tokenExpiresIn = this.configService.getOrThrow(
+        "auth.forgotExpires",
+        { infer: true },
+      );
+      const tokenExpires = Date.now() + ms(tokenExpiresIn);
+
+      // Reset tokens are keyed by the user's UUID from the "user" view
+      const userRecord = await this.dataSource.query(
+        `SELECT id FROM "user" WHERE legacy_id = $1 LIMIT 1`,
+        [userId],
+      );
+      const userUuid = userRecord[0]?.id;
+      if (!userUuid) {
+        this.logger.warn(
+          `No "user" row for legacy_id ${userId}; skipping welcome email`,
+        );
+        return;
+      }
+
+      const hash = await this.jwtService.signAsync(
+        { forgotUserId: userUuid },
+        {
+          secret: this.configService.getOrThrow("auth.forgotSecret", {
+            infer: true,
+          }),
+          expiresIn: tokenExpiresIn,
+        },
+      );
+
+      await this.mailService.welcomeFactory({
+        to: email,
+        data: { hash, tokenExpires },
+      });
+      this.logger.log(
+        `Welcome email sent to factory "${username}" at ${email}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send welcome email to ${email}: ${error.message}`,
+      );
+    }
   }
 
   /**
@@ -54,7 +222,8 @@ export class FactoryService {
       throw new NotFoundException("Factory not found");
     }
 
-    return this.toDto(factory);
+    const [dto] = await this.attachUserData([this.toDto(factory)]);
+    return dto;
   }
 
   /**
@@ -156,8 +325,27 @@ export class FactoryService {
     if (updateFactoryDto.emailaddress !== undefined)
       factory.emailaddress = updateFactoryDto.emailaddress;
 
+    // Name lives on the login account (credentials.full_name). Skip an empty
+    // value so a partial PATCH never blanks the existing name.
+    const newName = updateFactoryDto.name?.trim();
+    if (newName && factory.userId) {
+      await this.dataSource.query(
+        `UPDATE credentials SET full_name = $1 WHERE user_id = $2`,
+        [newName, factory.userId],
+      );
+    }
+
+    // Status lives on the login account: credentials.blocked (0 = enabled, 1 = blocked)
+    if (updateFactoryDto.enabled !== undefined && factory.userId) {
+      await this.dataSource.query(
+        `UPDATE credentials SET blocked = $1 WHERE user_id = $2`,
+        [updateFactoryDto.enabled ? 0 : 1, factory.userId],
+      );
+    }
+
     const savedFactory = await this.factoryRepository.save(factory);
-    return this.toDto(savedFactory);
+    const [dto] = await this.attachUserData([this.toDto(savedFactory)]);
+    return dto;
   }
 
   /**
@@ -272,6 +460,43 @@ export class FactoryService {
     );
 
     return { enabled: result[0]?.blocked === 0 };
+  }
+
+  /**
+   * Supplement factory DTOs with data that lives on the linked login account
+   * (the "user" view over credentials): name, username, enabled, lastLogin.
+   * Factories without a linked user are returned unchanged.
+   */
+  private async attachUserData(dtos: FactoryDto[]): Promise<FactoryDto[]> {
+    const userIds = dtos
+      .map((d) => d.userId)
+      .filter((uid): uid is number => uid !== undefined && uid !== null);
+
+    if (userIds.length === 0) {
+      return dtos;
+    }
+
+    const users = await this.dataSource.query(
+      `SELECT legacy_id, name, username, enabled, last_login FROM "user" WHERE legacy_id = ANY($1::int[])`,
+      [userIds],
+    );
+    const userMap = new Map<number, Record<string, unknown>>();
+    for (const u of users) {
+      userMap.set(u.legacy_id, u);
+    }
+    for (const dto of dtos) {
+      const user = dto.userId ? userMap.get(dto.userId) : undefined;
+      if (user) {
+        dto.name = user.name as string;
+        dto.username = user.username as string;
+        dto.enabled = user.enabled as boolean;
+        dto.lastLogin = user.last_login as Date;
+        if (user.name) {
+          dto.displayName = user.name as string;
+        }
+      }
+    }
+    return dtos;
   }
 
   /**

@@ -167,6 +167,23 @@ export class MailService implements OnModuleInit {
   async welcomeFitter(
     mailData: MailData<{ hash: string; tokenExpires: number }>,
   ): Promise<void> {
+    return this.welcomeAccount(mailData);
+  }
+
+  async welcomeFactory(
+    mailData: MailData<{ hash: string; tokenExpires: number }>,
+  ): Promise<void> {
+    return this.welcomeAccount(mailData);
+  }
+
+  /**
+   * "An account has been created for you, set your password" email.
+   * Shared by every admin-created login (fitters, factories); the copy is
+   * deliberately role-neutral.
+   */
+  private async welcomeAccount(
+    mailData: MailData<{ hash: string; tokenExpires: number }>,
+  ): Promise<void> {
     const title = "Welcome to Order My Saddle";
     const text1 =
       "An account has been created for you. To get started, please set your password by clicking the link below.";

@@ -4,6 +4,7 @@ import React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Supplier } from '@/services/suppliers';
 import { Button } from '@/components/ui/button';
+import { formatLastLogin } from '@/utils/formatLastLogin';
 
 interface SupplierDetailModalProps {
   supplier: Supplier | null;
@@ -19,23 +20,23 @@ export function SupplierDetailModal({ supplier, isOpen, onClose, onEdit }: Suppl
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Supplier Details - {supplier.name}</DialogTitle>
+          <DialogTitle>Factory Details - {supplier.name}</DialogTitle>
           <DialogDescription>
-            View supplier information and details.
+            View factory information and details.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-6 mt-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-sm text-gray-600 mb-1">Supplier ID</label>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">Factory ID</label>
               <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
                 {supplier.id}
               </p>
             </div>
 
             <div>
-              <label className="block font-semibold text-sm text-gray-600 mb-1">Supplier Name</label>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">Full Name</label>
               <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
                 {supplier.name || '-'}
               </p>
@@ -58,6 +59,13 @@ export function SupplierDetailModal({ supplier, isOpen, onClose, onEdit }: Suppl
             </div>
           </div>
 
+          <div>
+            <label className="block font-semibold text-sm text-gray-600 mb-1">Address</label>
+            <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
+              {supplier.address || '-'}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-sm text-gray-600 mb-1">City</label>
@@ -70,6 +78,38 @@ export function SupplierDetailModal({ supplier, isOpen, onClose, onEdit }: Suppl
               <label className="block font-semibold text-sm text-gray-600 mb-1">Country</label>
               <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
                 {supplier.country || '-'}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">State</label>
+              <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
+                {supplier.state || '-'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">Zipcode</label>
+              <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
+                {supplier.zipcode || '-'}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">Phone Number</label>
+              <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
+                {supplier.phoneNo || '-'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">Cellphone Number</label>
+              <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
+                {supplier.cellNo || '-'}
               </p>
             </div>
           </div>
@@ -89,7 +129,7 @@ export function SupplierDetailModal({ supplier, isOpen, onClose, onEdit }: Suppl
             <div>
               <label className="block font-semibold text-sm text-gray-600 mb-1">Last Login</label>
               <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
-                {new Date(supplier.lastLogin).toLocaleDateString()}
+                {formatLastLogin(supplier.lastLogin)}
               </p>
             </div>
           )}
