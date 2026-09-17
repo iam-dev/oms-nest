@@ -32,6 +32,7 @@ import {
   OrderStatus
 } from '@/types/ComprehensiveOrder';
 import { logger } from '@/utils/logger';
+import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DuplicateData = Record<string, any>;
@@ -41,7 +42,7 @@ interface EditFormOptions {
   fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
   leatherTypes: Array<{ id: number; name: string; price1: number }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number }>;
+  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number; extraAllowed: number }>;
   optionItems: Array<{ id: number; name: string; optionId: number; price1: number }>;
   statuses: Array<{ id: number; name: string }>;
   presets: Array<{ id: number; name: string; sequence: number }>;
@@ -128,9 +129,31 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [selectedPresetId, setSelectedPresetId] = useState<string>('none');
   const [selectedLeatherId, setSelectedLeatherId] = useState<string>('');
 
-  // Saddle option selections state
-  const [optionSelections, setOptionSelections] = useState<Record<number, string>>({});
-  const [optionCustom, setOptionCustom] = useState<Record<number, string>>({});
+  // Saddle option selections, keyed by slot ("optionId:cloneNumber", see utils/optionSlots)
+  const [optionSelections, setOptionSelections] = useState<Record<string, string>>({});
+  const [optionCustom, setOptionCustom] = useState<Record<string, string>>({});
+  // Extra rows open per option, e.g. { 4: [1] } for "CANTLE Option (2)"
+  const [optionClones, setOptionClones] = useState<Record<number, number[]>>({});
+
+  // Every open row of an option: the base row plus any extra ("clone") rows
+  const getSlots = (optionId: number): number[] => [0, ...(optionClones[optionId] ?? [])];
+
+  const addClone = (optionId: number) => {
+    setOptionClones(prev => {
+      const existing = prev[optionId] ?? [];
+      const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
+      return { ...prev, [optionId]: [...existing, next] };
+    });
+  };
+
+  const removeClone = (optionId: number, clone: number) => {
+    const key = slotKey(optionId, clone);
+    const without = (m: Record<string, string>) =>
+      Object.fromEntries(Object.entries(m).filter(([k]) => k !== key));
+    setOptionClones(prev => ({ ...prev, [optionId]: (prev[optionId] ?? []).filter(c => c !== clone) }));
+    setOptionSelections(without);
+    setOptionCustom(without);
+  };
   const [selectedExtras, setSelectedExtras] = useState<Record<number, boolean>>({});
 
   // New customer form state
@@ -494,12 +517,22 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             leatherId: selectedLeatherId ? parseInt(selectedLeatherId, 10) : undefined,
             // Saddle options
             saddleOptions: [
-              // Regular option selections
-              ...Object.entries(optionSelections).map(([optId, itemId]) => ({
-                optionId: Number(optId),
-                optionItemId: Number(itemId),
-                custom: optionCustom[Number(optId)] || '',
-              })),
+              // Regular option selections: every open slot of every option,
+              // renumbered 0..n-1 so orders_info.clone_number has no gaps
+              ...Array.from(new Set(Object.keys(optionSelections).map(slotOptionId))).flatMap(optId => {
+                let nextClone = 0;
+                return getSlots(optId).flatMap(clone => {
+                  const key = slotKey(optId, clone);
+                  const itemId = optionSelections[key];
+                  if (!itemId) return [];
+                  return [{
+                    optionId: optId,
+                    optionItemId: Number(itemId),
+                    cloneNumber: nextClone++,
+                    custom: optionCustom[key] || '',
+                  }];
+                });
+              }),
               // Extras (type=2 options, stored with optionItemId=0)
               ...Object.entries(selectedExtras)
                 .filter(([, checked]) => checked)
@@ -675,12 +708,13 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     if (presetId === 'none' || !editOptions?.presetItems) return;
     const pid = Number(presetId);
     const items = editOptions.presetItems.filter(pi => pi.presetId === pid);
-    const selections: Record<number, string> = {};
+    const selections: Record<string, string> = {};
     for (const item of items) {
-      selections[item.optionId] = String(item.itemId);
+      selections[slotKey(item.optionId)] = String(item.itemId);
     }
     setOptionSelections(selections);
     setOptionCustom({});
+    setOptionClones({});
     setSelectedExtras({});
   }, [editOptions]);
 
@@ -874,6 +908,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                     setSelectedLeatherId('');
                     setOptionSelections({});
                     setOptionCustom({});
+                    setOptionClones({});
                     setSelectedExtras({});
                     // Refetch options filtered by the selected saddle
                     const newOptions = await fetchEditOptions(val);
@@ -927,43 +962,79 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                     </>
                   )}
 
-                  {/* Dynamic saddle options - shown when preset is selected */}
+                  {/* Dynamic saddle options - shown when preset is selected.
+                      An option with extra_allowed > 0 may have several rows ("CANTLE Option (2)"). */}
                   {selectedPresetId !== 'none' && regularOptions.map(opt => {
                     const items = getItemsForOption(opt.optionId);
                     if (items.length === 0) return null;
+                    const slots = getSlots(opt.optionId);
+                    const extraAllowed = opt.extraAllowed ?? 0;
+                    const canAddClone = extraAllowed > 0 && slots.length - 1 < extraAllowed;
 
                     return (
                       <React.Fragment key={opt.optionId}>
-                        <Label className="text-sm font-medium pt-2">
-                          {opt.optionName}: <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="space-y-1">
-                          <Select
-                            value={optionSelections[opt.optionId] || ''}
-                            onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [opt.optionId]: val }))}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="- Choose -" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {items.map(item => (
-                                <SelectItem key={item.id} value={String(item.id)}>
-                                  {item.name}{item.price1 > 0 ? ` (+$${item.price1.toFixed(2)})` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {optionCustom[opt.optionId] !== undefined && (
-                            <div className="ml-2 flex items-center gap-2">
-                              <Label className="text-xs font-medium text-gray-600 whitespace-nowrap">Specify color: <span className="text-red-500">*</span></Label>
-                              <Input
-                                className="h-8 text-sm flex-1"
-                                value={optionCustom[opt.optionId] || ''}
-                                onChange={(e) => setOptionCustom(prev => ({ ...prev, [opt.optionId]: e.target.value }))}
-                              />
-                            </div>
-                          )}
-                        </div>
+                        {slots.map((clone, slotIdx) => {
+                          const key = slotKey(opt.optionId, clone);
+                          const label = slotLabel(opt.optionName, clone);
+                          const isLastSlot = slotIdx === slots.length - 1;
+                          return (
+                            <React.Fragment key={key}>
+                              <Label className="text-sm font-medium pt-2">
+                                {label}: <span className="text-red-500">*</span>
+                              </Label>
+                              <div className="space-y-1">
+                                <div className="flex items-start gap-1">
+                                  <div className="flex-1">
+                                    <Select
+                                      value={optionSelections[key] || ''}
+                                      onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="- Choose -" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {items.map(item => (
+                                          <SelectItem key={item.id} value={String(item.id)}>
+                                            {item.name}{item.price1 > 0 ? ` (+$${item.price1.toFixed(2)})` : ''}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  {clone > 0 && (
+                                    <button
+                                      type="button"
+                                      aria-label={`Remove ${label}`}
+                                      className="h-9 px-2 text-gray-500 hover:text-red-700"
+                                      onClick={() => removeClone(opt.optionId, clone)}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                                {optionCustom[key] !== undefined && (
+                                  <div className="ml-2 flex items-center gap-2">
+                                    <Label className="text-xs font-medium text-gray-600 whitespace-nowrap">Specify color: <span className="text-red-500">*</span></Label>
+                                    <Input
+                                      className="h-8 text-sm flex-1"
+                                      value={optionCustom[key] || ''}
+                                      onChange={(e) => setOptionCustom(prev => ({ ...prev, [key]: e.target.value }))}
+                                    />
+                                  </div>
+                                )}
+                                {isLastSlot && canAddClone && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-[#8B0000] hover:underline"
+                                    onClick={() => addClone(opt.optionId)}
+                                  >
+                                    + Add another {opt.optionName}
+                                  </button>
+                                )}
+                              </div>
+                            </React.Fragment>
+                          );
+                        })}
                       </React.Fragment>
                     );
                   })}
