@@ -516,7 +516,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
   const handleSubmit = async () => {
     if (currentStep < 4) {
-      if (currentStep === 1 && !validateSpecifications()) return;
+      if (currentStep === 1 && !validateSaddleInformation()) return;
       setCurrentStep(currentStep + 1);
       return;
     }
@@ -675,6 +675,49 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     return false;
   };
 
+  // Every step-1 field marked with a red asterisk that is still empty, in page
+  // order.  Shipping and Tax are marked but not checked: blank means "not yet
+  // determined by Custom Saddlery" and is shown as "-".
+  const getMissingRequiredFields = (): string[] => {
+    const missing: string[] = [];
+    const blank = (v?: string) => !v || v.trim() === '';
+    if (blank(fitterId)) missing.push('Fitter');
+    if (blank(saddleId)) missing.push('Brand & Model');
+    if (blank(leatherId)) missing.push('Leathertype');
+    // Option rows, including extra rows the user opened but never filled
+    for (const opt of sortedOptions) {
+      if (!getOptionItemId(opt.optionId) && getItemsForOption(opt.optionId).length === 0) continue;
+      for (const clone of getSlots(opt.optionId)) {
+        if (blank(getSelectedItemId(opt.optionId, clone))) {
+          missing.push(slotLabel(opt.optionName, clone));
+        }
+      }
+    }
+    missing.push(...getMissingSpecifications());
+    const prices: Array<[string, string]> = [
+      ['Trade in', priceTradein],
+      ['Deposit', priceDeposit],
+      ['Discount', priceDiscount],
+      ['Fitting/Eval', priceFittingeval],
+      ['Call fee', priceCallfee],
+      ['Girth', priceGirth],
+      ['Additional costs', priceAdditional],
+    ];
+    for (const [label, value] of prices) {
+      if (blank(value)) missing.push(label);
+    }
+    return missing;
+  };
+
+  // Gate for leaving step 1 (Next Step and the step indicator).  "Save as Draft"
+  // deliberately stays on validateSpecifications() so an incomplete order can be parked.
+  const validateSaddleInformation = (): boolean => {
+    const missing = getMissingRequiredFields();
+    if (missing.length === 0) return true;
+    toast.error(`Please fill in the required fields: ${missing.join(', ')}`);
+    return false;
+  };
+
   // Text shown for one slot in the preview, in the same shape as the saved displayValue
   const getSpecSummary = (optionId: number, clone = 0): string => {
     const selectedItemId = getSelectedItemId(optionId, clone);
@@ -751,7 +794,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     currentStep >= step.id ? 'text-[#8B0000]' : 'text-gray-400'
                   }`}
                   onClick={() => {
-                    if (currentStep === 1 && step.id > 1 && !validateSpecifications()) return;
+                    if (currentStep === 1 && step.id > 1 && !validateSaddleInformation()) return;
                     setCurrentStep(step.id);
                   }}
                 >

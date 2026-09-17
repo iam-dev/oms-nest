@@ -1462,7 +1462,7 @@ describe('ComprehensiveEditOrder component', () => {
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
       const opts = {
         ...specOptions,
-        options: [...specOptions.options, { optionId: 99, optionName: 'Orphan', sequence: 9, group: null }],
+        options: [{ optionId: 99, optionName: 'Orphan', sequence: 9, group: null }],
       };
       (fetchOrderDetail as jest.Mock).mockResolvedValue({
         ...mockOrderDetail,
@@ -1487,6 +1487,7 @@ describe('ComprehensiveEditOrder component', () => {
       await renderWithSpecs([
         spec(OPTION_LOOPS, 702, { color: 'Green Snake' }),
         spec(OPTION_TREE, 0, { custom: '27.5', itemName: null }),
+        spec(OPTION_PANEL, 1802),
       ]);
       await navigateToStep(4);
 
@@ -1529,11 +1530,20 @@ describe('ComprehensiveEditOrder component', () => {
       displayValue: '',
     });
 
+    // Tree Size is required too; keep it filled so only the cantle rows are under test
+    const tree = { ...cantle(0, 1701), optionId: OPTION_TREE, optionName: 'Tree Size', sequence: 1 };
+    const treeRow = { optionId: OPTION_TREE, optionItemId: 1701, cloneNumber: 0, custom: '', color: '', leatherType: '' };
+
     const renderWithSpecs = async (saddleSpecs: ReturnType<typeof cantle>[]) => {
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
-      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs });
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs: [tree, ...saddleSpecs] });
       (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(cloneOptions) });
       await renderAndWaitForLoad({ isDuplicate: false });
+    };
+
+    const savedOptions = async () => {
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      return (updateOrder as jest.Mock).mock.calls[0][1].saddleOptions;
     };
 
     const submit = async () => {
@@ -1541,8 +1551,7 @@ describe('ComprehensiveEditOrder component', () => {
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /update order/i }));
       });
-      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
-      return (updateOrder as jest.Mock).mock.calls[0][1].saddleOptions;
+      return savedOptions();
     };
 
     it('renders one labelled row per saved clone', async () => {
@@ -1557,6 +1566,7 @@ describe('ComprehensiveEditOrder component', () => {
       await renderWithSpecs([cantle(0, 401), cantle(1, 402, 'black')]);
 
       expect(await submit()).toEqual([
+        treeRow,
         { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
         { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '', color: 'black', leatherType: '' },
       ]);
@@ -1594,19 +1604,26 @@ describe('ComprehensiveEditOrder component', () => {
       });
 
       expect(await submit()).toEqual([
+        treeRow,
         { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
         { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 1, custom: '', color: '', leatherType: '' },
       ]);
     });
 
-    it('drops an added clone row that never got a selection', async () => {
+    it('drops an added clone row that never got a selection when saving as draft', async () => {
+      // "Next Step" refuses an empty row (see the required-fields gate); a draft
+      // save still goes through and simply leaves the empty row out.
       await renderWithSpecs([cantle(0, 401)]);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
       });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
 
-      expect(await submit()).toEqual([
+      expect(await savedOptions()).toEqual([
+        treeRow,
         { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
       ]);
     });
@@ -1620,6 +1637,7 @@ describe('ComprehensiveEditOrder component', () => {
       expect(screen.queryByDisplayValue('black')).not.toBeInTheDocument();
 
       expect(await submit()).toEqual([
+        treeRow,
         { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
         { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 1, custom: '', color: '', leatherType: '' },
       ]);
@@ -1715,6 +1733,123 @@ describe('ComprehensiveEditOrder component', () => {
       expect(values).toContain('17');
       expect(values).toContain('3595');
       expect(screen.getAllByText('Aviar AV1 Short').length).toBeGreaterThan(0);
+    });
+  });
+  describe('required saddle information (red asterisk) gate', () => {
+    // Every field on step 1 that carries a red asterisk must be filled before
+    // the wizard moves on.  Shipping and Tax are the exception: blank means
+    // "not yet determined by Custom Saddlery" and shows as "-".
+    const OPTION_LOOPS = 7;
+    const OPTION_CANTLE = 4;
+
+    const gateOptions = {
+      ...mockEditOptions,
+      options: [
+        { optionId: OPTION_LOOPS, optionName: 'Loops', sequence: 1, group: null, extraAllowed: 0 },
+        { optionId: OPTION_CANTLE, optionName: 'CANTLE Option', sequence: 2, group: 'CANTLE', extraAllowed: 20 },
+      ],
+      optionItems: [
+        { id: 701, name: 'STD - LOOPS', optionId: OPTION_LOOPS, userColor: 0, userLeather: 0 },
+        { id: 401, name: '2 cm cut of cantle', optionId: OPTION_CANTLE, userColor: 0, userLeather: 0 },
+      ],
+    };
+
+    const row = (optionId: number, optionName: string, optionItemId: number) => ({
+      optionId,
+      optionName,
+      optionItemId,
+      cloneNumber: 0,
+      itemName: gateOptions.optionItems.find(i => i.id === optionItemId)?.name ?? null,
+      leatherName: null,
+      custom: '',
+      color: '',
+      leatherType: '',
+      sequence: 0,
+      displayValue: '',
+    });
+    const completeSpecs = [row(OPTION_LOOPS, 'Loops', 701), row(OPTION_CANTLE, 'CANTLE Option', 401)];
+
+    // Loose type: overrides include null ids and non-empty saddleSpecs, which the fixture's inferred type forbids
+    const renderOrder = async (detail: Record<string, unknown> = {}) => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs: completeSpecs, ...detail });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(gateOptions) });
+      await renderAndWaitForLoad({ isDuplicate: false });
+    };
+
+    const clickNext = async () => {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /next step/i }));
+      });
+    };
+
+    const expectStillOnStep1 = () =>
+      expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 1:');
+
+    it('advances when every marked field is filled', async () => {
+      await renderOrder();
+      await clickNext();
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 2:');
+    });
+
+    it('blocks Next Step and names Fitter, Brand & Model and Leathertype when they are empty', async () => {
+      await renderOrder({ fitterId: null, saddleId: null, leatherId: null });
+      await clickNext();
+
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      const message = toast.error.mock.calls[0][0] as string;
+      expect(message).toContain('Fitter');
+      expect(message).toContain('Brand & Model');
+      expect(message).toContain('Leathertype');
+      expectStillOnStep1();
+    });
+
+    it('blocks Next Step when a saddle option has no selection', async () => {
+      await renderOrder({ saddleSpecs: [row(OPTION_LOOPS, 'Loops', 701)] });
+      await clickNext();
+
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('CANTLE Option'));
+      expectStillOnStep1();
+    });
+
+    it('blocks Next Step when an added extra option row has no selection', async () => {
+      await renderOrder();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
+      });
+      await clickNext();
+
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('CANTLE Option (2)'));
+      expectStillOnStep1();
+    });
+
+    it('blocks Next Step when a marked pricing field is cleared', async () => {
+      await renderOrder();
+      // Deposit is the only field showing 500
+      fireEvent.change(screen.getByDisplayValue('500'), { target: { value: '' } });
+      await clickNext();
+
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Deposit'));
+      expectStillOnStep1();
+    });
+
+    it('does not require Shipping or Tax', async () => {
+      await renderOrder({ priceShipping: 0, priceTax: 0 });
+      await clickNext();
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 2:');
+    });
+
+    it('blocks the step-indicator shortcut the same way as Next Step', async () => {
+      await renderOrder({ fitterId: null });
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: /order overview/i })[0]);
+      });
+
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
+      expectStillOnStep1();
     });
   });
 });
