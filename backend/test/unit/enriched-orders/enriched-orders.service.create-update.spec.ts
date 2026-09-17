@@ -229,6 +229,93 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
     });
   });
 
+  describe("customer assignment guard", () => {
+    // Customers have no login and no status flag: "inactive" means
+    // customers.deleted = 1. The search endpoints already hide such rows,
+    // so the service check is what stops direct API calls and duplicates.
+    it("should reject createOrder for a deleted customer and roll back", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([]); // no active customer row
+
+      await expect(
+        service.createOrder({ customerId: 7, specialNotes: "x" }, 42),
+      ).rejects.toThrow(BadRequestException);
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO orders"),
+        expect.anything(),
+      );
+    });
+
+    it("should not look up a customer in createOrder when none is given", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1 }]) // INSERT RETURNING id
+        .mockResolvedValueOnce(undefined); // audit log INSERT
+
+      await service.createOrder({ specialNotes: "walk-in" });
+
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("FROM customers"),
+        expect.anything(),
+      );
+    });
+
+    it("should reject updateOrder when switching to a deleted customer", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 10, customer_id: 3 },
+        ]) // existing order
+        .mockResolvedValueOnce([]); // new customer is deleted
+
+      await expect(
+        service.updateOrder(100, { customerId: 7 }, 1, 2),
+      ).rejects.toThrow(BadRequestException);
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it("should skip the customer check in updateOrder when the customer is unchanged", async () => {
+      // An order placed before its customer was deleted must stay editable.
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 10, customer_id: 3 },
+        ]) // existing order
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log INSERT
+
+      const result = await service.updateOrder(
+        100,
+        { customerId: 3, specialNotes: "same customer" },
+        1,
+        2,
+      );
+
+      expect(result).toEqual({ success: true, orderId: 100 });
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("FROM customers"),
+        expect.anything(),
+      );
+    });
+
+    it("should allow updateOrder to switch to an active customer", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 10, customer_id: 3 },
+        ]) // existing order
+        .mockResolvedValueOnce([{ id: 7 }]) // new customer is active
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log INSERT
+
+      const result = await service.updateOrder(100, { customerId: 7 }, 1, 2);
+
+      expect(result).toEqual({ success: true, orderId: 100 });
+    });
+  });
+
   describe("updateOrderStatus", () => {
     it("should update order status successfully", async () => {
       queryRunner.query

@@ -1904,6 +1904,27 @@ export class EnrichedOrdersService {
     }
   }
 
+  /**
+   * Reject attaching an order to a soft-deleted customer. Customers have no
+   * login account, so unlike fitters there is no "blocked" state: deleted is
+   * the only kind of inactive. The customer search already hides deleted rows;
+   * this catches direct API calls and duplicated orders.
+   */
+  private async assertCustomerAssignable(
+    queryRunner: QueryRunner,
+    customerId: number,
+  ): Promise<void> {
+    const rows = await queryRunner.query(
+      `SELECT id FROM customers WHERE id = $1 AND deleted = 0`,
+      [customerId],
+    );
+    if (!rows || rows.length === 0) {
+      throw new BadRequestException(
+        `Customer ${customerId} is deleted and cannot be used on orders`,
+      );
+    }
+  }
+
   async updateOrder(
     orderId: number,
     dto: UpdateOrderDto,
@@ -1925,7 +1946,7 @@ export class EnrichedOrdersService {
 
       // Verify order exists and get old status for audit
       const existing = await queryRunner.query(
-        `SELECT order_status, fitter_id FROM orders WHERE id = $1`,
+        `SELECT order_status, fitter_id, customer_id FROM orders WHERE id = $1`,
         [orderId],
       );
       if (!existing || existing.length === 0) {
@@ -1933,6 +1954,7 @@ export class EnrichedOrdersService {
       }
       const oldStatusId = existing[0].order_status;
       const existingFitterId = existing[0].fitter_id;
+      const existingCustomerId = existing[0].customer_id;
 
       // Fitter role-based status restriction
       if (
@@ -1953,6 +1975,11 @@ export class EnrichedOrdersService {
       // after the fact must stay editable without forcing a reassignment.
       if (dto.fitterId && dto.fitterId !== existingFitterId) {
         await this.assertFitterAssignable(queryRunner, dto.fitterId);
+      }
+      // Same rule for the customer: an order placed before its customer was
+      // deleted keeps that customer; only switching to another one is checked.
+      if (dto.customerId && dto.customerId !== existingCustomerId) {
+        await this.assertCustomerAssignable(queryRunner, dto.customerId);
       }
 
       const resolveStatusId = async (name: string): Promise<number> => {
@@ -2227,6 +2254,9 @@ export class EnrichedOrdersService {
 
       if (dto.fitterId) {
         await this.assertFitterAssignable(queryRunner, dto.fitterId);
+      }
+      if (dto.customerId) {
+        await this.assertCustomerAssignable(queryRunner, dto.customerId);
       }
 
       // Resolve status name to integer ID
