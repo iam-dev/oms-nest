@@ -170,3 +170,5 @@ docs/reviews/
 backend/certs
 .playwright-mcp
 .playwright-mcp/
+
+docs/superpowers/
