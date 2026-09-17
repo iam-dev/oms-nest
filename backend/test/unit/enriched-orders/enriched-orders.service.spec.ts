@@ -657,8 +657,12 @@ describe("EnrichedOrdersService", () => {
       await service.getOrderDetail(1);
 
       const sql = sqlContaining('as "displayValue"');
-      expect(sql).toContain("WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)");
-      expect(sql).toContain("LEFT JOIN leather_types lt ON oi.option_item_id = lt.id AND o.type = 1");
+      expect(sql).toContain(
+        "WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)",
+      );
+      expect(sql).toContain(
+        "LEFT JOIN leather_types lt ON oi.option_item_id = lt.id AND o.type = 1",
+      );
       expect(sql).not.toContain("ANY($2::int[])");
     });
 
@@ -668,7 +672,9 @@ describe("EnrichedOrdersService", () => {
       await service.getBatchSaddleSpecs([1, 2]);
 
       const sql = sqlContaining('as "displayValue"');
-      expect(sql).toContain("WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)");
+      expect(sql).toContain(
+        "WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)",
+      );
       expect(sql).not.toContain("ANY($2::int[])");
     });
   });
@@ -720,10 +726,14 @@ describe("EnrichedOrdersService", () => {
       expect(sql).toContain("en.saddle_id = $1 AND en.option_id = o.id");
       expect(sql).toContain("en.deleted = 0");
       // leather must be an item of the option
-      expect(sql).toContain("oi.option_id = o.id AND oi.leather_id > 0 AND oi.deleted = 0");
+      expect(sql).toContain(
+        "oi.option_id = o.id AND oi.leather_id > 0 AND oi.deleted = 0",
+      );
       expect(sql).toContain("lt.id = oi.leather_id AND lt.deleted = 0");
       // ticked anywhere on the saddle, regardless of option
-      expect(sql).toContain("WHERE t.saddle_id = $1 AND t.leather_id = lt.id AND t.deleted = 0");
+      expect(sql).toContain(
+        "WHERE t.saddle_id = $1 AND t.leather_id = lt.id AND t.deleted = 0",
+      );
       expect(sql).not.toContain("t.option_id");
       expect(sql).toContain("o.type = 1");
       expect(sql).toContain("ORDER BY o.id, lt.sequence, lt.name");
@@ -775,7 +785,9 @@ describe("EnrichedOrdersService", () => {
 
       const sql = sqlContaining("FROM fitters f");
       expect(sql).toContain("f.currency");
-      expect(sql).toContain("COALESCE(NULLIF(c.full_name, ''), NULLIF(c.user_name, '')) IS NOT NULL");
+      expect(sql).toContain(
+        "COALESCE(NULLIF(c.full_name, ''), NULLIF(c.user_name, '')) IS NOT NULL",
+      );
     });
 
     it("should return per-currency prices for options (extras)", async () => {
@@ -788,7 +800,8 @@ describe("EnrichedOrdersService", () => {
       queryRunner.query.mockClear();
       await service.getEditFormOptions(undefined);
       const withoutSaddle = sqlContaining('o.extra_allowed as "extraAllowed"');
-      for (let n = 1; n <= 7; n++) expect(withoutSaddle).toContain(`o.price${n}`);
+      for (let n = 1; n <= 7; n++)
+        expect(withoutSaddle).toContain(`o.price${n}`);
     });
   });
 });

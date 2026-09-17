@@ -146,7 +146,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
     // (1 USD→factory_us, 2 EUR→factory_eu, 3 GBP→factory_gb, 4 CAN→factory_ca,
     //  5 AUD→factory_aud, 6 NL→factory_nl, 7 DE→factory_de). 3,728/3,728 legacy
     // orders follow this rule.
-    it("createOrder stamps the fitter's currency and the saddle's regional factory", async () => {
+    it("should stamp the fitter's currency and the saddle's regional factory on create", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
         .mockResolvedValueOnce([{ active: true }]) // fitter assignable
@@ -157,12 +157,14 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       await service.createOrder({ fitterId: 299, saddleId: 97 }, 1);
 
       const resolve = queryRunner.query.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === "string" && c[0].includes("WHEN 7 THEN s.factory_de"),
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("WHEN 7 THEN s.factory_de"),
       );
       expect(resolve).toBeDefined();
       expect(resolve[1]).toEqual([299, 97]);
       const insert = queryRunner.query.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === "string" && c[0].includes("INSERT INTO orders ("),
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("INSERT INTO orders ("),
       );
       const params = insert[1] as unknown[];
       expect(params[3]).toBe(3); // factory_id
@@ -170,7 +172,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       expect(params[params.length - 5]).toBe(3); // oms_version = 3 like legacy's current writer
     });
 
-    it("createOrder skips the lookup and writes 0/0 when no fitter is given", async () => {
+    it("should skip the lookup and write 0/0 on create when no fitter is given", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
         .mockResolvedValueOnce([{ id: 502 }]) // INSERT
@@ -184,7 +186,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       );
     });
 
-    it("createOrder rejects an unknown status name with 400", async () => {
+    it("should reject an unknown status name with 400 on create", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
         .mockResolvedValueOnce([]); // status lookup: no row
@@ -195,10 +197,18 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
     });
 
-    it("updateOrder re-derives currency/factory when the saddle changes", async () => {
+    it("should re-derive currency/factory on update when the saddle changes", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40, currency: 1 }]) // existing
+        .mockResolvedValueOnce([
+          {
+            order_status: 1,
+            fitter_id: 10,
+            customer_id: 0,
+            saddle_id: 40,
+            currency: 1,
+          },
+        ]) // existing
         .mockResolvedValueOnce([{ currency: 1, factoryId: 4 }]) // resolve
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log
@@ -206,40 +216,69 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       await service.updateOrder(100, { saddleId: 47 }, 1, 2);
 
       const update = queryRunner.query.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
       );
       expect(update[0]).toContain("currency = $");
       expect(update[0]).toContain("factory_id = $");
       expect(update[1]).toEqual(expect.arrayContaining([1, 4]));
     });
 
-    it("updateOrder leaves currency/factory alone when neither fitter nor saddle changes", async () => {
+    it("should leave currency/factory alone on update when neither fitter nor saddle changes", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40, currency: 1 }]) // existing
+        .mockResolvedValueOnce([
+          {
+            order_status: 1,
+            fitter_id: 10,
+            customer_id: 0,
+            saddle_id: 40,
+            currency: 1,
+          },
+        ]) // existing
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log
 
-      await service.updateOrder(100, { fitterId: 10, saddleId: 40, specialNotes: "x" }, 1, 2);
+      await service.updateOrder(
+        100,
+        { fitterId: 10, saddleId: 40, specialNotes: "x" },
+        1,
+        2,
+      );
 
       const update = queryRunner.query.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
       );
       expect(update[0]).not.toContain("currency = $");
     });
 
-    it("updateOrder backfills currency/factory when the order was saved with currency 0 even if fitter and saddle are unchanged", async () => {
+    it("should backfill currency/factory on update when the order was saved with currency 0 even if fitter and saddle are unchanged", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40, currency: 0 }]) // existing, never stamped
+        .mockResolvedValueOnce([
+          {
+            order_status: 1,
+            fitter_id: 10,
+            customer_id: 0,
+            saddle_id: 40,
+            currency: 0,
+          },
+        ]) // existing, never stamped
         .mockResolvedValueOnce([{ currency: 2, factoryId: 5 }]) // resolve
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log
 
-      await service.updateOrder(100, { fitterId: 10, saddleId: 40, specialNotes: "x" }, 1, 2);
+      await service.updateOrder(
+        100,
+        { fitterId: 10, saddleId: 40, specialNotes: "x" },
+        1,
+        2,
+      );
 
       const update = queryRunner.query.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
       );
       expect(update[0]).toContain("currency = $");
       expect(update[0]).toContain("factory_id = $");
@@ -305,7 +344,9 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       // An order assigned before its fitter was blocked must stay editable.
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, currency: 1 }]) // existing order, already stamped
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 10, currency: 1 },
+        ]) // existing order, already stamped
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log INSERT
 
