@@ -83,32 +83,57 @@ jest.mock('@/components/ComprehensiveEditOrder', () => ({
   ComprehensiveEditOrder: () => <div data-testid="comprehensive-edit-order" />,
 }));
 
-// Minimal table: one "View" button per entity, wired to onView.
+// Minimal table: "View" and "Edit" buttons per entity, wired to onView/onEdit.
 jest.mock('@/components/shared/EntityTable', () => ({
   EntityTable: ({
     entities,
     onView,
+    onEdit,
   }: {
     entities: Array<{ id: number }>;
     onView: (entity: { id: number }) => void;
+    onEdit: (entity: { id: number }) => void;
   }) => (
     <div data-testid="entity-table">
       {entities.map((entity) => (
-        <button key={entity.id} data-testid={`view-${entity.id}`} onClick={() => onView(entity)}>
-          View
-        </button>
+        <div key={entity.id}>
+          <button data-testid={`view-${entity.id}`} onClick={() => onView(entity)}>
+            View
+          </button>
+          <button data-testid={`edit-${entity.id}`} onClick={() => onEdit(entity)}>
+            Edit
+          </button>
+        </div>
       ))}
     </div>
   ),
 }));
 
 // Radix-faithful Dialog: children always render, DialogContent only while open.
+// An open Dialog also renders a "dismiss" control standing in for the paths
+// Radix routes through `onOpenChange(false)`: the × button, Escape, and a
+// click on the overlay.
 jest.mock('@/components/ui/dialog', () => {
   const ReactActual = jest.requireActual('react') as typeof React;
   const OpenContext = ReactActual.createContext(true);
   return {
-    Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) => (
-      <OpenContext.Provider value={!!open}>{children}</OpenContext.Provider>
+    Dialog: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => (
+      <OpenContext.Provider value={!!open}>
+        {open && (
+          <button data-testid="dialog-dismiss" onClick={() => onOpenChange?.(false)}>
+            Dismiss
+          </button>
+        )}
+        {children}
+      </OpenContext.Provider>
     ),
     DialogContent: ({ children }: { children: React.ReactNode }) =>
       ReactActual.useContext(OpenContext) ? <div data-testid="dialog-content">{children}</div> : null,
@@ -149,6 +174,24 @@ describe('Order details dialog lifecycle (Orders host)', () => {
 
     expect(screen.queryByTestId('order-details')).not.toBeInTheDocument();
     expect(mockDetailsMounted).not.toHaveBeenCalled();
+  });
+
+  // The editor's "Change orderstatus" persists immediately, so dismissing the
+  // editor with × / Escape must refresh the list just like Cancel does —
+  // otherwise the table keeps showing the pre-edit status.
+  it('refreshes the list when the edit dialog is dismissed via ×/Escape', async () => {
+    render(<Orders />);
+
+    fireEvent.click(screen.getByTestId('edit-42'));
+    await waitFor(() => expect(screen.getByTestId('comprehensive-edit-order')).toBeInTheDocument());
+    mockFetchAndSetOrders.mockClear();
+
+    fireEvent.click(screen.getByTestId('dialog-dismiss'));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('comprehensive-edit-order')).not.toBeInTheDocument()
+    );
+    expect(mockFetchAndSetOrders).toHaveBeenCalledWith(true);
   });
 
   it('remounts OrderDetails when the same order is reopened after a saved edit', async () => {

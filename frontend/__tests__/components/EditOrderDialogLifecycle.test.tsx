@@ -37,12 +37,30 @@ jest.mock('next/navigation', () => ({
 // Radix-faithful Dialog: children always render, DialogContent only while open.
 // Default context is `true` so a DialogContent rendered outside any Dialog
 // (e.g. OrderDetails' own body in this test) is still visible.
+// An open Dialog also renders a "dismiss" control standing in for the paths
+// Radix routes through `onOpenChange(false)`: the × button, Escape, and a
+// click on the overlay.
 jest.mock('@/components/ui/dialog', () => {
   const ReactActual = jest.requireActual('react') as typeof React;
   const OpenContext = ReactActual.createContext(true);
   return {
-    Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) => (
-      <OpenContext.Provider value={!!open}>{children}</OpenContext.Provider>
+    Dialog: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => (
+      <OpenContext.Provider value={!!open}>
+        {open && (
+          <button data-testid="dialog-dismiss" onClick={() => onOpenChange?.(false)}>
+            Dismiss
+          </button>
+        )}
+        {children}
+      </OpenContext.Provider>
     ),
     DialogContent: ({ children }: { children: React.ReactNode }) =>
       ReactActual.useContext(OpenContext) ? <div data-testid="dialog-content">{children}</div> : null,
@@ -222,6 +240,31 @@ describe('Edit Order dialog lifecycle (OrderDetails host)', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('comprehensive-edit-order')).not.toBeInTheDocument()
     );
+  });
+
+  // "Order status differs between the main screen and Edit Order": the editor's
+  // "Change orderstatus" writes to the server immediately, so however the editor
+  // is closed afterwards the host must be told the order changed.  Only Cancel
+  // went through `onClose`; the × / Escape / overlay paths went through Radix's
+  // `onOpenChange` and left the details panel (and the list behind it) showing
+  // the pre-edit status.
+  it('reports the order as changed when the editor is dismissed via ×/Escape', async () => {
+    const onOrderChanged = jest.fn();
+    fetchOrderDetail.mockResolvedValue(mockOrderDetail);
+    render(<OrderDetails order={defaultOrder} onClose={jest.fn()} onOrderChanged={onOrderChanged} />);
+    await waitFor(() =>
+      expect(screen.queryByText('Loading order details...')).not.toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /edit order/i }));
+    await waitFor(() => expect(screen.getByTestId('comprehensive-edit-order')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('dialog-dismiss'));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('comprehensive-edit-order')).not.toBeInTheDocument()
+    );
+    expect(onOrderChanged).toHaveBeenCalledTimes(1);
   });
 
   it('reopens the same order with a fresh editor, discarding unsaved edits', async () => {

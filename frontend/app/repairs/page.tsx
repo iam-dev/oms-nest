@@ -237,8 +237,10 @@ export default function RepairsPage() {
         )}
       </Dialog>
 
-      {/* Edit order dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      {/* Edit order dialog.  The × / Escape / overlay paths arrive here via
+          onOpenChange and must refresh the list like Cancel does: the editor's
+          "Change orderstatus" has already been persisted by then. */}
+      <Dialog open={isEditOpen} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>
         {isEditOpen && selectedOrder && (
           <ComprehensiveEditOrder
             order={{
