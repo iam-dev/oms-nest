@@ -232,7 +232,7 @@ const minimalStep1Options = {
   optionLeathers: [],
   presets: [],
   presetItems: [],
-  statuses: [],
+  statuses: [{ id: 0, name: 'Unordered' }, { id: 1, name: 'Ordered' }, { id: 2, name: 'Cancelled' }],
 };
 
 function mockMinimalStep1Options() {
@@ -628,8 +628,8 @@ describe('EditOrder component', () => {
 
       const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
 
-      // formData.status → payload.orderStatus
-      expect(payload.orderStatus).toBe('DRAFT');
+      // formData.status → payload.orderStatus (new orders default to legacy's "Unordered")
+      expect(payload.orderStatus).toBe('Unordered');
       // formData.isUrgent → payload.rushed
       expect(payload.rushed).toBe(false);
       // formData.isDemo → payload.demo
@@ -806,8 +806,8 @@ describe('EditOrder component', () => {
       await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     });
 
-    it('maps status to DRAFT in duplicate mode when duplicateData provides status', async () => {
-      // Duplicate mode always sets status to DRAFT regardless of source
+    it('maps status to Unordered in duplicate mode when duplicateData provides status', async () => {
+      // Duplicate mode always resets status to "Unordered" regardless of source
       await renderAndWaitForLoad({
         isDuplicate: true,
         duplicateData: {
@@ -835,8 +835,8 @@ describe('EditOrder component', () => {
       );
 
       const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
-      // In duplicate mode the component sets status to 'DRAFT'
-      expect(payload.orderStatus).toBe('DRAFT');
+      // In duplicate mode the component sets status to 'Unordered'
+      expect(payload.orderStatus).toBe('Unordered');
     });
 
     it('maps duplicateData flags to payload fields in duplicate mode', async () => {
@@ -1034,24 +1034,14 @@ describe('EditOrder component', () => {
         expect(screen.getByText('Customer')).toBeInTheDocument();
       });
 
-      it('renders the Fitter heading', async () => {
+      it('renders the Shipping address section', async () => {
         await renderAndWaitForLoad();
 
         await completeStep1();
 
         await navigateToStep(2);
 
-        expect(screen.getByText('Fitter')).toBeInTheDocument();
-      });
-
-      it('renders the Shipping Address section', async () => {
-        await renderAndWaitForLoad();
-
-        await completeStep1();
-
-        await navigateToStep(2);
-
-        expect(screen.getByText('Shipping Address')).toBeInTheDocument();
+        expect(screen.getByText('Shipping address')).toBeInTheDocument();
       });
 
       it('renders the Search Customer label', async () => {
@@ -1062,16 +1052,6 @@ describe('EditOrder component', () => {
         await navigateToStep(2);
 
         expect(screen.getByText('Search Customer')).toBeInTheDocument();
-      });
-
-      it('renders the Search Fitter label', async () => {
-        await renderAndWaitForLoad();
-
-        await completeStep1();
-
-        await navigateToStep(2);
-
-        expect(screen.getByText('Search Fitter')).toBeInTheDocument();
       });
     });
 
@@ -1087,23 +1067,13 @@ describe('EditOrder component', () => {
         expect(screen.getByText('Order Information')).toBeInTheDocument();
       });
 
-      it('renders the Flags section heading', () => {
-        expect(screen.getByText('Flags')).toBeInTheDocument();
+      it('does not render a Flags section (flags live on Step 1 now)', () => {
+        expect(screen.queryByText('Flags')).not.toBeInTheDocument();
       });
 
-      it('renders all flag checkboxes (Urgent, Stock, Demo, Sponsored, Repair)', () => {
-        expect(screen.getByText('Urgent')).toBeInTheDocument();
-        expect(screen.getByText('Stock')).toBeInTheDocument();
-        expect(screen.getByText('Demo')).toBeInTheDocument();
-        expect(screen.getByText('Sponsored')).toBeInTheDocument();
-        expect(screen.getByText('Repair')).toBeInTheDocument();
-      });
-
-      it('renders all ORDER_STATUSES as select items', () => {
-        expect(screen.getByText('Draft')).toBeInTheDocument();
+      it('renders the DB statuses as select items', () => {
         expect(screen.getByText('Unordered')).toBeInTheDocument();
         expect(screen.getByText('Ordered')).toBeInTheDocument();
-        expect(screen.getByText('Approved')).toBeInTheDocument();
         expect(screen.getByText('Cancelled')).toBeInTheDocument();
       });
 
@@ -1170,7 +1140,7 @@ describe('EditOrder component', () => {
   // 8. formData default values (new order, order=undefined)
   // =========================================================================
   describe('default formData when no order is provided', () => {
-    it('initialises status as DRAFT', async () => {
+    it('initialises status as Unordered', async () => {
       renderNewOrder();
 
       await completeStep1();
@@ -1179,7 +1149,7 @@ describe('EditOrder component', () => {
 
       const selects = screen.getAllByTestId('select');
       const statusSelect = selects.find(
-        (el) => el.getAttribute('data-value') === 'DRAFT'
+        (el) => el.getAttribute('data-value') === 'Unordered'
       );
       expect(statusSelect).toBeTruthy();
     });
@@ -1560,6 +1530,68 @@ describe('EditOrder component', () => {
       expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
       expect(screen.getByText(/Step 1/)).toBeInTheDocument();
       expect(createOrderFromPayload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('legacy parity — Steps 2 and 3 (2026-09-17)', () => {
+    const originalFetch = global.fetch;
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({
+        fitters: [{ id: 28, username: 'aikenshop123', fullName: 'Aiken Shop', active: true, currency: 1 }],
+        saddles: [{ id: 97, brand: 'Aviar', modelName: 'Rook 2.0 (K644B)', displayName: 'Aviar Rook 2.0 (K644B)', active: 1 }],
+        leatherTypes: [{ id: 48, name: 'ASBLV', price1: 6595 }],
+        options: [], optionItems: [], optionLeathers: [], presets: [], presetItems: [],
+        statuses: [{ id: 0, name: 'Unordered' }, { id: 12, name: 'Inventory Aiken' }, { id: 15, name: 'Awaiting Client Confirmation' }],
+      }) });
+    });
+    afterEach(() => { global.fetch = originalFetch; });
+
+    async function toStep2() {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aiken Shop')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Aiken Shop')); });
+      await act(async () => { fireEvent.click(screen.getByText('Aviar Rook 2.0 (K644B)')); });
+      await navigateToStep(2);
+    }
+
+    it('Step 2 asks for the shipping name and the legacy country list, and no longer asks for the fitter or a shipping method', async () => {
+      await toStep2();
+      expect(screen.getByLabelText(/^Name:/)).toBeInTheDocument();
+      expect(screen.getByText('Republic of Ireland')).toBeInTheDocument();
+      expect(screen.queryByText('Search Fitter')).not.toBeInTheDocument();
+      expect(screen.queryByText('Shipping Method')).not.toBeInTheDocument();
+    });
+
+    it('Step 3 lists the DB statuses, defaults to Unordered and no longer repeats the flags', async () => {
+      await toStep2();
+      // Already on Step 2 — navigateToStep(N) assumes a fresh start from Step 1, so
+      // advance with a single Next Step click instead of calling it again.
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
+      expect(screen.getByText('Inventory Aiken')).toBeInTheDocument();
+      expect(screen.getByText('Awaiting Client Confirmation')).toBeInTheDocument();
+      expect(screen.queryByText('Flags')).not.toBeInTheDocument();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      expect(createOrderFromPayload.mock.calls[0][0].orderStatus).toBe('Unordered');
+    });
+
+    it('keeps customer and shipping addresses apart in the payload', async () => {
+      (orderEditViewModule.searchCustomers as jest.Mock).mockResolvedValue([
+        { id: 7, name: 'Jane Smith', email: 'jane@example.com', address: '789 Elm St', city: 'Denver', state: 'CO', zipcode: '80201', country: 'United States' },
+      ]);
+      await toStep2();
+      fireEvent.change(screen.getByPlaceholderText('Type customer name...'), { target: { value: 'Jane' } });
+      await waitFor(() => expect(screen.getByText('Jane Smith')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Jane Smith')); });
+      fireEvent.change(screen.getByLabelText(/^Name:/), { target: { value: 'Barn office' } });
+      fireEvent.change(screen.getByLabelText(/^Address:/), { target: { value: '1 Stable Rd' } });
+      await act(async () => { fireEvent.click(screen.getByText('Netherlands')); });
+      // Already on Step 2 — see the comment in the previous test for why this isn't navigateToStep(3).
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      expect(createOrderFromPayload.mock.calls[0][0]).toMatchObject({
+        customerId: 7, customerName: 'Jane Smith', customerAddress: '789 Elm St', customerCity: 'Denver', customerCountry: 'United States',
+        shipName: 'Barn office', shipAddress: '1 Stable Rd', shipCountry: 'Netherlands',
+      });
     });
   });
 });

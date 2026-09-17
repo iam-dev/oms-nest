@@ -21,16 +21,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings, Plus } from 'lucide-react';
-import { fetchOrderEditData, searchCustomers, searchFitters, saveOrderEditData } from '@/services/orderEditView';
+import { fetchOrderEditData, searchCustomers, saveOrderEditData } from '@/services/orderEditView';
 import { createOrderFromPayload, UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
 import {
   ComprehensiveOrderData,
   OrderEditFormState,
   Customer,
-  Fitter,
-  OrderLine,
-  OrderStatus
+  OrderLine
 } from '@/types/ComprehensiveOrder';
 import { logger } from '@/utils/logger';
 import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
@@ -39,6 +37,7 @@ import { specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
 import { presetSelections } from '@/utils/presetApply';
 import type { EditFormOptions } from '@/services/enrichedOrders';
 import { saddlePriceFor, orderTotal, currencyCodeFor, formatMoney } from '@/utils/orderPricing';
+import { ShippingCountrySelect } from '@/components/shared/ShippingCountrySelect';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DuplicateData = Record<string, any>;
@@ -55,24 +54,6 @@ interface EditOrderProps {
   isDuplicate?: boolean;
   duplicateData?: DuplicateData;
 }
-
-const ORDER_STATUSES: { value: OrderStatus; label: string }[] = [
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'UNORDERED', label: 'Unordered' },
-  { value: 'ORDERED', label: 'Ordered' },
-  { value: 'CHANGED', label: 'Changed' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'IN_PRODUCTION_P1', label: 'In Production P1' },
-  { value: 'IN_PRODUCTION_P2', label: 'In Production P2' },
-  { value: 'IN_PRODUCTION_P3', label: 'In Production P3' },
-  { value: 'SHIPPED_TO_FITTER', label: 'Shipped to Fitter' },
-  { value: 'SHIPPED_TO_CUSTOMER', label: 'Shipped to Customer' },
-  { value: 'INVENTORY', label: 'Inventory' },
-  { value: 'ON_HOLD', label: 'On Hold' },
-  { value: 'ON_TRIAL', label: 'On Trial' },
-  { value: 'COMPLETED_SALE', label: 'Completed Sale' },
-  { value: 'CANCELLED', label: 'Cancelled' }
-];
 
 const steps = [
   { id: 1, title: 'Products & Pricing', icon: Package },
@@ -98,7 +79,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       total: 0,
       currency: 'USD'
     },
-    status: 'DRAFT',
+    status: 'Unordered',
     isUrgent: false,
     isStock: false,
     isDemo: false,
@@ -110,11 +91,9 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
-  
-  // Fitter search state
-  const [fitterSearchTerm, setFitterSearchTerm] = useState('');
-  const [fitterSearchResults, setFitterSearchResults] = useState<Fitter[]>([]);
-  const [fitterSearchLoading, setFitterSearchLoading] = useState(false);
+
+  // Shipping name (legacy: separate from the customer's own name)
+  const [shipName, setShipName] = useState('');
 
   // Edit options from backend (fitters, saddles, presets, etc.)
   const [editOptions, setEditOptions] = useState<EditFormOptions | null>(null);
@@ -166,11 +145,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '', city: '', state: '', zipcode: '', country: '' });
-
-  // New fitter form state
-  const [showNewFitterForm, setShowNewFitterForm] = useState(false);
-  const [newFitterSaving, setNewFitterSaving] = useState(false);
-  const [newFitter, setNewFitter] = useState({ firstName: '', lastName: '', email: '' });
 
   // Fetch edit options from backend.
   // Active models only, like the legacy new-order form; repairs have their own flow.
@@ -266,7 +240,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
           order: {
             id: order.id,
             orderId: order.orderId,
-            status: 'DRAFT',
+            status: 'Unordered',
             pricing: {
               subtotal: 0,
               discount: 0,
@@ -319,15 +293,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fitter: (data.order as any).fitter,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        fitterAddress: (data.order as any).fitterAddress,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         shippingAddress: (data.order as any).shippingAddress,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        shippingMethod: (data.order as any).shippingMethod,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         reference: (data.order as any).reference,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        status: ((data.order as any).status || 'DRAFT') as OrderStatus,
+        status: (data.order as any).status || 'Unordered',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         isUrgent: (data.order as any).isUrgent || false,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -360,7 +330,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
           isSponsored: Boolean(duplicateData.isSponsored),
           isRepair: Boolean(duplicateData.isRepair),
           notes: String(duplicateData.specialNotes || prev.notes || ''),
-          status: 'DRAFT' as OrderStatus,
+          status: 'Unordered',
           pricing: {
             subtotal: Number(duplicateData.price) || prev.pricing.subtotal,
             discount: Number(duplicateData.discount) || prev.pricing.discount,
@@ -398,7 +368,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             total: 0,
             currency: 'USD'
           },
-          status: 'DRAFT',
+          status: 'Unordered',
           isUrgent: false,
           isStock: false,
           isDemo: false,
@@ -442,28 +412,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     []
   );
 
-  // Fitter search with debouncing
-  const searchFittersDebounced = useCallback(
-    async (searchTerm: string) => {
-      if (searchTerm.length < 2) {
-        setFitterSearchResults([]);
-        return;
-      }
-      
-      setFitterSearchLoading(true);
-      try {
-        const results = await searchFitters(searchTerm);
-        setFitterSearchResults(results as unknown as Fitter[]);
-      } catch (error) {
-        logger.error('Error searching fitters:', error);
-        setFitterSearchResults([]);
-      } finally {
-        setFitterSearchLoading(false);
-      }
-    },
-    []
-  );
-
   // Debounced customer search effect
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -471,14 +419,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     }, 300);
     return () => clearTimeout(timer);
   }, [customerSearchTerm, searchCustomersDebounced]);
-
-  // Debounced fitter search effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      searchFittersDebounced(fitterSearchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [fitterSearchTerm, searchFittersDebounced]);
 
   // Every Step-1 field marked with a red asterisk that is still empty, in page order
   // (same rules as ComprehensiveEditOrder.getMissingRequiredFields).
@@ -528,7 +468,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         if (isNewOrder) {
           // Build payload for createOrderFromPayload (enriched orders endpoint)
           const createPayload: UpdateOrderPayload = {
-            orderStatus: formData.status || 'DRAFT',
+            orderStatus: formData.status || 'Unordered',
             rushed: formData.isUrgent || false,
             demo: formData.isDemo || false,
             repair: formData.isRepair || false,
@@ -536,21 +476,23 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             fitterStock: formData.isStock || false,
             specialNotes: formData.notes,
             orderReference: formData.reference,
-            // Customer fields
+            // Customer fields — from the selected/created customer only
             customerId: formData.customer?.id ? Number(formData.customer.id) : undefined,
             customerName: formData.customer?.name,
             customerEmail: formData.customer?.email,
-            customerAddress: formData.shippingAddress?.street,
-            customerCity: formData.shippingAddress?.city,
-            customerState: formData.shippingAddress?.state,
-            customerZipcode: formData.shippingAddress?.zipCode,
-            // Drop the legacy "-1" sentinel so we don't round-trip it on save.
-            customerCountry: formData.shippingAddress?.country === '-1' ? undefined : formData.shippingAddress?.country,
-            // Shipping fields
+            customerPhone: formData.customer?.phone,
+            customerAddress: formData.customer?.address,
+            customerCity: formData.customer?.city,
+            customerState: formData.customer?.state,
+            customerZipcode: formData.customer?.zipcode,
+            customerCountry: formData.customer?.country,
+            // Shipping fields — from the Step 2 shipping block only
+            shipName,
             shipAddress: formData.shippingAddress?.street,
             shipCity: formData.shippingAddress?.city,
             shipState: formData.shippingAddress?.state,
             shipZipcode: formData.shippingAddress?.zipCode,
+            // Drop the legacy "-1" sentinel so we don't round-trip it on save.
             shipCountry: formData.shippingAddress?.country === '-1' ? undefined : formData.shippingAddress?.country,
             // Fitter
             fitterId: formData.fitter?.id ? Number(formData.fitter.id) : undefined,
@@ -633,21 +575,10 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const selectCustomer = (customer: Customer) => {
     setFormData(prev => ({
       ...prev,
-      customer,
-      customerAddress: customer.address
+      customer
     }));
     setCustomerSearchTerm(customer.name);
     setCustomerSearchResults([]);
-  };
-
-  const selectFitter = (fitter: Fitter) => {
-    setFormData(prev => ({
-      ...prev,
-      fitter,
-      fitterAddress: fitter.address
-    }));
-    setFitterSearchTerm(fitter.name);
-    setFitterSearchResults([]);
   };
 
   const handleCreateCustomer = async () => {
@@ -677,6 +608,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         name: created.name || newCustomer.name,
         email: created.email || newCustomer.email,
         phone: created.phoneNo || newCustomer.phone,
+        address: created.address || newCustomer.address,
+        city: created.city || newCustomer.city,
+        state: created.state || newCustomer.state,
+        zipcode: created.zipcode || newCustomer.zipcode,
+        country: created.country || newCustomer.country,
       };
       selectCustomer(customer);
       setShowNewCustomerForm(false);
@@ -685,47 +621,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       logger.error('Error creating customer:', err);
     } finally {
       setNewCustomerSaving(false);
-    }
-  };
-
-  const handleCreateFitter = async () => {
-    if (!newFitter.firstName.trim() || !newFitter.lastName.trim()) return;
-    setNewFitterSaving(true);
-    try {
-      const res = await fetch(`${API_URL}/api/v1/fitters`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          firstName: newFitter.firstName,
-          lastName: newFitter.lastName,
-          emailaddress: newFitter.email || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error(`Failed to create fitter: ${res.status}`);
-      const created = await res.json();
-      const fitter: Fitter = {
-        id: created.id,
-        name: `${newFitter.firstName} ${newFitter.lastName}`,
-        email: newFitter.email,
-      };
-      selectFitter(fitter);
-      // Also update the fitter dropdown on Step 1
-      setSelectedFitterId(String(created.id));
-      setFormData(prev => ({
-        ...prev,
-        fitter: { id: created.id, name: `${newFitter.firstName} ${newFitter.lastName}` }
-      }));
-      // Refresh edit options to include new fitter in dropdown
-      fetchEditOptions(selectedSaddleId || undefined).then(opts => {
-        if (opts) setEditOptions(opts);
-      });
-      setShowNewFitterForm(false);
-      setNewFitter({ firstName: '', lastName: '', email: '' });
-    } catch (err) {
-      logger.error('Error creating fitter:', err);
-    } finally {
-      setNewFitterSaving(false);
     }
   };
 
@@ -1248,7 +1143,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
           {/* Step 2: Customer & Shipping */}
           {currentStep === 2 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               {/* Customer Selection */}
               <div className="bg-white rounded-lg border p-6">
                 <h3 className="font-semibold mb-4 text-lg">Customer</h3>
@@ -1319,16 +1214,17 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                           <Input className="h-8 text-sm" value={newCustomer.city} onChange={(e) => setNewCustomer(prev => ({ ...prev, city: e.target.value }))} />
                         </div>
                         <div>
-                          <Label className="text-xs">State</Label>
-                          <Input className="h-8 text-sm" value={newCustomer.state} onChange={(e) => setNewCustomer(prev => ({ ...prev, state: e.target.value }))} />
-                        </div>
-                        <div>
                           <Label className="text-xs">Zipcode</Label>
                           <Input className="h-8 text-sm" value={newCustomer.zipcode} onChange={(e) => setNewCustomer(prev => ({ ...prev, zipcode: e.target.value }))} />
                         </div>
-                        <div>
-                          <Label className="text-xs">Country</Label>
-                          <Input className="h-8 text-sm" value={newCustomer.country} onChange={(e) => setNewCustomer(prev => ({ ...prev, country: e.target.value }))} />
+                        <div className="col-span-2">
+                          <ShippingCountrySelect
+                            idPrefix="new-customer"
+                            country={newCustomer.country}
+                            state={newCustomer.state}
+                            onCountryChange={(country) => setNewCustomer(prev => ({ ...prev, country }))}
+                            onStateChange={(state) => setNewCustomer(prev => ({ ...prev, state }))}
+                          />
                         </div>
                       </div>
                       <Button size="sm" onClick={handleCreateCustomer} disabled={!newCustomer.name.trim() || newCustomerSaving}>
@@ -1351,148 +1247,34 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 </div>
               </div>
 
-              {/* Fitter Selection */}
-              <div className="bg-white rounded-lg border p-6">
-                <h3 className="font-semibold mb-4 text-lg">Fitter</h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Search Fitter</Label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input
-                        placeholder="Type fitter name..."
-                        value={fitterSearchTerm}
-                        onChange={(e) => setFitterSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    {fitterSearchLoading && (
-                      <p className="text-sm text-gray-500 mt-2">Searching...</p>
-                    )}
-                    {fitterSearchResults.length > 0 && (
-                      <div className="mt-2 max-h-40 overflow-y-auto border rounded-md">
-                        {fitterSearchResults.map((fitter) => (
-                          <button
-                            key={fitter.id}
-                            className="w-full text-left p-3 hover:bg-gray-50 border-b last:border-b-0"
-                            onClick={() => selectFitter(fitter)}
-                          >
-                            <div className="font-medium">{fitter.name}</div>
-                            {fitter.email && (
-                              <div className="text-sm text-gray-600">{fitter.email}</div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => setShowNewFitterForm(!showNewFitterForm)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {showNewFitterForm ? 'Cancel' : 'Add New Fitter'}
-                    </Button>
-                  </div>
-
-                  {showNewFitterForm && (
-                    <div className="border rounded-md p-4 space-y-3 bg-blue-50">
-                      <h4 className="font-medium text-sm">New Fitter</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
-                          <Input className="h-8 text-sm" value={newFitter.firstName} onChange={(e) => setNewFitter(prev => ({ ...prev, firstName: e.target.value }))} />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
-                          <Input className="h-8 text-sm" value={newFitter.lastName} onChange={(e) => setNewFitter(prev => ({ ...prev, lastName: e.target.value }))} />
-                        </div>
-                        <div className="col-span-2">
-                          <Label className="text-xs">Email</Label>
-                          <Input className="h-8 text-sm" type="email" value={newFitter.email} onChange={(e) => setNewFitter(prev => ({ ...prev, email: e.target.value }))} />
-                        </div>
-                      </div>
-                      <Button size="sm" onClick={handleCreateFitter} disabled={(!newFitter.firstName.trim() || !newFitter.lastName.trim()) || newFitterSaving}>
-                        {newFitterSaving ? 'Saving...' : 'Create Fitter'}
-                      </Button>
-                    </div>
-                  )}
-
-                  {formData.fitter && (
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <h4 className="font-medium">{formData.fitter.name}</h4>
-                      {formData.fitter.email && (
-                        <p className="text-sm text-gray-600">{formData.fitter.email}</p>
-                      )}
-                      {formData.fitter.phone && (
-                        <p className="text-sm text-gray-600">{formData.fitter.phone}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Shipping Address */}
               <div className="bg-white rounded-lg border p-6 lg:col-span-2">
-                <h3 className="font-semibold mb-4 text-lg">Shipping Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Street Address</Label>
-                    <Input
-                      value={formData.shippingAddress?.street || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, street: e.target.value }
-                      })}
-                    />
+                <h3 className="font-semibold mb-2 text-lg">Shipping address</h3>
+                <p className="text-sm text-gray-500 mb-4">(if different than under &quot;customer information or Inventory&quot;)</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-name" className="text-sm font-medium">Name:</Label>
+                    <Input id="ship-name" value={shipName} onChange={(e) => setShipName(e.target.value)} />
                   </div>
-                  <div>
-                    <Label>City</Label>
-                    <Input
-                      value={formData.shippingAddress?.city || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, city: e.target.value }
-                      })}
-                    />
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-address" className="text-sm font-medium">Address:</Label>
+                    <Input id="ship-address" value={formData.shippingAddress?.street || ''}
+                      onChange={(e) => updateFormData({ shippingAddress: { ...formData.shippingAddress, street: e.target.value } })} />
                   </div>
-                  <div>
-                    <Label>State/Province</Label>
-                    <Input
-                      value={formData.shippingAddress?.state || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, state: e.target.value }
-                      })}
-                    />
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-city" className="text-sm font-medium">City:</Label>
+                    <Input id="ship-city" value={formData.shippingAddress?.city || ''}
+                      onChange={(e) => updateFormData({ shippingAddress: { ...formData.shippingAddress, city: e.target.value } })} />
                   </div>
-                  <div>
-                    <Label>ZIP/Postal Code</Label>
-                    <Input
-                      value={formData.shippingAddress?.zipCode || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, zipCode: e.target.value }
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Country</Label>
-                    <Input
-                      value={
-                        formData.shippingAddress?.country &&
-                        formData.shippingAddress.country !== '-1'
-                          ? formData.shippingAddress.country
-                          : ''
-                      }
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, country: e.target.value }
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Shipping Method</Label>
-                    <Input
-                      value={formData.shippingMethod || ''}
-                      onChange={(e) => updateFormData({ shippingMethod: e.target.value })}
-                    />
+                  <ShippingCountrySelect
+                    country={formData.shippingAddress?.country || ''}
+                    state={formData.shippingAddress?.state || ''}
+                    onCountryChange={(country) => updateFormData({ shippingAddress: { ...formData.shippingAddress, country } })}
+                    onStateChange={(state) => updateFormData({ shippingAddress: { ...formData.shippingAddress, state } })}
+                  />
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-zip" className="text-sm font-medium">Zipcode:</Label>
+                    <Input id="ship-zip" value={formData.shippingAddress?.zipCode || ''}
+                      onChange={(e) => updateFormData({ shippingAddress: { ...formData.shippingAddress, zipCode: e.target.value } })} />
                   </div>
                 </div>
               </div>
@@ -1516,15 +1298,15 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                     <Label>Status</Label>
                     <Select
                       value={formData.status}
-                      onValueChange={(value) => updateFormData({ status: value as OrderStatus })}
+                      onValueChange={(value) => updateFormData({ status: value })}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ORDER_STATUSES.map((status) => (
-                          <SelectItem key={status.value} value={status.value}>
-                            {status.label}
+                        {editOptions?.statuses?.map(s => (
+                          <SelectItem key={s.id} value={s.name}>
+                            {s.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1538,27 +1320,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                       onChange={(e) => updateFormData({ requestedDeliveryDate: e.target.value })}
                     />
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg border p-6">
-                <h3 className="font-semibold mb-4 text-lg">Flags</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {[
-                    { key: 'isUrgent', label: 'Urgent' },
-                    { key: 'isStock', label: 'Stock' },
-                    { key: 'isDemo', label: 'Demo' },
-                    { key: 'isSponsored', label: 'Sponsored' },
-                    { key: 'isRepair', label: 'Repair' },
-                  ].map(({ key, label }) => (
-                    <div key={key} className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={formData[key as keyof OrderEditFormState] as boolean}
-                        onCheckedChange={(checked) => updateFormData({ [key]: checked })}
-                      />
-                      <Label>{label}</Label>
-                    </div>
-                  ))}
                 </div>
               </div>
 
