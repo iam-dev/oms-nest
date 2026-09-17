@@ -1021,6 +1021,24 @@ describe('EditOrder component', () => {
 
         expect(screen.getByText(/^Fitter:/)).toBeInTheDocument();
       });
+
+      it('renders the five order flags on Step 1 (Urgent, Stock, Demo, Sponsored, Repair)', async () => {
+        const { container } = renderNewOrder();
+
+        await waitFor(() => expect(screen.getByText('Test Fitter')).toBeInTheDocument());
+
+        expect(container.querySelector('#urgent')).toBeInTheDocument();
+        expect(container.querySelector('#stock')).toBeInTheDocument();
+        expect(container.querySelector('#demo')).toBeInTheDocument();
+        expect(container.querySelector('#sponsored')).toBeInTheDocument();
+        expect(container.querySelector('#repair')).toBeInTheDocument();
+
+        expect(screen.getByText('Urgent:')).toBeInTheDocument();
+        expect(screen.getByText('Stock:')).toBeInTheDocument();
+        expect(screen.getByText('Demo:')).toBeInTheDocument();
+        expect(screen.getByText('Sponsored:')).toBeInTheDocument();
+        expect(screen.getByText('Repair:')).toBeInTheDocument();
+      });
     });
 
     describe('step 2 — Customer & Shipping', () => {
