@@ -358,6 +358,44 @@ describe('ComprehensiveEditOrder component', () => {
   });
 
   // =========================================================================
+  // 2b. Fitter dropdown hides inactive (blocked) fitters
+  // =========================================================================
+  describe('fitter dropdown', () => {
+    const fittersWithInactive = [
+      { id: 5, username: 'expertfitter', fullName: 'Expert Fitter', active: true },
+      { id: 6, username: 'blocked', fullName: 'Blocked Fitter', active: false },
+    ];
+
+    it('does not offer an inactive fitter that is not already on the order', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockEditOptions, fitters: fittersWithInactive }),
+      });
+      await renderAndWaitForLoad();
+      await waitFor(() => expect(screen.getByText('Expert Fitter')).toBeInTheDocument());
+
+      expect(screen.queryByText(/Blocked Fitter/)).not.toBeInTheDocument();
+    });
+
+    it("keeps the order's current fitter selectable even when inactive, labelled as such", async () => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({
+        ...mockOrderDetail,
+        fitterId: 6,
+        fitterName: 'Blocked Fitter',
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockEditOptions, fitters: fittersWithInactive }),
+      });
+      await renderAndWaitForLoad();
+
+      await waitFor(() =>
+        expect(screen.getByText('Blocked Fitter (inactive)')).toBeInTheDocument()
+      );
+    });
+  });
+
+  // =========================================================================
   // 3. Data fetching on mount
   // =========================================================================
   describe('data fetching on mount', () => {

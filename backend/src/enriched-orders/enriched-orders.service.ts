@@ -2,11 +2,12 @@ import {
   Injectable,
   Inject,
   Logger,
+  BadRequestException,
   ConflictException,
   ForbiddenException,
 } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { DataSource } from "typeorm";
+import { DataSource, QueryRunner } from "typeorm";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { ConfigService } from "@nestjs/config";
@@ -1508,8 +1509,12 @@ export class EnrichedOrdersService {
       // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
+      // `active` mirrors the Fitters page's "enabled" (credentials.blocked = 0).
+      // Inactive fitters are still returned so an order already assigned to one
+      // can display it; the form decides whether to offer them for selection.
       const fitters = await queryRunner.query(`
-        SELECT f.id, c.user_name as "username", c.full_name as "fullName"
+        SELECT f.id, c.user_name as "username", c.full_name as "fullName",
+          COALESCE(c.blocked = 0, true) as "active"
         FROM fitters f
         LEFT JOIN credentials c ON f.user_id = c.user_id AND c.user_type = 1
         WHERE f.deleted = 0
@@ -1868,6 +1873,37 @@ export class EnrichedOrdersService {
     }
   }
 
+  /**
+   * Reject assigning an order to a fitter that is soft-deleted or whose login
+   * account is blocked (shown as "inactive" on the Fitters page). The edit
+   * form hides such fitters, but the fitter search box and direct API calls
+   * do not, so this is the authoritative check.
+   *
+   * "Active" deliberately means `credentials.blocked = 0` and nothing more, so
+   * it matches the Fitters page's status column exactly. Legacy rows whose
+   * login was deleted, or that have no login at all, still count as active.
+   */
+  private async assertFitterAssignable(
+    queryRunner: QueryRunner,
+    fitterId: number,
+  ): Promise<void> {
+    const rows = await queryRunner.query(
+      `SELECT COALESCE(c.blocked = 0, true) AS "active"
+       FROM fitters f
+       LEFT JOIN credentials c ON c.user_id = f.user_id
+       WHERE f.id = $1 AND f.deleted = 0`,
+      [fitterId],
+    );
+    if (!rows || rows.length === 0) {
+      throw new BadRequestException(`Fitter ${fitterId} does not exist`);
+    }
+    if (!rows[0].active) {
+      throw new BadRequestException(
+        `Fitter ${fitterId} is inactive and cannot be assigned to orders`,
+      );
+    }
+  }
+
   async updateOrder(
     orderId: number,
     dto: UpdateOrderDto,
@@ -1911,6 +1947,12 @@ export class EnrichedOrdersService {
         throw new ForbiddenException(
           `Fitters cannot edit orders with status: ${statusName}`,
         );
+      }
+
+      // Only a *new* assignment is validated: an order whose fitter was blocked
+      // after the fact must stay editable without forcing a reassignment.
+      if (dto.fitterId && dto.fitterId !== existingFitterId) {
+        await this.assertFitterAssignable(queryRunner, dto.fitterId);
       }
 
       const resolveStatusId = async (name: string): Promise<number> => {
@@ -2182,6 +2224,10 @@ export class EnrichedOrdersService {
       // enforcement must be applied in the controller/guard layer before invoking this method.
       // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+
+      if (dto.fitterId) {
+        await this.assertFitterAssignable(queryRunner, dto.fitterId);
+      }
 
       // Resolve status name to integer ID
       let statusId = 0; // Default: Unordered

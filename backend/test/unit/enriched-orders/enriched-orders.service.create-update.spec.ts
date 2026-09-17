@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { DataSource } from "typeorm";
 import { ConfigService } from "@nestjs/config";
+import { BadRequestException } from "@nestjs/common";
 import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 import { ProductionCacheService } from "../../../src/cache/production-cache.service";
 
@@ -75,6 +76,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
     it("should create an order and return success with orderId", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ active: true }]) // fitter assignable check
         .mockResolvedValueOnce([{ id: 1 }]) // status lookup (if orderStatus provided)
         .mockResolvedValueOnce([{ id: 999 }]) // INSERT RETURNING id
         .mockResolvedValueOnce(undefined); // audit log INSERT
@@ -134,6 +136,96 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
 
       expect(result).toEqual({ success: true, orderId: 777 });
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
+    });
+  });
+
+  describe("fitter assignment guard", () => {
+    // "Inactive" on the Fitters page means credentials.blocked = 1 on the
+    // fitter's login account; such fitters must not receive new orders.
+    it("should reject createOrder for a blocked fitter and roll back", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ active: false }]); // fitter is blocked
+
+      await expect(
+        service.createOrder({ fitterId: 5, specialNotes: "x" }, 42),
+      ).rejects.toThrow(BadRequestException);
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO orders"),
+        expect.anything(),
+      );
+    });
+
+    it("should reject createOrder for a fitter that does not exist or is deleted", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([]); // no fitter row
+
+      await expect(service.createOrder({ fitterId: 5 }, 42)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("should not look up a fitter in createOrder when none is given", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1 }]) // INSERT RETURNING id
+        .mockResolvedValueOnce(undefined); // audit log INSERT
+
+      await service.createOrder({ specialNotes: "no fitter" });
+
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("FROM fitters"),
+        expect.anything(),
+      );
+    });
+
+    it("should reject updateOrder when reassigning to a blocked fitter", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValueOnce([{ active: false }]); // new fitter is blocked
+
+      await expect(
+        service.updateOrder(100, { fitterId: 5 }, 1, 2),
+      ).rejects.toThrow(BadRequestException);
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it("should skip the fitter check in updateOrder when the fitter is unchanged", async () => {
+      // An order assigned before its fitter was blocked must stay editable.
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log INSERT
+
+      const result = await service.updateOrder(
+        100,
+        { fitterId: 10, specialNotes: "same fitter" },
+        1,
+        2,
+      );
+
+      expect(result).toEqual({ success: true, orderId: 100 });
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("FROM fitters"),
+        expect.anything(),
+      );
+    });
+
+    it("should allow updateOrder to reassign to an active fitter", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValueOnce([{ active: true }]) // new fitter is active
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log INSERT
+
+      const result = await service.updateOrder(100, { fitterId: 5 }, 1, 2);
+
+      expect(result).toEqual({ success: true, orderId: 100 });
     });
   });
 

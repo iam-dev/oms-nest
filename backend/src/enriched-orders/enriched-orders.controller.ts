@@ -13,6 +13,7 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
+  BadRequestException,
   ConflictException,
   ForbiddenException,
 } from "@nestjs/common";
@@ -256,6 +257,9 @@ export class EnrichedOrdersController {
       const result = await this.enrichedOrdersService.createOrder(body, userId);
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       this.logger.error("Failed to create order", error);
       throw new HttpException(
         {
@@ -353,7 +357,8 @@ export class EnrichedOrdersController {
       if (
         error instanceof NotFoundException ||
         error instanceof ForbiddenException ||
-        error instanceof ConflictException
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }

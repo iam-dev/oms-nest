@@ -26,7 +26,8 @@ import { fetchOrderDetail, updateOrder, createOrderFromPayload, type OrderDetail
 import { API_URL } from '@/services/api-config';
 
 interface EditFormOptions {
-  fitters: Array<{ id: number; username: string; fullName: string }>;
+  /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
+  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
   leatherTypes: Array<{ id: number; name: string }>;
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null }>;
@@ -752,11 +753,14 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                         <SelectValue placeholder="Select fitter..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {editOptions?.fitters?.map(f => (
-                          <SelectItem key={f.id} value={String(f.id)}>
-                            {f.fullName || f.username}
-                          </SelectItem>
-                        )) || (
+                        {/* Inactive fitters can't take new orders; keep only the one already on this order. */}
+                        {editOptions?.fitters
+                          ?.filter(f => f.active !== false || String(f.id) === fitterId)
+                          .map(f => (
+                            <SelectItem key={f.id} value={String(f.id)}>
+                              {f.fullName || f.username}{f.active === false ? ' (inactive)' : ''}
+                            </SelectItem>
+                          )) || (
                           fitterId && <SelectItem value={fitterId}>
                             {orderDetail.fitterName || 'Unknown'}
                           </SelectItem>

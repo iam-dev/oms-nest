@@ -37,7 +37,8 @@ import { logger } from '@/utils/logger';
 type DuplicateData = Record<string, any>;
 
 interface EditFormOptions {
-  fitters: Array<{ id: number; username: string; fullName: string }>;
+  /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
+  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
   leatherTypes: Array<{ id: number; name: string; price1: number }>;
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number }>;
@@ -797,11 +798,14 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                       <SelectValue placeholder="- Choose fitter -" />
                     </SelectTrigger>
                     <SelectContent>
-                      {editOptions?.fitters?.map(f => (
-                        <SelectItem key={f.id} value={String(f.id)}>
-                          {f.fullName || f.username}
-                        </SelectItem>
-                      ))}
+                      {/* Inactive fitters can't take new orders; keep only the one already on this order. */}
+                      {editOptions?.fitters
+                        ?.filter(f => f.active !== false || String(f.id) === selectedFitterId)
+                        .map(f => (
+                          <SelectItem key={f.id} value={String(f.id)}>
+                            {f.fullName || f.username}{f.active === false ? ' (inactive)' : ''}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
 
