@@ -1528,10 +1528,12 @@ export class EnrichedOrdersService {
       // can display it; the form decides whether to offer them for selection.
       const fitters = await queryRunner.query(`
         SELECT f.id, c.user_name as "username", c.full_name as "fullName",
+          f.currency,
           COALESCE(c.blocked = 0, true) as "active"
         FROM fitters f
         LEFT JOIN credentials c ON f.user_id = c.user_id AND c.user_type = 1
         WHERE f.deleted = 0
+          AND COALESCE(NULLIF(c.full_name, ''), NULLIF(c.user_name, '')) IS NOT NULL
         ORDER BY c.full_name
       `);
 
@@ -1559,7 +1561,8 @@ export class EnrichedOrdersService {
       const leatherTypes = saddleId
         ? await queryRunner.query(
             `
-          SELECT lt.id, lt.name, 0 as "price1"
+          SELECT lt.id, lt.name,
+            sl.price1, sl.price2, sl.price3, sl.price4, sl.price5, sl.price6, sl.price7
           FROM leather_types lt
           INNER JOIN saddle_leathers sl ON sl.leather_id = lt.id
           WHERE sl.saddle_id = $1 AND sl.deleted = 0 AND lt.deleted = 0
@@ -1580,7 +1583,7 @@ export class EnrichedOrdersService {
       if (saddleId) {
         options = await queryRunner.query(
           `
-          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.extra_allowed as "extraAllowed"
+          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.price2, o.price3, o.price4, o.price5, o.price6, o.price7, o.extra_allowed as "extraAllowed"
           FROM options o
           INNER JOIN saddle_options_items soi ON soi.option_id = o.id
           WHERE soi.saddle_id = $1 AND soi.deleted = 0
@@ -1628,7 +1631,7 @@ export class EnrichedOrdersService {
         );
       } else {
         options = await queryRunner.query(`
-          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.extra_allowed as "extraAllowed"
+          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.price2, o.price3, o.price4, o.price5, o.price6, o.price7, o.extra_allowed as "extraAllowed"
           FROM options o
           ORDER BY o.sequence
         `);
