@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { HttpException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  HttpException,
+  NotFoundException,
+} from "@nestjs/common";
 import { EnrichedOrdersController } from "../../../src/enriched-orders/enriched-orders.controller";
 import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 
@@ -65,6 +69,18 @@ describe("EnrichedOrdersController - Create & Update endpoints", () => {
 
       await expect(controller.createOrder(body, req)).rejects.toThrow(
         HttpException,
+      );
+    });
+
+    it("should pass BadRequestException through as a 400, not a generic 500", async () => {
+      const body = { fitterId: 5 };
+      const req = { user: { legacyId: 1 } };
+      service.createOrder.mockRejectedValue(
+        new BadRequestException("Fitter 5 is inactive"),
+      );
+
+      await expect(controller.createOrder(body, req)).rejects.toThrow(
+        "Fitter 5 is inactive",
       );
     });
   });
