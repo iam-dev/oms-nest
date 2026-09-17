@@ -366,7 +366,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
           typeof c[0] === "string" && c[0].includes("INSERT INTO orders_info"),
       );
 
-    it("updateOrder writes cloneNumber as the 4th insert parameter", async () => {
+    it("should write cloneNumber as the 4th insert parameter in updateOrder", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
         .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
@@ -390,7 +390,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       expect(inserts[1][1]).toEqual([100, 4, 11, 1, "black", "", ""]);
     });
 
-    it("updateOrder defaults cloneNumber to 0 when omitted", async () => {
+    it("should default cloneNumber to 0 in updateOrder when omitted", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
         .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
@@ -406,7 +406,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       expect(insertCalls()[0][1]).toEqual([100, 7, 701, 0, "", "", ""]);
     });
 
-    it("createOrder writes cloneNumber as the 4th insert parameter", async () => {
+    it("should write cloneNumber as the 4th insert parameter in createOrder", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
         .mockResolvedValueOnce([{ id: 555 }]) // INSERT orders RETURNING id
@@ -415,7 +415,12 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       await service.createOrder({
         saddleOptions: [
           { optionId: 4, optionItemId: 10, cloneNumber: 0 },
-          { optionId: 4, optionItemId: 0, cloneNumber: 1, custom: "A+B same as seat" },
+          {
+            optionId: 4,
+            optionItemId: 0,
+            cloneNumber: 1,
+            custom: "A+B same as seat",
+          },
         ],
       });
 

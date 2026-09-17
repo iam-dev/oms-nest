@@ -543,7 +543,7 @@ describe("EnrichedOrdersService", () => {
 
     const CLONE_LABEL_SQL = `o.name || CASE WHEN oi.clone_number > 0 THEN ' (' || (oi.clone_number + 1) || ')' ELSE '' END as "optionName"`;
 
-    it("getOrderDetail returns cloneNumber and a suffixed optionName, ordered by clone_number", async () => {
+    it("should return cloneNumber and a suffixed optionName from getOrderDetail, ordered by clone_number", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
         .mockResolvedValueOnce([{ id: 1, currency: 1, fitterCurrency: 1 }]) // detail row
@@ -560,10 +560,22 @@ describe("EnrichedOrdersService", () => {
       );
     });
 
-    it("getBatchSaddleSpecs returns cloneNumber and a suffixed optionName, ordered by clone_number", async () => {
+    it("should return cloneNumber and a suffixed optionName from getBatchSaddleSpecs, ordered by clone_number", async () => {
       queryRunner.query.mockResolvedValue([
-        { orderId: 1, optionId: 4, optionName: "CANTLE Option", cloneNumber: 0, displayValue: "A" },
-        { orderId: 1, optionId: 4, optionName: "CANTLE Option (2)", cloneNumber: 1, displayValue: "B" },
+        {
+          orderId: 1,
+          optionId: 4,
+          optionName: "CANTLE Option",
+          cloneNumber: 0,
+          displayValue: "A",
+        },
+        {
+          orderId: 1,
+          optionId: 4,
+          optionName: "CANTLE Option (2)",
+          cloneNumber: 1,
+          displayValue: "B",
+        },
       ]);
 
       const result = await service.getBatchSaddleSpecs([1]);
@@ -575,22 +587,35 @@ describe("EnrichedOrdersService", () => {
         "ORDER BY oi.order_id, o.sequence, oi.option_id, oi.clone_number",
       );
       expect(result[1]).toEqual([
-        { optionId: 4, optionName: "CANTLE Option", cloneNumber: 0, displayValue: "A" },
-        { optionId: 4, optionName: "CANTLE Option (2)", cloneNumber: 1, displayValue: "B" },
+        {
+          optionId: 4,
+          optionName: "CANTLE Option",
+          cloneNumber: 0,
+          displayValue: "A",
+        },
+        {
+          optionId: 4,
+          optionName: "CANTLE Option (2)",
+          cloneNumber: 1,
+          displayValue: "B",
+        },
       ]);
     });
 
     it.each([
       ["with a saddle filter", 10],
       ["without a saddle filter", undefined],
-    ])("getEditFormOptions selects options.extra_allowed %s", async (_label, saddleId) => {
-      queryRunner.query.mockResolvedValue([]);
+    ])(
+      "should select options.extra_allowed in getEditFormOptions %s",
+      async (_label, saddleId) => {
+        queryRunner.query.mockResolvedValue([]);
 
-      await service.getEditFormOptions(saddleId);
+        await service.getEditFormOptions(saddleId);
 
-      const sql = sqlContaining('o.name as "optionName"');
-      expect(sql).not.toBe("");
-      expect(sql).toContain(`o.extra_allowed as "extraAllowed"`);
-    });
+        const sql = sqlContaining('o.name as "optionName"');
+        expect(sql).not.toBe("");
+        expect(sql).toContain(`o.extra_allowed as "extraAllowed"`);
+      },
+    );
   });
 });
