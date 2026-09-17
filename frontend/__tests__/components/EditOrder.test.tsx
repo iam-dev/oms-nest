@@ -213,6 +213,42 @@ async function navigateToStep(targetStep: 2 | 3) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Fitter and Brand & Model are always required on Step 1 (legacy
+// parity validation, 2026-09-17). Most pre-existing tests don't care about
+// product selection at all, so this minimal fixture — installed as the
+// default `global.fetch` mock for `fetchEditOptions` — and `completeStep1()`
+// let them satisfy the gate and reach later steps without each test building
+// out a full options fixture. Describes that need real product data (option
+// rows, presets, leathers, …) override `global.fetch` in their own
+// `beforeEach`, which runs after this one.
+// ---------------------------------------------------------------------------
+
+const minimalStep1Options = {
+  fitters: [{ id: 1, username: 'testfitter', fullName: 'Test Fitter', active: true }],
+  saddles: [{ id: 1, brand: 'Test', modelName: 'Model', displayName: 'Test Model' }],
+  leatherTypes: [],
+  options: [],
+  optionItems: [],
+  optionLeathers: [],
+  presets: [],
+  presetItems: [],
+  statuses: [],
+};
+
+function mockMinimalStep1Options() {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve(minimalStep1Options),
+  }) as unknown as typeof fetch;
+}
+
+async function completeStep1() {
+  await waitFor(() => expect(screen.getByText('Test Fitter')).toBeInTheDocument());
+  await act(async () => { fireEvent.click(screen.getByText('Test Fitter')); });
+  await act(async () => { fireEvent.click(screen.getByText('Test Model')); });
+}
+
+// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
@@ -225,6 +261,7 @@ describe('EditOrder component', () => {
       success: true,
       orderId: 99,
     });
+    mockMinimalStep1Options();
   });
 
   // =========================================================================
@@ -343,6 +380,8 @@ describe('EditOrder component', () => {
     it('advances to step 2 when Next Step is clicked once', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /next step/i }));
       });
@@ -355,6 +394,8 @@ describe('EditOrder component', () => {
     it('advances to step 3 when Next Step is clicked twice', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(screen.getByTestId('dialog-title')).toHaveTextContent(
@@ -364,6 +405,8 @@ describe('EditOrder component', () => {
 
     it('goes back from step 2 to step 1 when Previous Step is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       await navigateToStep(2);
       expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 2:');
@@ -379,6 +422,8 @@ describe('EditOrder component', () => {
 
     it('goes back from step 3 to step 2 when Previous Step is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       await navigateToStep(3);
       expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 3:');
@@ -420,6 +465,8 @@ describe('EditOrder component', () => {
       const onBack = jest.fn();
       await renderAndWaitForLoad({ onBack });
 
+      await completeStep1();
+
       await navigateToStep(2);
 
       await act(async () => {
@@ -442,6 +489,8 @@ describe('EditOrder component', () => {
     it('shows "Previous Step" on the footer back button when on step 2', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await navigateToStep(2);
 
       expect(
@@ -460,6 +509,8 @@ describe('EditOrder component', () => {
     it('shows "Next Step" on the primary button while on step 2', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await navigateToStep(2);
 
       expect(
@@ -469,6 +520,8 @@ describe('EditOrder component', () => {
 
     it('shows "Update Order" on the primary button at step 3 in edit mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -483,6 +536,8 @@ describe('EditOrder component', () => {
     it('shows "Create Order" on the primary button at step 3 for a new order (order=undefined)', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(
@@ -495,6 +550,8 @@ describe('EditOrder component', () => {
       // When isDuplicate=true AND order is provided the label is still "Update Order".
       // Internally handleSubmit routes to createOrderFromPayload (isNewOrder = !order || isDuplicate = true).
       await renderAndWaitForLoad({ isDuplicate: true });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -537,6 +594,8 @@ describe('EditOrder component', () => {
     it('calls createOrderFromPayload when submitting a new order (order=undefined)', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -550,6 +609,8 @@ describe('EditOrder component', () => {
 
     it('calls createOrderFromPayload with the correct payload mapping from formData', async () => {
       renderNewOrder();
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -588,6 +649,8 @@ describe('EditOrder component', () => {
     it('does NOT call saveOrderEditData when submitting a new order', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -604,6 +667,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
       renderNewOrder({ onClose });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -619,6 +684,8 @@ describe('EditOrder component', () => {
       );
       const onClose = jest.fn();
       renderNewOrder({ onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -641,6 +708,8 @@ describe('EditOrder component', () => {
     it('payload does not include customerId when no customer is selected', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -656,21 +725,22 @@ describe('EditOrder component', () => {
       expect(payload.customerId).toBeUndefined();
     });
 
-    it('payload does not include fitterId when no fitter is selected', async () => {
+    it('blocks Next Step and never calls createOrderFromPayload when no fitter is selected', async () => {
+      // Fitter is a red-asterisk Step-1 field (legacy parity validation, Task 13) —
+      // reaching Step 3 without one is no longer possible, so payload.fitterId can
+      // never be sent unset. Assert the stronger, still-true contract: no fitter
+      // means the submission never happens at all.
+      const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
       renderNewOrder();
-
-      await navigateToStep(3);
+      await waitFor(() => expect(screen.getByText('Test Model')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Test Model')); });
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /create order/i }));
+        fireEvent.click(screen.getByRole('button', { name: /next step/i }));
       });
 
-      await waitFor(() =>
-        expect(createOrderFromPayload).toHaveBeenCalledTimes(1)
-      );
-
-      const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
-      expect(payload.fitterId).toBeUndefined();
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
+      expect(createOrderFromPayload).not.toHaveBeenCalled();
     });
   });
 
@@ -685,6 +755,8 @@ describe('EditOrder component', () => {
 
     it('calls createOrderFromPayload when submitting in duplicate mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -701,6 +773,8 @@ describe('EditOrder component', () => {
     it('does NOT call saveOrderEditData in duplicate mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -716,6 +790,8 @@ describe('EditOrder component', () => {
     it('calls onClose after successful duplicate creation', async () => {
       const onClose = jest.fn();
       await renderAndWaitForLoad({ isDuplicate: true, onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -741,6 +817,8 @@ describe('EditOrder component', () => {
           discount: 50,
         },
       });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -771,6 +849,8 @@ describe('EditOrder component', () => {
         },
       });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -797,6 +877,8 @@ describe('EditOrder component', () => {
     it('calls saveOrderEditData when submitting an existing order edit', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -810,6 +892,8 @@ describe('EditOrder component', () => {
 
     it('calls saveOrderEditData with the correct orderId', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -828,6 +912,8 @@ describe('EditOrder component', () => {
     it('does NOT call createOrderFromPayload in edit mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -843,6 +929,8 @@ describe('EditOrder component', () => {
     it('calls onClose after a successful edit', async () => {
       const onClose = jest.fn();
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -860,6 +948,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -884,6 +974,8 @@ describe('EditOrder component', () => {
     it('initialises formData.status from the loaded order status', async () => {
       // mockOrderEditData.orderStatus is 'ORDERED'
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -916,8 +1008,8 @@ describe('EditOrder component', () => {
       it('renders the saddle price input with a default value', async () => {
         await renderAndWaitForLoad();
 
-        // Static default value in the component is 3795.00
-        expect(screen.getByDisplayValue('3795.00')).toBeInTheDocument();
+        // Saddle price defaults to 0.00 until a Leathertype is chosen (Task 13).
+        expect(screen.getByLabelText('Saddle price:')).toHaveValue(0);
       });
 
       it('renders the Fitter label on step 1', async () => {
@@ -931,6 +1023,8 @@ describe('EditOrder component', () => {
       it('renders the Customer heading', async () => {
         await renderAndWaitForLoad();
 
+        await completeStep1();
+
         await navigateToStep(2);
 
         expect(screen.getByText('Customer')).toBeInTheDocument();
@@ -938,6 +1032,8 @@ describe('EditOrder component', () => {
 
       it('renders the Fitter heading', async () => {
         await renderAndWaitForLoad();
+
+        await completeStep1();
 
         await navigateToStep(2);
 
@@ -947,6 +1043,8 @@ describe('EditOrder component', () => {
       it('renders the Shipping Address section', async () => {
         await renderAndWaitForLoad();
 
+        await completeStep1();
+
         await navigateToStep(2);
 
         expect(screen.getByText('Shipping Address')).toBeInTheDocument();
@@ -955,6 +1053,8 @@ describe('EditOrder component', () => {
       it('renders the Search Customer label', async () => {
         await renderAndWaitForLoad();
 
+        await completeStep1();
+
         await navigateToStep(2);
 
         expect(screen.getByText('Search Customer')).toBeInTheDocument();
@@ -962,6 +1062,8 @@ describe('EditOrder component', () => {
 
       it('renders the Search Fitter label', async () => {
         await renderAndWaitForLoad();
+
+        await completeStep1();
 
         await navigateToStep(2);
 
@@ -972,6 +1074,8 @@ describe('EditOrder component', () => {
     describe('step 3 — Order Settings', () => {
       beforeEach(async () => {
         await renderAndWaitForLoad({ isDuplicate: false });
+        await completeStep1();
+
         await navigateToStep(3);
       });
 
@@ -1022,6 +1126,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
       renderNewOrder({ onClose });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -1040,6 +1146,8 @@ describe('EditOrder component', () => {
       );
 
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -1061,6 +1169,8 @@ describe('EditOrder component', () => {
     it('initialises status as DRAFT', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       const selects = screen.getAllByTestId('select');
@@ -1072,6 +1182,8 @@ describe('EditOrder component', () => {
 
     it('initialises isUrgent as false — payload rushed is false', async () => {
       renderNewOrder();
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -1090,6 +1202,8 @@ describe('EditOrder component', () => {
     it('initialises isDemo as false — payload demo is false', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -1106,6 +1220,8 @@ describe('EditOrder component', () => {
 
     it('initialises pricing.subtotal as 0 — payload priceSaddle is 0', async () => {
       renderNewOrder();
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -1128,6 +1244,8 @@ describe('EditOrder component', () => {
 
       // No assertion about currency in payload since it is not part of UpdateOrderPayload,
       // but we verify the component renders without crashing and reaches step 3
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(
@@ -1139,7 +1257,7 @@ describe('EditOrder component', () => {
   describe('multiple rows of one option (legacy clone_number)', () => {
     const OPTION_CANTLE = 4;
     const editOptions = {
-      fitters: [],
+      fitters: [{ id: 1, username: 'multirowfitter', fullName: 'Multi Row Fitter', active: true }],
       saddles: [{ id: 10, brand: 'Premium', modelName: 'Classic', displayName: 'Premium Classic' }],
       leatherTypes: [{ id: 3, name: 'Italian Leather', price1: 0 }],
       presets: [{ id: 1, name: 'Aviar preset' }],
@@ -1165,6 +1283,12 @@ describe('EditOrder component', () => {
 
     it('adds a second CANTLE Option row and sends it with cloneNumber 1', async () => {
       renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Premium Classic')).toBeInTheDocument());
+
+      // Fitter and Brand & Model first — picking the model resets preset/option
+      // selections, so it must happen before the preset and CANTLE Option picks below.
+      await act(async () => { fireEvent.click(screen.getByText('Multi Row Fitter')); });
+      await act(async () => { fireEvent.click(screen.getByText('Premium Classic')); });
       await waitFor(() => expect(screen.getByText('Aviar preset')).toBeInTheDocument());
 
       // Options only render once a preset is chosen; the preset picks item 401 for slot 0
@@ -1172,6 +1296,9 @@ describe('EditOrder component', () => {
         fireEvent.click(screen.getByText('Aviar preset'));
       });
       expect(screen.getByText('CANTLE Option:')).toBeInTheDocument();
+
+      // Leathertype — required once a preset is selected (Task 13 validation).
+      await act(async () => { fireEvent.click(screen.getByText('Italian Leather')); });
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
@@ -1353,17 +1480,67 @@ describe('EditOrder component', () => {
       await act(async () => { fireEvent.click(within(seatSizeSelect).getByText('Customized by fitter')); });
       fireEvent.change(screen.getByLabelText('Please specify:'), { target: { value: '17.25' } });
       fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'Black' } });
-      // leather + fill prices happen in Task 13's tests; here only the option rows matter.
-      // "ASBLV - Aviar SMOOTH Black Vienna" appears in both the top Leathertype select and
-      // the Seat Leather option row (a type-1 option using the same leatherTypes name) — scope
-      // to the Seat Leather row (identified by its sibling "SBL - SMOOTH BLACK" item).
+      // Complete Step 1 so the Task 13 validation lets us reach Step 3: pick AVIAR Seat
+      // Shape (its only offered item), keep the Seat Leather pick, and choose the top
+      // Leathertype. "ASBLV - Aviar SMOOTH Black Vienna" appears in both the top
+      // Leathertype select and the Seat Leather option row (a type-1 option using the
+      // same leatherTypes name) — scope to the Seat Leather row (identified by its
+      // sibling "SBL - SMOOTH BLACK" item).
+      const seatShapeSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('X-SLEEK(spacer fabric)'))!;
+      await act(async () => { fireEvent.click(within(seatShapeSelect).getByText('X-SLEEK(spacer fabric)')); });
       const seatLeatherSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('SBL - SMOOTH BLACK'))!;
       await act(async () => { fireEvent.click(within(seatLeatherSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
+      // The top Leathertype select is the first select rendering "ASBLV …" in DOM order.
+      const leatherTypeSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('ASBLV - Aviar SMOOTH Black Vienna'))!;
+      await act(async () => { fireEvent.click(within(leatherTypeSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
       await navigateToStep(3);
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
       const payload = createOrderFromPayload.mock.calls[0][0];
       expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: OPT_SEAT_SIZE, optionItemId: 0, custom: '17.25' }));
       expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: OPT_SEAT_OPTION, optionItemId: 4660, color: 'Black' }));
+    });
+
+    it('fills the saddle price from saddle_leathers in the fitter currency when the leather is chosen', async () => {
+      await chooseModelAndPreset();
+      expect(screen.getByText('Total (USD):')).toBeInTheDocument();
+      expect(screen.getByLabelText('Saddle price:')).toHaveValue(0);
+      // "ASBLV - Aviar SMOOTH Black Vienna" appears in both the top Leathertype select
+      // and the Seat Leather option row (a type-1 option using the same leatherTypes
+      // name); the Leathertype select renders first in the DOM.
+      await act(async () => { fireEvent.click(screen.getAllByText('ASBLV - Aviar SMOOTH Black Vienna')[0]); });
+      expect(screen.getByLabelText('Saddle price:')).toHaveValue(6595);
+      expect(screen.getByText('6595.00')).toBeInTheDocument(); // total
+    });
+
+    it('totals like legacy and sends every price field', async () => {
+      await chooseModelAndPreset();
+      await act(async () => { fireEvent.click(screen.getAllByText('ASBLV - Aviar SMOOTH Black Vienna')[0]); });
+      fireEvent.change(screen.getByLabelText(/^Deposit:/), { target: { value: '500' } });
+      fireEvent.change(screen.getByLabelText(/^Additional costs:/), { target: { value: '290' } });
+      expect(screen.getByText('6385.00')).toBeInTheDocument();
+      // Complete the rest of Step 1's red-asterisk option rows (Task 13's validation
+      // gate) so Next Step isn't blocked: Seat Size, AVIAR Seat Shape, and Seat Leather
+      // have no preset value on this model, so they still need an explicit pick.
+      await act(async () => { fireEvent.click(screen.getByText('16.5')); });
+      await act(async () => { fireEvent.click(screen.getByText('X-SLEEK(spacer fabric)')); });
+      const seatLeatherSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('SBL - SMOOTH BLACK'))!;
+      await act(async () => { fireEvent.click(within(seatLeatherSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
+      // SEAT Option's preset item (4660) is a user_color item — its color is required too.
+      fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'Black' } });
+      await navigateToStep(3);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      expect(createOrderFromPayload.mock.calls[0][0]).toMatchObject({
+        priceSaddle: 6595, priceTradein: 0, priceDeposit: 500, priceDiscount: 0,
+        priceFittingeval: 0, priceCallfee: 0, priceGirth: 0, priceAdditional: 290, priceShipping: 0, priceTax: 0,
+      });
+    });
+
+    it('blocks Next Step until the red-asterisk fields are filled', async () => {
+      const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
+      await chooseModelAndPreset();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Leathertype'));
+      expect(screen.getByText(/Step 1/)).toBeInTheDocument();
     });
   });
 });

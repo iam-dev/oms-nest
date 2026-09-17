@@ -8,6 +8,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import {
   DialogContent,
   DialogHeader,
@@ -37,6 +38,7 @@ import { OptionSlotRow } from '@/components/shared/OptionSlotRow';
 import { specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
 import { presetSelections } from '@/utils/presetApply';
 import type { EditFormOptions } from '@/services/enrichedOrders';
+import { saddlePriceFor, orderTotal, currencyCodeFor, formatMoney } from '@/utils/orderPricing';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DuplicateData = Record<string, any>;
@@ -120,6 +122,14 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [selectedFitterId, setSelectedFitterId] = useState<string>('');
   const [selectedPresetId, setSelectedPresetId] = useState<string>('none');
   const [selectedLeatherId, setSelectedLeatherId] = useState<string>('');
+
+  // Step-1 pricing panel. Legacy fills Saddle price from saddle_leathers when
+  // the Leathertype is chosen; the rest are manual entries with a red asterisk.
+  const [prices, setPrices] = useState({
+    saddle: '0.00', tradein: '0.00', deposit: '0.00', discount: '0.00',
+    fittingeval: '0.00', callfee: '0.00', girth: '0.00', additional: '0.00',
+  });
+  const setPrice = (key: keyof typeof prices, value: string) => setPrices(prev => ({ ...prev, [key]: value }));
 
   // Saddle option selections, keyed by slot ("optionId:cloneNumber", see utils/optionSlots)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>({});
@@ -470,8 +480,45 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     return () => clearTimeout(timer);
   }, [fitterSearchTerm, searchFittersDebounced]);
 
+  // Every Step-1 field marked with a red asterisk that is still empty, in page order
+  // (same rules as ComprehensiveEditOrder.getMissingRequiredFields).
+  const getMissingRequiredFields = (): string[] => {
+    const missing: string[] = [];
+    const blank = (v?: string) => !v || v.trim() === '';
+    if (blank(selectedFitterId)) missing.push('Fitter');
+    if (blank(selectedSaddleId)) missing.push('Brand & Model');
+    if (selectedPresetId !== 'none') {
+      if (blank(selectedLeatherId)) missing.push('Leathertype');
+      for (const opt of regularOptions) {
+        if (getItemsForOption(opt).length === 0) continue;
+        for (const clone of getSlots(opt.optionId)) {
+          const key = slotKey(opt.optionId, clone);
+          const selected = optionSelections[key];
+          if (blank(selected)) { missing.push(slotLabel(opt.optionName, clone)); continue; }
+          const inputs = getSpecInputs(opt.optionId, selected);
+          if ((inputs.custom && blank(optionCustom[key])) || (inputs.color && blank(optionColor[key])) || (inputs.leather && blank(optionLeather[key]))) {
+            missing.push(slotLabel(opt.optionName, clone));
+          }
+        }
+      }
+    }
+    const priceLabels: Array<[keyof typeof prices, string]> = [
+      ['tradein', 'Trade in'], ['deposit', 'Deposit'], ['discount', 'Discount'], ['fittingeval', 'Fitting/Eval'],
+      ['callfee', 'Call fee'], ['girth', 'Girth'], ['additional', 'Additional costs'],
+    ];
+    for (const [key, label] of priceLabels) if (blank(prices[key])) missing.push(label);
+    return missing;
+  };
+  const validateSaddleInformation = (): boolean => {
+    const missing = getMissingRequiredFields();
+    if (missing.length === 0) return true;
+    toast.error(`Please fill in the required fields: ${missing.join(', ')}`);
+    return false;
+  };
+
   const handleSubmit = async () => {
     if (currentStep < 3) {
+      if (currentStep === 1 && !validateSaddleInformation()) return;
       setCurrentStep(currentStep + 1);
     } else {
       setSaving(true);
@@ -541,10 +588,16 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 })),
             ],
             // Pricing
-            priceSaddle: formData.pricing.subtotal,
-            priceDiscount: formData.pricing.discount,
-            priceTax: formData.pricing.tax,
-            priceShipping: formData.pricing.shipping,
+            priceSaddle: parseFloat(prices.saddle) || 0,
+            priceTradein: parseFloat(prices.tradein) || 0,
+            priceDeposit: parseFloat(prices.deposit) || 0,
+            priceDiscount: parseFloat(prices.discount) || 0,
+            priceFittingeval: parseFloat(prices.fittingeval) || 0,
+            priceCallfee: parseFloat(prices.callfee) || 0,
+            priceGirth: parseFloat(prices.girth) || 0,
+            priceAdditional: parseFloat(prices.additional) || 0,
+            priceShipping: 0,
+            priceTax: 0,
           };
           await createOrderFromPayload(createPayload);
           logger.log(isDuplicate ? 'Duplicate order created successfully' : 'New order created successfully');
@@ -703,6 +756,10 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const regularOptions = sortedOptions.filter(o => o.type !== 2);
   const extraOptions = sortedOptions.filter(o => o.type === 2);
 
+  const selectedFitter = editOptions?.fitters.find(f => String(f.id) === selectedFitterId);
+  const currencyCode = currencyCodeFor(selectedFitter?.currency);
+  const total = formatMoney(orderTotal({ ...prices, shipping: 0, tax: 0 }));
+
   // Auto-fill option selections from preset.
   // Dep is the whole editOptions object rather than editOptions?.presetItems so the React
   // Compiler can infer an exact match between the source and the memoization boundary.
@@ -835,6 +892,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         fitter: { id: fitter.id, name: fitter.fullName || fitter.username }
                       }));
                     }
+                    // Changing the fitter changes the currency: re-derive the saddle price unless the user overrode it.
+                    const leather = editOptions?.leatherTypes.find(lt => String(lt.id) === selectedLeatherId);
+                    if (leather && prices.saddle === formatMoney(saddlePriceFor(leather, selectedFitter?.currency))) {
+                      setPrice('saddle', formatMoney(saddlePriceFor(leather, fitter?.currency)));
+                    }
                   }}>
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="- Choose fitter -" />
@@ -957,7 +1019,12 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                       <Label className="text-sm font-medium pt-2">
                         Leathertype: <span className="text-red-500">*</span>
                       </Label>
-                      <Select value={selectedLeatherId} onValueChange={setSelectedLeatherId}>
+                      <Select value={selectedLeatherId} onValueChange={(val) => {
+                        setSelectedLeatherId(val);
+                        // Legacy fills the saddle price from saddle_leathers.price<fitter currency>.
+                        const leather = editOptions?.leatherTypes.find(lt => String(lt.id) === val);
+                        setPrice('saddle', formatMoney(saddlePriceFor(leather, selectedFitter?.currency)));
+                      }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="- Choose -" />
                         </SelectTrigger>
@@ -1063,38 +1130,24 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
               <div className="bg-white rounded-lg border p-6">
                 <h3 className="font-semibold mb-4 text-lg">Pricing</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Saddle price:</Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="3795.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Trade in: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Deposit: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Discount: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Fitting/Eval: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Call fee: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Girth: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Additional costs: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
+                  {([
+                    ['saddle', 'Saddle price:', false],
+                    ['tradein', 'Trade in:', true],
+                    ['deposit', 'Deposit:', true],
+                    ['discount', 'Discount:', true],
+                    ['fittingeval', 'Fitting/Eval:', true],
+                    ['callfee', 'Call fee:', true],
+                    ['girth', 'Girth:', true],
+                    ['additional', 'Additional costs:', true],
+                  ] as const).map(([key, label, required]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Label htmlFor={`price-${key}`} className="text-sm font-medium min-w-fit">
+                        {label}{required && <> <span className="text-red-500">*</span></>}
+                      </Label>
+                      <Input id={`price-${key}`} className="h-8 text-right text-sm w-24" type="number" step="0.01"
+                        value={prices[key]} onChange={(e) => setPrice(key, e.target.value)} />
+                    </div>
+                  ))}
                   <div className="flex items-center gap-2">
                     <Label className="text-sm font-medium min-w-fit">Shipping: <span className="text-red-500">*</span></Label>
                     <span className="text-sm">-</span>
@@ -1108,8 +1161,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   </div>
                   <hr className="my-3" />
                   <div className="flex items-center gap-2 font-semibold">
-                    <Label className="text-sm font-medium min-w-fit">Total (EUR):</Label>
-                    <span className="text-sm">3795.00</span>
+                    <Label className="text-sm font-medium min-w-fit">Total ({currencyCode}):</Label>
+                    <span className="text-sm">{total}</span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
                     Your deposit is non-refundable if your order is canceled.
