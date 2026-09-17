@@ -636,4 +636,80 @@ describe("EnrichedOrdersService", () => {
       },
     );
   });
+
+  describe("getEditFormOptions - per-model dropdown lists", () => {
+    // Models > Manage Options stores what a model may use in saddle_options_items:
+    //   option enabled   -> (option_id, option_item_id = 0, leather_id = 0)
+    //   item ticked      -> (option_id, option_item_id = item, leather_id = 0)
+    //   leather ticked   -> (option_id, option_item_id = 0, leather_id = leather)
+    // and the model's base leathers in saddle_leathers. The wizard must only
+    // offer what is ticked; an enabled option with no ticks offers nothing.
+    const sqlContaining = (needle: string): string => {
+      const call = queryRunner.query.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === "string" && c[0].includes(needle),
+      );
+      return call ? (call[0] as string).replace(/\s+/g, " ") : "";
+    };
+
+    it("should only return option items ticked for the saddle", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getEditFormOptions(100);
+
+      const sql = sqlContaining('oi.option_id as "optionId"');
+      expect(sql).toContain("saddle_options_items soi");
+      expect(sql).toContain("soi.option_item_id = oi.id");
+      expect(sql).toContain("soi.saddle_id = $1");
+      expect(sql).toContain("soi.deleted = 0");
+      expect(sql).toContain("oi.deleted = 0");
+      expect(sql).toContain("ORDER BY oi.option_id, oi.sequence, oi.name");
+    });
+
+    it("should return the leathers ticked per leather option as optionLeathers", async () => {
+      queryRunner.query.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql.includes("soi.leather_id = lt.id")
+            ? [{ optionId: 11, leatherId: 48, name: "ASBLV" }]
+            : [],
+        ),
+      );
+
+      const result = await service.getEditFormOptions(100);
+
+      const sql = sqlContaining("soi.leather_id = lt.id");
+      expect(sql).toContain("saddle_options_items soi");
+      expect(sql).toContain("soi.saddle_id = $1");
+      expect(sql).toContain("soi.deleted = 0");
+      expect(sql).toContain("lt.deleted = 0");
+      expect(result.optionLeathers).toEqual([
+        { optionId: 11, leatherId: 48, name: "ASBLV" },
+      ]);
+    });
+
+    it("should only return the saddle's own base leather types", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getEditFormOptions(100);
+
+      const sql = sqlContaining("FROM leather_types lt");
+      expect(sql).toContain("saddle_leathers sl");
+      expect(sql).toContain("sl.leather_id = lt.id");
+      expect(sql).toContain("sl.saddle_id = $1");
+      expect(sql).toContain("sl.deleted = 0");
+      expect(sql).toContain("ORDER BY sl.sequence, lt.name");
+    });
+
+    it("should return every item, leather type and no optionLeathers when no saddle is chosen", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      const result = await service.getEditFormOptions(undefined);
+
+      const items = sqlContaining('oi.option_id as "optionId"');
+      expect(items).not.toContain("saddle_options_items");
+      expect(items).toContain("oi.deleted = 0");
+      const leathers = sqlContaining("FROM leather_types");
+      expect(leathers).not.toContain("saddle_leathers");
+      expect(result.optionLeathers).toEqual([]);
+    });
+  });
 });

@@ -31,15 +31,17 @@ interface EditFormOptions {
   fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
   leatherTypes: Array<{ id: number; name: string }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; extraAllowed: number }>;
+  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type?: number; extraAllowed: number }>;
   optionItems: Array<{ id: number; name: string; optionId: number; userColor?: number; userLeather?: number }>;
+  /** Leathers ticked per leather option (type 1) in Models > Manage Options. */
+  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
   statuses: Array<{ id: number; name: string }>;
   presets: Array<{ id: number; name: string; sequence: number }>;
   presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
 }
 
 // Leather option IDs - these use leather_types instead of options_items
-const LEATHER_OPTION_IDS = [5, 6, 10, 11, 12, 13, 14, 21, 22];
+const LEATHER_OPTION_TYPE = 1;
 
 // Legacy sentinel: orders_info.option_item_id = 0 means "Customized by fitter",
 // with the fitter's free text stored in orders_info.custom.
@@ -593,13 +595,27 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     setOptionLeather(without);
   };
 
-  // Get available items for a given option
+  // Get available items for a given option. Leather options (type 1) pick a
+  // leather_types row (saved as orders_info.leather_id) rather than an options_items row.
   const getItemsForOption = (optionId: number): Array<{ id: number; name: string }> => {
     if (!editOptions) return [];
-    if (LEATHER_OPTION_IDS.includes(optionId)) {
-      return editOptions.leatherTypes;
+    const option = editOptions.options.find(o => o.optionId === optionId);
+    if (option?.type === LEATHER_OPTION_TYPE) {
+      return (editOptions.optionLeathers ?? [])
+        .filter(l => l.optionId === optionId)
+        .map(l => ({ id: l.leatherId, name: l.name }));
     }
     return editOptions.optionItems.filter(i => i.optionId === optionId);
+  };
+
+  // The model's list plus the slot's saved item when the model no longer ticks
+  // it, so editing an older order never blanks a choice the fitter already made.
+  const getItemsForSlot = (optionId: number, clone = 0): Array<{ id: number | string; name: string }> => {
+    const items = getItemsForOption(optionId);
+    const savedItemId = getOptionItemId(optionId, clone);
+    if (!savedItemId || savedItemId === CUSTOMIZED_BY_FITTER_ID) return items;
+    if (items.some(i => String(i.id) === savedItemId)) return items;
+    return [...items, { id: savedItemId, name: getOptionDisplayValue(optionId, clone) }];
   };
 
   // Which item is currently chosen for a slot: the user's pick, else the saved one
@@ -971,8 +987,8 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                         {slots.map((clone, slotIdx) => {
                           const key = slotKey(opt.optionId, clone);
                           const label = slotLabel(opt.optionName, clone);
-                          const currentItemId = getOptionItemId(opt.optionId, clone);
                           const currentDisplay = getOptionDisplayValue(opt.optionId, clone);
+                          const slotItems = getItemsForSlot(opt.optionId, clone);
                           const selectedItemId = getSelectedItemId(opt.optionId, clone);
                           const inputs = getSpecInputs(opt.optionId, selectedItemId, clone);
                           const isLastSlot = slotIdx === slots.length - 1;
@@ -993,19 +1009,11 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                                         <SelectValue placeholder={currentDisplay || 'Select...'} />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {items.length > 0 ? (
-                                          items.map(item => (
-                                            <SelectItem key={item.id} value={String(item.id)}>
-                                              {item.name}
-                                            </SelectItem>
-                                          ))
-                                        ) : (
-                                          currentItemId && currentItemId !== CUSTOMIZED_BY_FITTER_ID && (
-                                            <SelectItem value={currentItemId}>
-                                              {currentDisplay}
-                                            </SelectItem>
-                                          )
-                                        )}
+                                        {slotItems.map(item => (
+                                          <SelectItem key={item.id} value={String(item.id)}>
+                                            {item.name}
+                                          </SelectItem>
+                                        ))}
                                         <SelectItem value={CUSTOMIZED_BY_FITTER_ID}>
                                           {CUSTOMIZED_BY_FITTER_LABEL}
                                         </SelectItem>

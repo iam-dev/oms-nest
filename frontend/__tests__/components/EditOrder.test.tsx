@@ -1209,4 +1209,62 @@ describe('EditOrder component', () => {
       expect(screen.queryByText('CANTLE Option (2):')).not.toBeInTheDocument();
     });
   });
+
+  describe('per-model dropdown lists', () => {
+    // edit-options?saddleId= returns only what Models > Manage Options ticked
+    // for the model: optionItems for custom options, optionLeathers for leather
+    // options (type 1), leatherTypes for the base leather. The form must read
+    // leather options from optionLeathers, not the base leather list.
+    const OPTION_SEAT_LEATHER = 11;
+    const OPTION_AVIAR_KNEE_ROLL_LEATHER = 48;
+    const editOptions = {
+      fitters: [],
+      saddles: [{ id: 100, brand: 'Aviar', modelName: 'Ace Jump', displayName: 'Aviar Ace Jump' }],
+      leatherTypes: [{ id: 3, name: 'Italian Leather', price1: 0 }],
+      presets: [{ id: 1, name: 'Aviar preset' }],
+      presetItems: [],
+      options: [
+        { optionId: OPTION_SEAT_LEATHER, optionName: 'Seat Leather', sequence: 1, group: 'SEAT', type: 1, price1: 0, extraAllowed: 0 },
+        { optionId: OPTION_AVIAR_KNEE_ROLL_LEATHER, optionName: 'AVIAR Knee Roll Leather', sequence: 2, group: null, type: 1, price1: 0, extraAllowed: 0 },
+      ],
+      optionItems: [],
+      optionLeathers: [
+        { optionId: OPTION_SEAT_LEATHER, leatherId: 48, name: 'Aviar Smooth Black' },
+        { optionId: OPTION_AVIAR_KNEE_ROLL_LEATHER, leatherId: 63, name: 'Aviar Buffalo Black' },
+      ],
+      statuses: [],
+    };
+    const originalFetch = global.fetch;
+
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(editOptions) });
+    });
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('offers a leather option only the leathers ticked for the model', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar preset')).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.click(screen.getByText('Aviar preset'));
+      });
+
+      expect(screen.getByText('Seat Leather:')).toBeInTheDocument();
+      expect(screen.getByText('Aviar Smooth Black')).toBeInTheDocument();
+      // The base leather list is only the top-level Leathertype dropdown
+      expect(screen.getAllByText('Italian Leather')).toHaveLength(1);
+    });
+
+    it('treats every type-1 option as a leather option, not just a fixed id list', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar preset')).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.click(screen.getByText('Aviar preset'));
+      });
+
+      expect(screen.getByText('AVIAR Knee Roll Leather:')).toBeInTheDocument();
+      expect(screen.getByText('Aviar Buffalo Black')).toBeInTheDocument();
+    });
+  });
 });

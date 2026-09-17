@@ -44,6 +44,8 @@ interface EditFormOptions {
   leatherTypes: Array<{ id: number; name: string; price1: number }>;
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number; extraAllowed: number }>;
   optionItems: Array<{ id: number; name: string; optionId: number; price1: number }>;
+  /** Leathers ticked per leather option (type 1) in Models > Manage Options. */
+  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
   statuses: Array<{ id: number; name: string }>;
   presets: Array<{ id: number; name: string; sequence: number }>;
   presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
@@ -682,16 +684,16 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
-  // Leather option IDs - these use leather_types instead of options_items
-  const LEATHER_OPTION_IDS = [5, 6, 10, 11, 12, 13, 14, 21, 22];
-
-  // Get available items for a given option
-  const getItemsForOption = (optionId: number): Array<{ id: number; name: string; price1: number }> => {
+  // Get available items for a given option. Leather options (type 1) pick a
+  // leather_types row (saved as orders_info.leather_id) rather than an options_items row.
+  const getItemsForOption = (opt: { optionId: number; type: number }): Array<{ id: number; name: string; price1: number }> => {
     if (!editOptions) return [];
-    if (LEATHER_OPTION_IDS.includes(optionId)) {
-      return editOptions.leatherTypes;
+    if (opt.type === 1) {
+      return (editOptions.optionLeathers ?? [])
+        .filter(l => l.optionId === opt.optionId)
+        .map(l => ({ id: l.leatherId, name: l.name, price1: 0 }));
     }
-    return editOptions.optionItems.filter(i => i.optionId === optionId);
+    return editOptions.optionItems.filter(i => i.optionId === opt.optionId);
   };
 
   // Sorted options by sequence
@@ -965,7 +967,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   {/* Dynamic saddle options - shown when preset is selected.
                       An option with extra_allowed > 0 may have several rows ("CANTLE Option (2)"). */}
                   {selectedPresetId !== 'none' && regularOptions.map(opt => {
-                    const items = getItemsForOption(opt.optionId);
+                    const items = getItemsForOption(opt);
                     if (items.length === 0) return null;
                     const slots = getSlots(opt.optionId);
                     const extraAllowed = opt.extraAllowed ?? 0;

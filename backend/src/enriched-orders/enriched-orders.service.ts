@@ -1548,7 +1548,25 @@ export class EnrichedOrdersService {
         ORDER BY s.brand, s.model_name
       `);
 
-      const leatherTypes = await queryRunner.query(`
+      // What a model may use is curated in Models > Manage Options and stored as
+      //   saddle_leathers                          -> base leather (orders.leather_id)
+      //   saddle_options_items (option, 0, 0)      -> option enabled
+      //   saddle_options_items (option, item, 0)   -> item ticked
+      //   saddle_options_items (option, 0, leather)-> leather ticked on a leather option
+      // With a saddleId the dropdowns offer only what is ticked; an enabled
+      // option with no ticks offers nothing rather than the full list.
+      const leatherTypes = saddleId
+        ? await queryRunner.query(
+            `
+          SELECT lt.id, lt.name, 0 as "price1"
+          FROM leather_types lt
+          INNER JOIN saddle_leathers sl ON sl.leather_id = lt.id
+          WHERE sl.saddle_id = $1 AND sl.deleted = 0 AND lt.deleted = 0
+          ORDER BY sl.sequence, lt.name
+        `,
+            [saddleId],
+          )
+        : await queryRunner.query(`
         SELECT id, name, 0 as "price1" FROM leather_types
         WHERE deleted = 0
         ORDER BY name
@@ -1556,6 +1574,7 @@ export class EnrichedOrdersService {
 
       let options: unknown[];
       let optionItems: unknown[];
+      let optionLeathers: unknown[] = [];
 
       if (saddleId) {
         options = await queryRunner.query(
@@ -1569,18 +1588,28 @@ export class EnrichedOrdersService {
           [saddleId],
         );
 
-        // Return ALL items for options relevant to this saddle (full lists for seat size, etc.)
         optionItems = await queryRunner.query(
           `
-          SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1,
-                 oi.user_color as "userColor", oi.user_leather as "userLeather"
+          SELECT DISTINCT oi.id, oi.name, oi.option_id as "optionId", oi.price1,
+                 oi.user_color as "userColor", oi.user_leather as "userLeather",
+                 oi.sequence
           FROM options_items oi
-          WHERE oi.option_id IN (
-            SELECT DISTINCT soi.option_id
-            FROM saddle_options_items soi
-            WHERE soi.saddle_id = $1 AND soi.deleted = 0
-          )
-          ORDER BY oi.option_id, oi.name
+          INNER JOIN saddle_options_items soi
+            ON soi.option_id = oi.option_id AND soi.option_item_id = oi.id
+          WHERE soi.saddle_id = $1 AND soi.deleted = 0 AND oi.deleted = 0
+          ORDER BY oi.option_id, oi.sequence, oi.name
+        `,
+          [saddleId],
+        );
+
+        optionLeathers = await queryRunner.query(
+          `
+          SELECT DISTINCT soi.option_id as "optionId", lt.id as "leatherId", lt.name,
+                 soi.sequence
+          FROM saddle_options_items soi
+          INNER JOIN leather_types lt ON soi.leather_id = lt.id
+          WHERE soi.saddle_id = $1 AND soi.deleted = 0 AND lt.deleted = 0
+          ORDER BY soi.option_id, soi.sequence, lt.name
         `,
           [saddleId],
         );
@@ -1595,7 +1624,8 @@ export class EnrichedOrdersService {
           SELECT oi.id, oi.name, oi.option_id as "optionId", oi.price1,
                  oi.user_color as "userColor", oi.user_leather as "userLeather"
           FROM options_items oi
-          ORDER BY oi.option_id, oi.name
+          WHERE oi.deleted = 0
+          ORDER BY oi.option_id, oi.sequence, oi.name
         `);
       }
 
@@ -1667,6 +1697,7 @@ export class EnrichedOrdersService {
         leatherTypes,
         options,
         optionItems,
+        optionLeathers,
         statuses,
         presets,
         presetItems,
