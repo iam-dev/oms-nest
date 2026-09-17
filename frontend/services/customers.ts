@@ -35,12 +35,16 @@ export interface CustomersResponse {
 
 export async function fetchCustomers({
   page = 1,
+  limit,
   searchTerm = '',
   filters = {},
   orderBy = 'name',
   order = 'asc'
 }: {
   page?: number;
+  // Page size; keep in step with the caller's itemsPerPage so LAST/NEXT land
+  // on pages the backend actually has.
+  limit?: number;
   searchTerm?: string;
   filters?: Record<string, string>;
   orderBy?: string;
@@ -66,6 +70,10 @@ export async function fetchCustomers({
       }
     }
   });
+
+  if (limit) {
+    extraParams.limit = limit;
+  }
 
   logger.log('fetchCustomers: Calling fetchEntities with entity "customers" and params:', extraParams);
 

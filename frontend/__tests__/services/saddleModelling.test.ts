@@ -7,6 +7,7 @@
  * totals stay correct.
  */
 import { fetchLeathertypes } from '@/services/leathertypes';
+import { fetchPresets } from '@/services/presets';
 import { fetchOptions } from '@/services/options';
 import { fetchExtras } from '@/services/extras';
 import { fetchSaddleLeathersBySaddleId } from '@/services/saddleLeathers';
@@ -55,6 +56,22 @@ describe('saddle-modelling services', () => {
 
       const call = mockFetchEntities.mock.calls[0][0];
       expect(call.extraParams).not.toHaveProperty('limit');
+    });
+  });
+
+  describe('fetchPresets', () => {
+    test('passes limit through so the backend pages match the UI page size', async () => {
+      // Regression: the Presets page assumed 30 per page while the backend
+      // served 10, so the UI stopped at page 2 of 5 and 22 presets were unreachable.
+      await fetchPresets({ page: 2, limit: 30 });
+
+      expect(mockFetchEntities).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity: 'presets',
+          page: 2,
+          extraParams: expect.objectContaining({ limit: 30 }),
+        }),
+      );
     });
   });
 

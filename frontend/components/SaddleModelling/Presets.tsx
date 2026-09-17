@@ -39,6 +39,7 @@ export default function Presets() {
       logger.log('Fetching presets with filters:', filters);
       const data = await fetchPresets({
         page: pagination.currentPage,
+        limit: pagination.itemsPerPage,
         searchTerm,
         filters,
         orderBy: 'sequence',
@@ -56,7 +57,7 @@ export default function Presets() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.currentPage, searchTerm, filters, setTotalItems]);
+  }, [pagination.currentPage, pagination.itemsPerPage, searchTerm, filters, setTotalItems]);
 
   // Fetch presets when dependencies change
   useEffect(() => {

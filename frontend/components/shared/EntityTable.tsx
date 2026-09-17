@@ -1,5 +1,5 @@
 import React from 'react';
-import { DataTable, Column } from '@/components/shared/DataTable';
+import { DataTable, Column, ACTIONS_COLUMN_WIDTH } from '@/components/shared/DataTable';
 import { Button } from '@/components/ui/button';
 import { Eye, Edit, Trash, CheckCircle2, Lock } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -68,6 +68,10 @@ export function EntityTable<T extends { id?: string | number }>({
         {
           key: 'actions',
           title: 'OPTIONS',
+          // Rendered as a regular column, so it lands inside DataTable's
+          // truncate wrapper; size it explicitly or the buttons get clipped.
+          width: ACTIONS_COLUMN_WIDTH,
+          sticky: 'right',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           render: (value: any, row?: T) => {
             if (!row) return null;

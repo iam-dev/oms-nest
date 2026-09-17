@@ -147,10 +147,18 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
       minHeight: 270,
       overflow: 'visible',
     }}>
-      <div style={{ display: 'flex', zIndex: 1, position: 'relative', height: 220 }}>
+      {/* Each card is ~200px wide, so four side-by-side columns need ~950px.
+          Below that (small laptops, or zoomed-in browsers) reflow to 2 then 1
+          column instead of letting the columns overlap. Breakpoints are
+          Tailwind's since media queries can't be expressed inline. */}
+      <div
+        data-testid="status-flow-grid"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-4 gap-y-8"
+        style={{ zIndex: 1, position: 'relative', minHeight: 220 }}
+      >
         {/* Status kolommen */}
         {STATUS_GROUPS.map((group, colIdx) => (
-          <div key={colIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 24 }}>
+          <div key={colIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 24 }}>
             {/* eslint-disable-next-line @typescript-eslint/no-unused-vars */}
             {group.map((statusKey, rowIdx) => {
               const status = statuses[statusKey];
@@ -160,6 +168,7 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
               return (
                 <div
                   key={statusKey}
+                  data-status-card
                   onClick={() => {
                     logger.log('DashboardOrderStatusFlow: Clicking status:', status.key, 'with label:', status.label, 'mapped to filter:', filterValue);
                     // Toggle: if already selected, clear it; otherwise select it
@@ -183,6 +192,7 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
                     justifyContent: 'flex-start',
                     transition: 'background 0.15s, color 0.15s',
                     marginLeft: 0,
+                    whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={e => {
                     if (!isActive) {
@@ -217,7 +227,9 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
                     height: 10,
                     background: '#bbb',
                     borderRadius: '50%',
-                    marginRight: 80,
+                    // Keeps the widest card ("Shipped to Customer") inside a
+                    // quarter of the panel at the xl breakpoint.
+                    marginRight: 48,
                     marginLeft: -36,
                     flexShrink: 0,
                     border: '1px solid #888',

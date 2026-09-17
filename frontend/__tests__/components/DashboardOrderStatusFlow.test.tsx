@@ -33,6 +33,24 @@ describe('DashboardOrderStatusFlow', () => {
     expect(mockFetchOrderStatusStats).toHaveBeenCalledTimes(1);
   });
 
+  it('lays the status groups out in a responsive grid instead of a fixed four-column row', async () => {
+    // Each card is ~200px wide (label, connector dot and count badge), so four
+    // flex:1 columns overlap each other once the panel drops below ~950px —
+    // which is what happens at browser zoom levels above ~125%.
+    render(<DashboardOrderStatusFlow />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Approved')).toBeInTheDocument();
+    });
+
+    const row = screen.getByTestId('status-flow-grid');
+    expect(row).toHaveClass('grid');
+    expect(row).toHaveClass('xl:grid-cols-4');
+    expect(row).toHaveClass('md:grid-cols-2');
+    // Labels must never wrap, or a card grows taller than its row slot.
+    expect(screen.getByText('Approved').closest('[data-status-card]')).toHaveStyle({ whiteSpace: 'nowrap' });
+  });
+
   it('refetches the counts when refreshKey changes', async () => {
     // Regression: a status change made in the details or Edit Order dialog moves
     // an order between buckets, so counts fetched once on mount kept showing the

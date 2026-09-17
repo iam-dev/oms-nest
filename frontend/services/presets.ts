@@ -31,12 +31,16 @@ export interface PresetsResponse {
 
 export async function fetchPresets({
   page = 1,
+  limit,
   searchTerm = '',
   filters = {},
   orderBy = 'sequence',
   order = 'asc'
 }: {
   page?: number;
+  // Page size; keep in step with the caller's itemsPerPage so LAST/NEXT land
+  // on pages the backend actually has.
+  limit?: number;
   searchTerm?: string;
   filters?: Record<string, string>;
   orderBy?: string;
@@ -69,6 +73,10 @@ export async function fetchPresets({
       }
     }
   });
+
+  if (limit) {
+    extraParams.limit = limit;
+  }
 
   logger.log('fetchPresets: Calling fetchEntities with entity "presets" and params:', extraParams);
 

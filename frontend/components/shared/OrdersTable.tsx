@@ -2,7 +2,7 @@ import { Eye, Edit, Trash, CheckCircle2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { DataTable, Column } from '@/components/shared/DataTable';
+import { DataTable, Column, ACTIONS_COLUMN_WIDTH } from '@/components/shared/DataTable';
 import { Order } from '@/types/Order';
 import React from 'react';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
@@ -78,6 +78,10 @@ export function OrdersTable({
         {
           key: 'actions',
           title: 'OPTIONS',
+          // Rendered as a regular column, so it lands inside DataTable's
+          // truncate wrapper; size it explicitly or the buttons get clipped.
+          width: ACTIONS_COLUMN_WIDTH,
+          sticky: 'right',
           render: (_: unknown, row?: Order) => (
             <div className="flex gap-2">
               {onViewOrder && row && (hasScreenPermission(role, 'ORDER_VIEW') || role === null) && (

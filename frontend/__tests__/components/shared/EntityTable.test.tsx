@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { EntityTable } from '@/components/shared/EntityTable';
+import { ACTIONS_COLUMN_WIDTH } from '@/components/shared/DataTable';
 
 // Mock the DataTable component
 jest.mock('@/components/shared/DataTable', () => ({
+  ACTIONS_COLUMN_WIDTH: jest.requireActual('@/components/shared/DataTable').ACTIONS_COLUMN_WIDTH,
   DataTable: ({ data, columns, renderRowActions, loading, error }: {
     data: Record<string, unknown>[];
-    columns: { key: string; title: React.ReactNode; render?: (v: unknown) => React.ReactNode | undefined }[];
+    columns: { key: string; title: React.ReactNode; width?: string | number; sticky?: 'right'; render?: (v: unknown) => React.ReactNode | undefined }[];
     renderRowActions?: (item: Record<string, unknown>) => React.ReactNode;
     loading?: boolean;
     error?: string;
@@ -20,7 +22,7 @@ jest.mock('@/components/shared/DataTable', () => ({
           <thead>
             <tr>
               {columns.map((col, i) => (
-                <th key={i}>{col.title}</th>
+                <th key={i} data-width={col.width} data-sticky={col.sticky}>{col.title}</th>
               ))}
               <th>Actions</th>
             </tr>
@@ -91,6 +93,34 @@ describe('EntityTable Component', () => {
     expect(screen.getByText('Entity 2')).toBeInTheDocument();
   });
   
+  test('sizes the OPTIONS column for a full row of icon buttons', () => {
+    render(
+      <EntityTable
+        entities={mockEntities}
+        columns={mockColumns}
+        onView={jest.fn()}
+        onDelete={jest.fn()}
+      />
+    );
+
+    // The actions column is appended as a regular column, so the fixed-layout
+    // DataTable would otherwise give it an equal share and clip the buttons.
+    expect(screen.getByText('OPTIONS')).toHaveAttribute('data-width', String(ACTIONS_COLUMN_WIDTH));
+  });
+
+  test('pins the OPTIONS column to the right so it survives horizontal scroll', () => {
+    render(
+      <EntityTable
+        entities={mockEntities}
+        columns={mockColumns}
+        onView={jest.fn()}
+        onDelete={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('OPTIONS')).toHaveAttribute('data-sticky', 'right');
+  });
+
   test('renders loading state', () => {
     render(
       <EntityTable

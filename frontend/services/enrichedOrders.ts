@@ -29,6 +29,9 @@ export interface EnrichedOrderRow extends EnrichedOrder {
 
 interface GetEnrichedOrdersParams {
   page?: number;
+  // Page size. Must match the itemsPerPage the caller derives totalPages
+  // from, otherwise the backend's page numbering drifts from the UI's.
+  limit?: number;
   partial?: boolean;
   filters?: Record<string, string>;
   orderBy?: string;
@@ -177,9 +180,12 @@ export async function getEnrichedOrders(params: GetEnrichedOrdersParams = {}) {
   logger.log('enrichedOrders.ts: Final API request parameters:', formattedFilters, 'searchTerm:', effectiveSearchTerm);
 
   // When bustCache is true, pass noCache to bypass backend Redis cache entirely
-  const extraParams = params.bustCache
+  const extraParams: Record<string, string | number | boolean> = params.bustCache
     ? { ...formattedFilters, noCache: 'true' }
-    : formattedFilters;
+    : { ...formattedFilters };
+  if (params.limit) {
+    extraParams.limit = params.limit;
+  }
 
   const response = await fetchEntities({
     entity: 'enriched_orders',
