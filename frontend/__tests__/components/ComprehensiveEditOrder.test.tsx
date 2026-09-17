@@ -790,6 +790,63 @@ describe('ComprehensiveEditOrder component', () => {
       expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();
     });
 
+    it('sends an empty orderReference when the user clears the field', async () => {
+      // Regression: clearing the reference sent `undefined`, which the server's
+      // partial update treats as "not provided", so the old value came back.
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+
+      await renderAndWaitForLoad({ isDuplicate: false });
+      await navigateToStep(2);
+
+      const referenceInput = screen.getByDisplayValue('REF-001');
+      fireEvent.change(referenceInput, { target: { value: '' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(payload.orderReference).toBe('');
+    });
+
+    it('sends empty shipping fields when the user clears them', async () => {
+      // Same `'' || undefined` bug as the reference: a cleared shipping address
+      // must reach the server as '' so the partial update actually blanks it.
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({
+        ...mockOrderDetail,
+        shipName: 'Jane Rider',
+        shipAddress: '1 Stable Lane',
+        shipCity: 'Lexington',
+        shipZipcode: '40502',
+        shipCountry: 'USA',
+      });
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+
+      await renderAndWaitForLoad({ isDuplicate: false });
+      await navigateToStep(2);
+
+      for (const value of ['Jane Rider', '1 Stable Lane', 'Lexington', '40502', 'USA']) {
+        fireEvent.change(screen.getByDisplayValue(value), { target: { value: '' } });
+      }
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(payload).toEqual(
+        expect.objectContaining({
+          shipName: '',
+          shipAddress: '',
+          shipCity: '',
+          shipZipcode: '',
+          shipCountry: '',
+        })
+      );
+    });
+
     it('keeps the dialog open after changing the customer and saving as draft', async () => {
       // Regression: edit order > change customer > Save as Draft closed the whole
       // Edit Order dialog. It must persist and leave the user where they were.

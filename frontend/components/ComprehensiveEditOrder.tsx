@@ -449,14 +449,16 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         customerPhone: selectedCustomer?.phone || undefined,
         customerCell: selectedCustomer?.cell || undefined,
         customerId: selectedCustomer?.id || undefined,
-        // Shipping fields
-        shipName: shipName || undefined,
-        shipAddress: shipAddress || undefined,
-        shipCity: shipCity || undefined,
-        shipZipcode: shipZipcode || undefined,
-        shipCountry: shipCountry || undefined,
+        // Shipping fields and reference are free-text inputs: always send them, even
+        // when empty. The server's partial update skips `undefined` fields, so
+        // `'' || undefined` made it impossible to clear a value once saved.
+        shipName,
+        shipAddress,
+        shipCity,
+        shipZipcode,
+        shipCountry,
         // Order overview
-        orderReference: orderReference || undefined,
+        orderReference,
         orderStatus: submitStatus ? orderStatus || undefined : undefined,
         expectedStatus:
           !isDuplicate && statusDirty ? loadedStatus || undefined : undefined,
