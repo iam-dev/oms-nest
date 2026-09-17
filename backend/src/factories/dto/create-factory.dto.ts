@@ -10,16 +10,38 @@ import {
 /**
  * Create Factory Data Transfer Object
  *
- * Defines the required data for creating a new factory
+ * Defines the required data for creating a new factory.
+ * A factory always needs a login account (`factories.user_id` is NOT NULL):
+ * either pass an existing `userId`, or a `username` and the service will
+ * create a factory-type credentials row and email a set-password link.
  */
 export class CreateFactoryDto {
   @ApiPropertyOptional({
-    description: "Associated user ID",
+    description:
+      "Existing user ID to link. Omit to create a new login account from `username`.",
     example: 123,
   })
   @IsOptional()
   @IsNumber()
   userId?: number;
+
+  @ApiPropertyOptional({
+    description: "Username for the new factory login account",
+    example: "aikenusa",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  username?: string;
+
+  @ApiPropertyOptional({
+    description: "Factory full name (stored as credentials.full_name)",
+    example: "Aiken USA",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  name?: string;
 
   @ApiPropertyOptional({
     description: "Factory address",

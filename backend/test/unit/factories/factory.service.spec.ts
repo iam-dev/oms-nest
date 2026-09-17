@@ -1,6 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import { MailService } from "../../../src/mail/mail.service";
 import { FactoryService } from "../../../src/factories/factory.service";
 import { FactoryEntity } from "../../../src/factories/infrastructure/persistence/relational/entities/factory.entity";
 import { Repository, DataSource } from "typeorm";
@@ -8,6 +11,8 @@ import { Repository, DataSource } from "typeorm";
 describe("FactoryService", () => {
   let service: FactoryService;
   let repository: jest.Mocked<Repository<FactoryEntity>>;
+  let dataSource: { query: jest.Mock };
+  let mailService: { welcomeFactory: jest.Mock };
 
   function createMockFactoryEntity(): FactoryEntity {
     return {
@@ -91,11 +96,32 @@ describe("FactoryService", () => {
             query: jest.fn().mockResolvedValue([]),
           },
         },
+        {
+          provide: MailService,
+          useValue: {
+            welcomeFactory: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            signAsync: jest.fn().mockResolvedValue("mock-hash"),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue("test-value"),
+            getOrThrow: jest.fn().mockReturnValue("30m"),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<FactoryService>(FactoryService);
     repository = module.get(getRepositoryToken(FactoryEntity));
+    dataSource = module.get(DataSource);
+    mailService = module.get(MailService);
   });
 
   afterEach(() => {
@@ -122,17 +148,19 @@ describe("FactoryService", () => {
       const result = await service.create(createDto);
 
       // Assert
+      // Every column on the legacy `factories` table is NOT NULL, so omitted
+      // fields must be written as "" / 1, never null.
       expect(repository.create).toHaveBeenCalledWith({
         userId: createDto.userId,
         address: createDto.address,
-        zipcode: null,
-        state: null,
+        zipcode: "",
+        state: "",
         city: createDto.city,
         country: createDto.country,
-        phoneNo: null,
-        cellNo: null,
-        currency: null,
-        emailaddress: null,
+        phoneNo: "",
+        cellNo: "",
+        currency: 1,
+        emailaddress: "",
         deleted: 0,
       });
       expect(repository.save).toHaveBeenCalledWith(mockFactoryEntity);
@@ -164,6 +192,158 @@ describe("FactoryService", () => {
       expect(repository.save).toHaveBeenCalled();
       expect(result.emailaddress).toBe("factory@example.com");
     });
+
+    describe("with a new login account", () => {
+      /**
+       * Route dataSource.query by SQL so one mock can answer the username
+       * check, the credentials INSERT and the user-uuid lookup independently.
+       */
+      function mockCredentialQueries(
+        opts: {
+          existing?: boolean;
+          userUuid?: string | null;
+        } = {},
+      ) {
+        dataSource.query.mockImplementation((sql: string) => {
+          if (/SELECT user_id FROM credentials WHERE user_name/i.test(sql)) {
+            return Promise.resolve(opts.existing ? [{ user_id: 9 }] : []);
+          }
+          if (/INSERT INTO credentials/i.test(sql)) {
+            return Promise.resolve([{ user_id: 501 }]);
+          }
+          if (/SELECT id FROM "user" WHERE legacy_id/i.test(sql)) {
+            return Promise.resolve(
+              opts.userUuid === null ? [] : [{ id: opts.userUuid ?? "uuid-1" }],
+            );
+          }
+          if (/FROM "user" WHERE legacy_id = ANY/i.test(sql)) {
+            return Promise.resolve([
+              {
+                legacy_id: 501,
+                name: "Aiken USA",
+                username: "aikenusa",
+                enabled: true,
+                last_login: 0,
+              },
+            ]);
+          }
+          return Promise.resolve([]);
+        });
+      }
+
+      const createDto = {
+        username: "aikenusa",
+        name: "Aiken USA",
+        address: "127 Main St",
+        city: "Aiken",
+        country: "United States",
+        emailaddress: "cary@mysaddle.com",
+      };
+
+      it("should insert a factory-type credentials row and link the factory to it", async () => {
+        mockCredentialQueries();
+        repository.create.mockReturnValue(mockFactoryEntity);
+        repository.save.mockResolvedValue({
+          ...mockFactoryEntity,
+          userId: 501,
+        } as any);
+
+        await service.create(createDto);
+
+        const insertCall = dataSource.query.mock.calls.find(([sql]) =>
+          /INSERT INTO credentials/i.test(sql),
+        );
+        expect(insertCall).toBeDefined();
+        const [, params] = insertCall!;
+        // [deleted, user_type, user_name, full_name, password_hash, ...]
+        expect(params[1]).toBe(3); // user_type 3 = factory
+        expect(params[2]).toBe("aikenusa");
+        expect(params[3]).toBe("Aiken USA");
+        expect(params[4]).toMatch(/^\$2[aby]\$/); // bcrypt hash, never plaintext
+        expect(params[6]).toBe(0); // blocked = 0
+        expect(repository.create).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: 501, currency: 1 }),
+        );
+      });
+
+      it("should fall back to the username as full_name when no name is given", async () => {
+        mockCredentialQueries();
+        repository.create.mockReturnValue(mockFactoryEntity);
+        repository.save.mockResolvedValue(mockFactoryEntity);
+
+        await service.create({ ...createDto, name: undefined });
+
+        const [, params] = dataSource.query.mock.calls.find(([sql]) =>
+          /INSERT INTO credentials/i.test(sql),
+        )!;
+        expect(params[3]).toBe("aikenusa");
+      });
+
+      it("should reject a username that is already taken", async () => {
+        mockCredentialQueries({ existing: true });
+
+        await expect(service.create(createDto)).rejects.toThrow(
+          BadRequestException,
+        );
+        await expect(service.create(createDto)).rejects.toThrow(
+          "Username already exists",
+        );
+        expect(repository.save).not.toHaveBeenCalled();
+      });
+
+      it("should reject a create without username or userId (user_id is NOT NULL)", async () => {
+        await expect(
+          service.create({ address: "x", city: "y" }),
+        ).rejects.toThrow(BadRequestException);
+        expect(repository.save).not.toHaveBeenCalled();
+      });
+
+      it("should send the welcome / set-password email to the factory address", async () => {
+        mockCredentialQueries({ userUuid: "uuid-501" });
+        repository.create.mockReturnValue(mockFactoryEntity);
+        repository.save.mockResolvedValue({
+          ...mockFactoryEntity,
+          userId: 501,
+        } as any);
+
+        await service.create(createDto);
+
+        expect(mailService.welcomeFactory).toHaveBeenCalledWith({
+          to: "cary@mysaddle.com",
+          data: { hash: "mock-hash", tokenExpires: expect.any(Number) },
+        });
+      });
+
+      it("should still create the factory when the welcome email fails", async () => {
+        mockCredentialQueries();
+        mailService.welcomeFactory.mockRejectedValue(new Error("smtp down"));
+        repository.create.mockReturnValue(mockFactoryEntity);
+        repository.save.mockResolvedValue({
+          ...mockFactoryEntity,
+          userId: 501,
+        } as any);
+
+        const result = await service.create(createDto);
+
+        expect(result.id).toBe(1);
+      });
+
+      it("should return the linked user's name/username/enabled on the created dto", async () => {
+        mockCredentialQueries();
+        repository.create.mockReturnValue(mockFactoryEntity);
+        repository.save.mockResolvedValue({
+          ...mockFactoryEntity,
+          userId: 501,
+        } as any);
+
+        const result = await service.create(createDto);
+
+        expect(result.name).toBe("Aiken USA");
+        expect(result.username).toBe("aikenusa");
+        expect(result.enabled).toBe(true);
+        expect(result.displayName).toBe("Aiken USA");
+      });
+    });
   });
 
   describe("findOne", () => {
@@ -179,6 +359,26 @@ describe("FactoryService", () => {
         where: { id: 1, deleted: 0 },
       });
       expect(result.id).toBe(1);
+    });
+
+    it("should attach name/username/enabled/lastLogin from the linked user", async () => {
+      repository.findOne.mockResolvedValue(mockFactoryEntity);
+      dataSource.query.mockResolvedValue([
+        {
+          legacy_id: 200,
+          name: "Aiken USA",
+          username: "aikenusa",
+          enabled: true,
+          last_login: 1528271289,
+        },
+      ]);
+
+      const result = await service.findOne(1);
+
+      expect(result.name).toBe("Aiken USA");
+      expect(result.username).toBe("aikenusa");
+      expect(result.enabled).toBe(true);
+      expect(result.displayName).toBe("Aiken USA");
     });
 
     it("should throw NotFoundException when factory not found", async () => {
@@ -324,6 +524,93 @@ describe("FactoryService", () => {
       await expect(service.update(999, { city: "Boston" })).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it("should write name to credentials.full_name of the linked user", async () => {
+      repository.findOne.mockResolvedValue(createMockFactoryEntity());
+      repository.save.mockResolvedValue(mockFactoryEntity);
+
+      await service.update(1, { name: "Aiken USA Ltd" });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringMatching(/UPDATE credentials SET full_name/i),
+        ["Aiken USA Ltd", 200],
+      );
+    });
+
+    it("should not blank credentials.full_name when name is empty", async () => {
+      repository.findOne.mockResolvedValue(createMockFactoryEntity());
+      repository.save.mockResolvedValue(mockFactoryEntity);
+
+      await service.update(1, { name: "   " });
+
+      expect(dataSource.query).not.toHaveBeenCalledWith(
+        expect.stringMatching(/UPDATE credentials SET full_name/i),
+        expect.anything(),
+      );
+    });
+
+    it("should set credentials.blocked = 1 when enabled is false", async () => {
+      repository.findOne.mockResolvedValue(createMockFactoryEntity());
+      repository.save.mockResolvedValue(mockFactoryEntity);
+
+      await service.update(1, { enabled: false });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringMatching(/UPDATE credentials SET blocked/i),
+        [1, 200],
+      );
+    });
+
+    it("should set credentials.blocked = 0 when enabled is true", async () => {
+      repository.findOne.mockResolvedValue(createMockFactoryEntity());
+      repository.save.mockResolvedValue(mockFactoryEntity);
+
+      await service.update(1, { enabled: true });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringMatching(/UPDATE credentials SET blocked/i),
+        [0, 200],
+      );
+    });
+
+    it("should not touch credentials.blocked when enabled is omitted", async () => {
+      repository.findOne.mockResolvedValue(createMockFactoryEntity());
+      repository.save.mockResolvedValue(mockFactoryEntity);
+
+      await service.update(1, { city: "Boston" });
+
+      expect(dataSource.query).not.toHaveBeenCalledWith(
+        expect.stringMatching(/UPDATE credentials SET blocked/i),
+        expect.anything(),
+      );
+    });
+
+    it("should return the updated factory with linked user data attached", async () => {
+      repository.findOne.mockResolvedValue(createMockFactoryEntity());
+      repository.save.mockResolvedValue(mockFactoryEntity);
+      dataSource.query.mockImplementation((sql: string) =>
+        Promise.resolve(
+          /FROM "user" WHERE legacy_id = ANY/i.test(sql)
+            ? [
+                {
+                  legacy_id: 200,
+                  name: "Aiken USA",
+                  username: "aikenusa",
+                  enabled: false,
+                  last_login: 1528271289,
+                },
+              ]
+            : [],
+        ),
+      );
+
+      const result = await service.update(1, { city: "Aiken" });
+
+      expect(result.name).toBe("Aiken USA");
+      expect(result.username).toBe("aikenusa");
+      expect(result.enabled).toBe(false);
+      expect(result.lastLogin).toBe(1528271289);
     });
   });
 

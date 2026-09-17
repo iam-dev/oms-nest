@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsEmail,
+  IsBoolean,
   MaxLength,
   Min,
 } from "class-validator";
@@ -24,6 +25,25 @@ export class UpdateFactoryDto {
   @IsNumber()
   @Transform(({ value }) => parseInt(value))
   userId?: number;
+
+  @ApiPropertyOptional({
+    description: "Factory full name. Maps to credentials.full_name.",
+    example: "Aiken USA",
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Whether the factory's login account is enabled (false = blocked). Maps to credentials.blocked.",
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
 
   @ApiPropertyOptional({
     description: "Street address",

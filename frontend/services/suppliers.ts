@@ -1,34 +1,98 @@
 import { fetchEntities } from './api';
-import { API_URL } from './api-config';
+import { API_URL, fetchWithRefresh } from './api-config';
 import { logger } from '@/utils/logger';
 
-interface SaveBundleError {
-  ErrorMessage?: string;
-  message?: string;
-  Message?: string;
-  error?: string;
-  description?: string;
-  [key: string]: unknown;
-}
-
+/**
+ * A factory ("supplier" in older UI code). Address data lives on the
+ * `factories` row; name, username, enabled and lastLogin come from the linked
+ * login account and are attached by the backend.
+ */
 export interface Supplier {
   id: number; // INTEGER - matching legacy database
+  userId?: number;
   name: string;
   username: string;
   email?: string;
-  address?: string; // Required by HasAddressTrait
-  city?: string; // Required by HasAddressTrait
+  address?: string;
+  city?: string;
   country?: string;
-  currency?: string; // Required by HasCurrencyTrait
+  state?: string;
+  zipcode?: string;
+  phoneNo?: string;
+  cellNo?: string;
+  /** Legacy currency id (factories.currency); not editable in the UI */
+  currency?: number;
   enabled?: boolean;
-  lastLogin?: string;
+  lastLogin?: string | number;
   createdAt?: string;
   updatedAt?: string;
-  // Additional address fields from HasAddressTrait
-  zipcode?: string;
+}
+
+/**
+ * Body accepted by POST/PATCH /factories (mirrors the backend Create/UpdateFactoryDto).
+ * Note the backend field is `emailaddress`, not `email`.
+ */
+export interface FactoryApiPayload {
+  username?: string;
+  name?: string;
+  emailaddress?: string;
+  address?: string;
+  city?: string;
+  country?: string;
   state?: string;
-  cellNo?: string;
+  zipcode?: string;
   phoneNo?: string;
+  cellNo?: string;
+  enabled?: boolean;
+}
+
+/**
+ * Translate the edit/create form's Supplier shape into the backend DTO shape.
+ *
+ * The backend validation pipe runs with `whitelist: true`, so any key the DTO
+ * does not declare is dropped *silently*: sending `email` instead of
+ * `emailaddress` returns 200 while the change is lost. Funnel every save
+ * through this helper so the two field vocabularies cannot drift.
+ * Undefined values are omitted so a PATCH never blanks untouched columns.
+ */
+export function toFactoryApiPayload(supplier: Partial<Supplier>): FactoryApiPayload {
+  const payload: FactoryApiPayload = {
+    username: supplier.username,
+    name: supplier.name,
+    emailaddress: supplier.email,
+    address: supplier.address,
+    city: supplier.city,
+    country: supplier.country,
+    state: supplier.state,
+    zipcode: supplier.zipcode,
+    phoneNo: supplier.phoneNo,
+    cellNo: supplier.cellNo,
+    enabled: supplier.enabled,
+  };
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as FactoryApiPayload;
+}
+
+/**
+ * Build a readable Error from a failed factory API response. NestJS returns
+ * `{ message }` for 400/404 and `{ errors: { field: msg } }` for 422.
+ */
+async function factoryApiError(action: string, response: Response): Promise<Error> {
+  const text = await response.text();
+  logger.error(`Factory ${action} failed:`, response.status, text);
+  let detail = `${response.status} ${response.statusText}`;
+  try {
+    const parsed = JSON.parse(text) as { message?: string; errors?: Record<string, string> };
+    if (parsed.errors && typeof parsed.errors === 'object') {
+      detail = Object.values(parsed.errors).join(', ');
+    } else if (typeof parsed.message === 'string') {
+      detail = parsed.message;
+    }
+  } catch {
+    // non-JSON body: keep the status text
+  }
+  return new Error(`Failed to ${action} factory: ${detail}`);
 }
 
 export interface SuppliersResponse {
@@ -99,193 +163,50 @@ export async function fetchSuppliers({
 }
 
 export async function createSupplier(supplierData: Partial<Supplier>): Promise<Supplier> {
+  const payload = toFactoryApiPayload(supplierData);
+  logger.log('Creating factory with data:', payload);
 
-  // Create BreezeJS-style entity with the correct format for the backend
-  const entity = {
-    // Include all supplier fields for creation
-    name: supplierData.name,
-    username: supplierData.username,
-    email: supplierData.email,
-    address: supplierData.address, // Required field
-    city: supplierData.city, // Required field
-    country: supplierData.country,
-    currency: supplierData.currency || 'USD', // Required field with default
-    enabled: supplierData.enabled ?? true,
-    // Add other supplier-specific fields if provided
-    ...(supplierData.zipcode && { zipcode: supplierData.zipcode }),
-    ...(supplierData.state && { state: supplierData.state }),
-    ...(supplierData.cellNo && { cellNo: supplierData.cellNo }),
-    ...(supplierData.phoneNo && { phoneNo: supplierData.phoneNo }),
-    // BreezeJS entity metadata with correct format
-    entityAspect: {
-      entityTypeName: "Factory:#App.Entity.Factory",
-      entityState: "Added",
-      originalValuesMap: {},
-      autoGeneratedKey: null,
-      defaultResourceName: "factories"
-    }
-  };
-
-  // Remove undefined fields to keep payload clean
-  const entityRecord = entity as Record<string, unknown>;
-  Object.keys(entityRecord).forEach(key => {
-    if (key !== 'entityAspect' && entityRecord[key] === undefined) {
-      delete entityRecord[key];
-    }
-  });
-
-  // Create the save bundle structure expected by the backend
-  const saveBundle = {
-    entities: [entity]
-  };
-
-  logger.log('Attempting supplier creation with BreezeJS SaveBundle:', JSON.stringify(saveBundle, null, 2));
-
-  const response = await fetch(`${API_URL}/save`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/factories`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/ld+json',
-      'Accept': 'application/ld+json',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-    },
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify(saveBundle),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.error('Supplier creation failed:', response.status, errorText);
-    throw new Error(`Failed to create supplier: ${response.status} ${response.statusText}`);
+    throw await factoryApiError('create', response);
   }
 
   const result = await response.json();
-  logger.log('Supplier creation result:', result);
-
-  // Check for errors in SaveBundle response
-  if (result.Errors && result.Errors.length > 0) {
-    logger.error('SaveBundle errors:', result.Errors);
-    logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: SaveBundleError) => {
-      return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
-    }).join(', ');
-    throw new Error(`Supplier creation failed: ${errorMessages}`);
-  }
-
-  // Return the created supplier from the save result
-  if (result.Entities && result.Entities.length > 0) {
-    return result.Entities[0];
-  } else if (result.entities && result.entities.length > 0) {
-    return result.entities[0];
-  } else {
-    // If no entity returned in SaveBundle but no errors, creation was likely successful
-    logger.log('No entities in SaveBundle response but no errors, returning optimistic data');
-    return {
-      id: 'pending', // Will be set by backend
-      ...supplierData
-    } as Supplier;
-  }
+  logger.log('Factory creation successful:', result);
+  return result;
 }
 
 export async function updateSupplier(id: number | string, supplierData: Partial<Supplier>): Promise<Supplier> {
+  // The login name is immutable once created, so never send it on update.
+  const { username: _username, ...editable } = supplierData;
+  void _username;
+  const payload = toFactoryApiPayload(editable);
+  logger.log('Updating factory with ID:', id, 'Data:', payload);
 
-  // Create entity with the same explicit structure as customers
-  const entity = {
-    // Include the id field for updates
-    id: id,
-    // Include all supplier fields explicitly (like customers)
-    name: supplierData.name,
-    username: supplierData.username,
-    email: supplierData.email,
-    address: supplierData.address, // Required field
-    city: supplierData.city, // Required field
-    country: supplierData.country,
-    currency: supplierData.currency || 'USD', // Required field with default
-    enabled: supplierData.enabled,
-    // Add other supplier-specific fields if needed
-    ...(supplierData.zipcode && { zipcode: supplierData.zipcode }),
-    ...(supplierData.state && { state: supplierData.state }),
-    ...(supplierData.cellNo && { cellNo: supplierData.cellNo }),
-    ...(supplierData.phoneNo && { phoneNo: supplierData.phoneNo }),
-    // BreezeJS entity metadata with correct format
-    entityAspect: {
-      entityTypeName: "Factory:#App.Entity.Factory",  // Match the factory entity structure
-      entityState: "Modified",
-      originalValuesMap: {},
-      autoGeneratedKey: null,
-      defaultResourceName: "factories"
-    }
-  };
-
-  // Remove undefined fields to keep payload clean
-  const updateEntityRecord = entity as Record<string, unknown>;
-  Object.keys(updateEntityRecord).forEach(key => {
-    if (key !== 'entityAspect' && updateEntityRecord[key] === undefined) {
-      delete updateEntityRecord[key];
-    }
-  });
-
-  // Create the save bundle structure expected by the backend
-  const saveBundle = {
-    entities: [entity]
-  };
-
-  logger.log('Attempting supplier update with BreezeJS SaveBundle:', JSON.stringify(saveBundle, null, 2));
-
-  const response = await fetch(`${API_URL}/save`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/ld+json',
-      'Accept': 'application/ld+json',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-    },
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/factories/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify(saveBundle),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.error('Update supplier error response:', errorText);
-    throw new Error(`Failed to update supplier: ${response.statusText}`);
+    throw await factoryApiError('update', response);
   }
 
   const result = await response.json();
-  logger.log('Supplier update result:', result);
-
-  // Check for errors in SaveBundle response
-  if (result.Errors && result.Errors.length > 0) {
-    logger.error('SaveBundle errors:', result.Errors);
-    // Log the full error structure to understand the format
-    logger.error('Full error objects:', JSON.stringify(result.Errors, null, 2));
-    const errorMessages = result.Errors.map((err: SaveBundleError) => {
-      // Try different error message fields
-      return err.ErrorMessage || err.message || err.Message || err.error || err.description || JSON.stringify(err);
-    }).join(', ');
-    throw new Error(`Supplier update failed: ${errorMessages}`);
-  }
-
-  // Handle SaveBundle response format
-  if (result.Entities && result.Entities.length > 0) {
-    // Use the updated entity from the response
-    return result.Entities[0];
-  } else if (result.entities && result.entities.length > 0) {
-    // Fallback for alternative response format
-    return result.entities[0];
-  } else {
-    // If no entity returned in SaveBundle but no errors, update was likely successful
-    logger.log('No entities in SaveBundle response but no errors, returning optimistic data');
-    return {
-      id: id,
-      ...supplierData
-    } as Supplier;
-  }
+  logger.log('Factory update successful:', result);
+  return result;
 }
 
 export async function blockFactory(id: number | string): Promise<{ enabled: boolean }> {
-  const response = await fetch(`${API_URL}/api/v1/factories/${id}/toggle-block`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/factories/${id}/toggle-block`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -295,16 +216,14 @@ export async function blockFactory(id: number | string): Promise<{ enabled: bool
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.error('Factory block toggle failed:', response.status, errorText);
-    throw new Error(`Failed to toggle factory block: ${response.status} ${response.statusText}`);
+    throw await factoryApiError('block/unblock', response);
   }
 
   return response.json();
 }
 
 export async function deleteSupplier(id: number | string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/v1/factories/${id}`, {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/factories/${id}`, {
     method: 'DELETE',
     headers: {
       'Accept': 'application/json',
@@ -313,6 +232,6 @@ export async function deleteSupplier(id: number | string): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to delete supplier: ${response.statusText}`);
+    throw await factoryApiError('delete', response);
   }
 }
