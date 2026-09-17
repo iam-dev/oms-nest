@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { EditOrder } from '@/components/EditOrder';
 import * as orderEditViewModule from '@/services/orderEditView';
 import * as enrichedOrdersModule from '@/services/enrichedOrders';
@@ -91,7 +91,9 @@ jest.mock('@/components/ui/select', () => {
 });
 
 jest.mock('@/components/ui/checkbox', () => ({
-  Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
+  Checkbox: ({ onCheckedChange, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { onCheckedChange?: (checked: boolean) => void }) => (
+    <input type="checkbox" {...props} onChange={(e) => onCheckedChange?.(e.target.checked)} />
+  ),
 }));
 
 jest.mock('@/components/ui/textarea', () => ({
@@ -1188,8 +1190,8 @@ describe('EditOrder component', () => {
 
       const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
       expect(payload.saddleOptions).toEqual([
-        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '' },
-        { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '', color: '', leatherType: '' },
       ]);
     });
 
@@ -1265,6 +1267,103 @@ describe('EditOrder component', () => {
 
       expect(screen.getByText('AVIAR Knee Roll Leather:')).toBeInTheDocument();
       expect(screen.getByText('Aviar Buffalo Black')).toBeInTheDocument();
+    });
+  });
+
+  describe('legacy parity — Step 1 (2026-09-17)', () => {
+    // Aviar Rook 2.0 (97) with fitter Aiken Shop (currency 1 = USD), preset
+    // AVIAR SMOOTH Black (24), as captured from production.
+    const OPT_SEAT_SIZE = 1, OPT_SEAT_SHAPE = 41, OPT_FLAP = 8, OPT_SEAT_OPTION = 34, OPT_SEAT_LEATHER = 11;
+    const rookOptions = {
+      fitters: [{ id: 28, username: 'aikenshop123', fullName: 'Aiken Shop', active: true, currency: 1 }],
+      saddles: [{ id: 97, brand: 'Aviar', modelName: 'Rook 2.0 (K644B)', displayName: 'Aviar Rook 2.0 (K644B)', active: 1 }],
+      leatherTypes: [{ id: 48, name: 'ASBLV - Aviar SMOOTH Black Vienna', price1: 6595, price2: 5095, price7: 5695 }],
+      options: [
+        { optionId: OPT_SEAT_SIZE, optionName: 'Seat Size', sequence: 1, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_SEAT_SHAPE, optionName: 'AVIAR Seat Shape', sequence: 2, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_FLAP, optionName: 'Flap Length', sequence: 7, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_SEAT_LEATHER, optionName: 'Seat Leather', sequence: 20, group: 'SEAT', type: 1, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_SEAT_OPTION, optionName: 'SEAT Option', sequence: 25, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: 23, optionName: 'Complete Re-Flock', sequence: 100, group: null, type: 2, price1: 250, extraAllowed: 0 },
+      ],
+      optionItems: [
+        { id: 4, name: '16.5', optionId: OPT_SEAT_SIZE, price1: 0 },
+        { id: 6150, name: 'X-SLEEK(spacer fabric)', optionId: OPT_SEAT_SHAPE, price1: 0 },
+        { id: 69, name: '16', optionId: OPT_FLAP, price1: 0 },
+        { id: 4660, name: 'Aviar STD Inlaid (Full Wrap) Match Leather', optionId: OPT_SEAT_OPTION, price1: 120, userColor: 1, userLeather: 0 },
+      ],
+      optionLeathers: [
+        { optionId: OPT_SEAT_LEATHER, leatherId: 48, name: 'ASBLV - Aviar SMOOTH Black Vienna' },
+        { optionId: OPT_SEAT_LEATHER, leatherId: 3, name: 'SBL - SMOOTH BLACK' },
+      ],
+      statuses: [{ id: 0, name: 'Unordered' }, { id: 1, name: 'Ordered' }],
+      presets: [{ id: 24, name: 'AVIAR SMOOTH Black', sequence: 1 }],
+      presetItems: [
+        { presetId: 24, optionId: OPT_FLAP, itemId: 69 },
+        { presetId: 24, optionId: OPT_SEAT_OPTION, itemId: 4660 },
+        { presetId: 24, optionId: OPT_SEAT_SHAPE, itemId: 5430 }, // not offered on Rook 2.0
+        { presetId: 24, optionId: OPT_SEAT_SIZE, itemId: 0 },     // legacy junk row
+      ],
+    };
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn();
+    beforeEach(() => {
+      fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve(rookOptions) });
+      global.fetch = fetchMock;
+    });
+    afterEach(() => { global.fetch = originalFetch; });
+
+    async function chooseModelAndPreset() {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar Rook 2.0 (K644B)')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Aiken Shop')); });
+      await act(async () => { fireEvent.click(screen.getByText('Aviar Rook 2.0 (K644B)')); });
+      await act(async () => { fireEvent.click(screen.getByText('AVIAR SMOOTH Black')); });
+    }
+
+    it('requests active models only (no includeDiscontinued)', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(String(fetchMock.mock.calls[0][0])).not.toContain('includeDiscontinued');
+    });
+
+    it('ends every option select with "Customized by fitter" and shows plain item labels', async () => {
+      await chooseModelAndPreset();
+      expect(screen.getAllByText('Customized by fitter').length).toBeGreaterThanOrEqual(5);
+      expect(screen.getByText('Aviar STD Inlaid (Full Wrap) Match Leather')).toBeInTheDocument();
+      expect(screen.queryByText(/\+\$120/)).not.toBeInTheDocument();
+      expect(screen.getByText('Complete Re-Flock')).toBeInTheDocument();
+      expect(screen.queryByText(/\+\$250/)).not.toBeInTheDocument();
+    });
+
+    it('applies the preset only for offered items and shows "Specify color" for a user_color item', async () => {
+      await chooseModelAndPreset();
+      expect(screen.getByLabelText('Specify color:')).toBeInTheDocument(); // SEAT Option 4660 asks for a colour
+      const selects = screen.getAllByTestId('select');
+      const seatShape = selects.find(s => s.textContent?.includes('X-SLEEK'));
+      expect(seatShape).not.toHaveAttribute('data-value', '5430');
+      const seatSize = selects.find(s => s.textContent?.includes('16.5'));
+      expect(seatSize).not.toHaveAttribute('data-value', '0');
+    });
+
+    it('shows "Please specify" when Customized by fitter is chosen and sends the texts in the payload', async () => {
+      await chooseModelAndPreset();
+      // pick "Customized by fitter" for Seat Size (first select containing 16.5)
+      const seatSizeSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('16.5'))!;
+      await act(async () => { fireEvent.click(within(seatSizeSelect).getByText('Customized by fitter')); });
+      fireEvent.change(screen.getByLabelText('Please specify:'), { target: { value: '17.25' } });
+      fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'Black' } });
+      // leather + fill prices happen in Task 13's tests; here only the option rows matter.
+      // "ASBLV - Aviar SMOOTH Black Vienna" appears in both the top Leathertype select and
+      // the Seat Leather option row (a type-1 option using the same leatherTypes name) — scope
+      // to the Seat Leather row (identified by its sibling "SBL - SMOOTH BLACK" item).
+      const seatLeatherSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('SBL - SMOOTH BLACK'))!;
+      await act(async () => { fireEvent.click(within(seatLeatherSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
+      await navigateToStep(3);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      const payload = createOrderFromPayload.mock.calls[0][0];
+      expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: OPT_SEAT_SIZE, optionItemId: 0, custom: '17.25' }));
+      expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: OPT_SEAT_OPTION, optionItemId: 4660, color: 'Black' }));
     });
   });
 });

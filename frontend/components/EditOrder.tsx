@@ -33,23 +33,13 @@ import {
 } from '@/types/ComprehensiveOrder';
 import { logger } from '@/utils/logger';
 import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
+import { OptionSlotRow } from '@/components/shared/OptionSlotRow';
+import { specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
+import { presetSelections } from '@/utils/presetApply';
+import type { EditFormOptions } from '@/services/enrichedOrders';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DuplicateData = Record<string, any>;
-
-interface EditFormOptions {
-  /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
-  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
-  saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
-  leatherTypes: Array<{ id: number; name: string; price1: number }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number; extraAllowed: number }>;
-  optionItems: Array<{ id: number; name: string; optionId: number; price1: number }>;
-  /** Leathers ticked per leather option (type 1) in Models > Manage Options. */
-  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
-  statuses: Array<{ id: number; name: string }>;
-  presets: Array<{ id: number; name: string; sequence: number }>;
-  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
-}
 
 interface EditOrderProps {
   order?: {
@@ -134,6 +124,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   // Saddle option selections, keyed by slot ("optionId:cloneNumber", see utils/optionSlots)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>({});
   const [optionCustom, setOptionCustom] = useState<Record<string, string>>({});
+  const [optionColor, setOptionColor] = useState<Record<string, string>>({});
+  const [optionLeather, setOptionLeather] = useState<Record<string, string>>({});
   // Extra rows open per option, e.g. { 4: [1] } for "CANTLE Option (2)"
   const [optionClones, setOptionClones] = useState<Record<number, number[]>>({});
 
@@ -155,6 +147,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     setOptionClones(prev => ({ ...prev, [optionId]: (prev[optionId] ?? []).filter(c => c !== clone) }));
     setOptionSelections(without);
     setOptionCustom(without);
+    setOptionColor(without);
+    setOptionLeather(without);
   };
   const [selectedExtras, setSelectedExtras] = useState<Record<number, boolean>>({});
 
@@ -169,10 +163,9 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [newFitter, setNewFitter] = useState({ firstName: '', lastName: '', email: '' });
 
   // Fetch edit options from backend.
-  // includeDiscontinued=true so repair orders can reference legacy/discontinued
-  // saddle models that the standard "active" filter would hide.
+  // Active models only, like the legacy new-order form; repairs have their own flow.
   const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
-    const params = new URLSearchParams({ includeDiscontinued: 'true' });
+    const params = new URLSearchParams();
     if (forSaddleId) params.set('saddleId', forSaddleId);
     const url = `${API_URL}/api/v1/enriched_orders/edit-options?${params.toString()}`;
     try {
@@ -526,12 +519,15 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 return getSlots(optId).flatMap(clone => {
                   const key = slotKey(optId, clone);
                   const itemId = optionSelections[key];
-                  if (!itemId) return [];
+                  if (itemId === undefined || itemId === '') return [];
+                  const inputs = getSpecInputs(optId, itemId);
                   return [{
                     optionId: optId,
                     optionItemId: Number(itemId),
                     cloneNumber: nextClone++,
-                    custom: optionCustom[key] || '',
+                    custom: inputs.custom ? (optionCustom[key] ?? '') : '',
+                    color: inputs.color ? (optionColor[key] ?? '') : '',
+                    leatherType: inputs.leather ? (optionLeather[key] ?? '') : '',
                   }];
                 });
               }),
@@ -686,14 +682,19 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
   // Get available items for a given option. Leather options (type 1) pick a
   // leather_types row (saved as orders_info.leather_id) rather than an options_items row.
-  const getItemsForOption = (opt: { optionId: number; type: number }): Array<{ id: number; name: string; price1: number }> => {
+  const getItemsForOption = (opt: { optionId: number; type?: number }): Array<{ id: number; name: string }> => {
     if (!editOptions) return [];
     if (opt.type === 1) {
       return (editOptions.optionLeathers ?? [])
         .filter(l => l.optionId === opt.optionId)
-        .map(l => ({ id: l.leatherId, name: l.name, price1: 0 }));
+        .map(l => ({ id: l.leatherId, name: l.name }));
     }
     return editOptions.optionItems.filter(i => i.optionId === opt.optionId);
+  };
+
+  const getSpecInputs = (optionId: number, selectedItemId: string): SpecInputs => {
+    const item = editOptions?.optionItems.find(i => i.optionId === optionId && String(i.id) === selectedItemId);
+    return specInputsForItem(selectedItemId, item);
   };
 
   // Sorted options by sequence
@@ -708,14 +709,19 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const applyPreset = useCallback((presetId: string) => {
     setSelectedPresetId(presetId);
     if (presetId === 'none' || !editOptions?.presetItems) return;
-    const pid = Number(presetId);
-    const items = editOptions.presetItems.filter(pi => pi.presetId === pid);
-    const selections: Record<string, string> = {};
-    for (const item of items) {
-      selections[slotKey(item.optionId)] = String(item.itemId);
-    }
-    setOptionSelections(selections);
+    // Inlined rather than calling getItemsForOption, which isn't memoized and
+    // would otherwise be an unstable useCallback dependency.
+    const offeredItemIds = (optionId: number): Array<number | string> => {
+      const type = editOptions.options.find(o => o.optionId === optionId)?.type ?? 0;
+      if (type === 1) {
+        return (editOptions.optionLeathers ?? []).filter(l => l.optionId === optionId).map(l => l.leatherId);
+      }
+      return editOptions.optionItems.filter(i => i.optionId === optionId).map(i => i.id);
+    };
+    setOptionSelections(presetSelections(editOptions.presetItems, Number(presetId), offeredItemIds));
     setOptionCustom({});
+    setOptionColor({});
+    setOptionLeather({});
     setOptionClones({});
     setSelectedExtras({});
   }, [editOptions]);
@@ -910,6 +916,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                     setSelectedLeatherId('');
                     setOptionSelections({});
                     setOptionCustom({});
+                    setOptionColor({});
+                    setOptionLeather({});
                     setOptionClones({});
                     setSelectedExtras({});
                     // Refetch options filtered by the selected saddle
@@ -956,7 +964,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         <SelectContent>
                           {editOptions?.leatherTypes?.map(lt => (
                             <SelectItem key={lt.id} value={String(lt.id)}>
-                              {lt.name}{lt.price1 > 0 ? ` (+$${lt.price1.toFixed(2)})` : ''}
+                              {lt.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -978,63 +986,29 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         {slots.map((clone, slotIdx) => {
                           const key = slotKey(opt.optionId, clone);
                           const label = slotLabel(opt.optionName, clone);
+                          const selectedItemId = optionSelections[key] || '';
                           const isLastSlot = slotIdx === slots.length - 1;
                           return (
-                            <React.Fragment key={key}>
-                              <Label className="text-sm font-medium pt-2">
-                                {label}: <span className="text-red-500">*</span>
-                              </Label>
-                              <div className="space-y-1">
-                                <div className="flex items-start gap-1">
-                                  <div className="flex-1">
-                                    <Select
-                                      value={optionSelections[key] || ''}
-                                      onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
-                                    >
-                                      <SelectTrigger className="h-9">
-                                        <SelectValue placeholder="- Choose -" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {items.map(item => (
-                                          <SelectItem key={item.id} value={String(item.id)}>
-                                            {item.name}{item.price1 > 0 ? ` (+$${item.price1.toFixed(2)})` : ''}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  {clone > 0 && (
-                                    <button
-                                      type="button"
-                                      aria-label={`Remove ${label}`}
-                                      className="h-9 px-2 text-gray-500 hover:text-red-700"
-                                      onClick={() => removeClone(opt.optionId, clone)}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </div>
-                                {optionCustom[key] !== undefined && (
-                                  <div className="ml-2 flex items-center gap-2">
-                                    <Label className="text-xs font-medium text-gray-600 whitespace-nowrap">Specify color: <span className="text-red-500">*</span></Label>
-                                    <Input
-                                      className="h-8 text-sm flex-1"
-                                      value={optionCustom[key] || ''}
-                                      onChange={(e) => setOptionCustom(prev => ({ ...prev, [key]: e.target.value }))}
-                                    />
-                                  </div>
-                                )}
-                                {isLastSlot && canAddClone && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-[#8B0000] hover:underline"
-                                    onClick={() => addClone(opt.optionId)}
-                                  >
-                                    + Add another {opt.optionName}
-                                  </button>
-                                )}
-                              </div>
-                            </React.Fragment>
+                            <div key={key} className="col-span-2">
+                              <OptionSlotRow
+                                label={label}
+                                selectedItemId={selectedItemId}
+                                placeholder="- Choose -"
+                                items={items}
+                                inputs={getSpecInputs(opt.optionId, selectedItemId)}
+                                custom={optionCustom[key] ?? ''}
+                                color={optionColor[key] ?? ''}
+                                leather={optionLeather[key] ?? ''}
+                                onSelect={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
+                                onCustomChange={(v) => setOptionCustom(prev => ({ ...prev, [key]: v }))}
+                                onColorChange={(v) => setOptionColor(prev => ({ ...prev, [key]: v }))}
+                                onLeatherChange={(v) => setOptionLeather(prev => ({ ...prev, [key]: v }))}
+                                onRemove={clone > 0 ? () => removeClone(opt.optionId, clone) : undefined}
+                                onAddClone={isLastSlot && canAddClone ? () => addClone(opt.optionId) : undefined}
+                                addCloneLabel={`+ Add another ${opt.optionName}`}
+                                inputIdPrefix={`spec-${opt.optionId}-${clone}`}
+                              />
+                            </div>
                           );
                         })}
                       </React.Fragment>
@@ -1063,7 +1037,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                               />
                               <label htmlFor={`extra-${extra.optionId}`} className="text-sm">
                                 {extra.optionName}
-                                {extra.price1 > 0 ? ` (+$${extra.price1.toFixed(2)})` : ''}
                               </label>
                             </div>
                           </div>
