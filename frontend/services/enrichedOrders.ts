@@ -305,6 +305,8 @@ export interface UpdateOrderPayload {
     optionId: number;
     /** 0 = "Customized by fitter" (legacy sentinel, text goes in `custom`) */
     optionItemId: number;
+    /** orders_info.clone_number: 0 for the first row of an option, 1, 2, … for extra rows */
+    cloneNumber?: number;
     custom?: string;
     /** "Specify color" answer for items flagged user_color */
     color?: string;
@@ -547,8 +549,10 @@ export interface OrderDetailData {
   // Saddle specifications from orders_info
   saddleSpecs: Array<{
     optionId: number;
+    /** Already suffixed for clones, e.g. "CANTLE Option (2)" */
     optionName: string;
     optionItemId: number;
+    cloneNumber: number;
     itemName: string | null;
     leatherName: string | null;
     custom: string;
