@@ -24,10 +24,10 @@ jest.mock('@/components/ui/label', () => ({
 }));
 
 describe('ShippingCountrySelect', () => {
-  it('offers the legacy 31 countries in legacy order', () => {
-    expect(SHIPPING_COUNTRIES).toHaveLength(31);
+  it('offers the legacy 30 countries in legacy order', () => {
+    expect(SHIPPING_COUNTRIES).toHaveLength(30);
     expect(SHIPPING_COUNTRIES[0]).toBe('Argentina');
-    expect(SHIPPING_COUNTRIES[30]).toBe('United States');
+    expect(SHIPPING_COUNTRIES[29]).toBe('United States');
     expect(SHIPPING_COUNTRIES).toContain('Republic of Ireland');
   });
 

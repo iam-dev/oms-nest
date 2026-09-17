@@ -9,7 +9,7 @@ export const SHIPPING_COUNTRIES: readonly string[] = [
   'Argentina', 'Australia', 'Austria', 'Belgium', 'Brazil', 'Canada', 'Czech Republic', 'China',
   'Denmark', 'Finland', 'France', 'Germany', 'Italy', 'Israel', 'India', 'Japan', 'Mexico',
   'Netherlands', 'New Zealand', 'Norway', 'Portugal', 'Republic of Ireland', 'Romania', 'Russia',
-  'South Africa', 'Spain', 'Sweden', 'Switzerland', 'Ukraine', 'United Kingdom', 'United States',
+  'Spain', 'Sweden', 'Switzerland', 'Ukraine', 'United Kingdom', 'United States',
 ];
 
 export const US_STATES: readonly string[] = [
