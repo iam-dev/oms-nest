@@ -1654,4 +1654,67 @@ describe('ComprehensiveEditOrder component', () => {
       expect(screen.queryByText('CANTLE Option (2):')).not.toBeInTheDocument();
     });
   });
+
+  describe('per-model dropdown lists', () => {
+    // edit-options?saddleId= only returns what Models > Manage Options ticked
+    // for the model. A saved order may still point at an item that is no
+    // longer ticked; the form keeps that saved value selectable instead of
+    // silently blanking it.
+    const OPTION_KNEE_ROLL = 2;
+    const OPTION_SEAT_LEATHER = 11;
+
+    const modelOptions = {
+      ...mockEditOptions,
+      options: [
+        { optionId: OPTION_KNEE_ROLL, optionName: 'Knee Roll', sequence: 1, group: 'FLAPS', type: 0, extraAllowed: 0 },
+        { optionId: OPTION_SEAT_LEATHER, optionName: 'Seat Leather', sequence: 2, group: 'SEAT', type: 1, extraAllowed: 0 },
+      ],
+      optionItems: [
+        { id: 17, name: 'Pencil Roll J1', optionId: OPTION_KNEE_ROLL, userColor: 0, userLeather: 0 },
+      ],
+      optionLeathers: [
+        { optionId: OPTION_SEAT_LEATHER, leatherId: 48, name: 'Aviar Smooth Black' },
+      ],
+    };
+
+    const spec = (optionId: number, optionName: string, optionItemId: number, itemName: string) => ({
+      optionId,
+      optionName,
+      optionItemId,
+      cloneNumber: 0,
+      itemName,
+      leatherName: null,
+      custom: '',
+      color: '',
+      leatherType: '',
+      sequence: 1,
+      displayValue: itemName,
+    });
+
+    const renderWithSpecs = async (saddleSpecs: ReturnType<typeof spec>[]) => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(modelOptions) });
+      await renderAndWaitForLoad({ isDuplicate: false });
+    };
+
+    it('offers a leather option only the leathers ticked for the model', async () => {
+      await renderWithSpecs([]);
+
+      expect(screen.getByText('Seat Leather:')).toBeInTheDocument();
+      expect(screen.getByText('Aviar Smooth Black')).toBeInTheDocument();
+      // The base leather list is only the top-level Leathertype dropdown
+      expect(screen.getAllByText('Italian Leather')).toHaveLength(1);
+    });
+
+    it('keeps a saved item selectable when the model no longer ticks it', async () => {
+      await renderWithSpecs([spec(OPTION_KNEE_ROLL, 'Knee Roll', 3595, 'Aviar AV1 Short')]);
+
+      const kneeRoll = screen.getByText('Knee Roll:').parentElement as HTMLElement;
+      // Items only: the mocked <Select> wrapper carries data-value too
+      const values = Array.from(kneeRoll.querySelectorAll('[data-value]:not([data-testid="select"])')).map(el => el.getAttribute('data-value'));
+      expect(values).toContain('17');
+      expect(values).toContain('3595');
+      expect(screen.getAllByText('Aviar AV1 Short').length).toBeGreaterThan(0);
+    });
+  });
 });
