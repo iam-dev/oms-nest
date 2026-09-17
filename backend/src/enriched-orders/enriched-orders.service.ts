@@ -148,9 +148,13 @@ export interface UpdateOrderDto {
   // `custom` is the free text behind "Customized by fitter" (optionItemId = 0),
   // `color` / `leatherType` are the "Specify color" / "Specify leather" answers
   // for items flagged options_items.user_color / user_leather.
+  // `cloneNumber` is orders_info.clone_number: 0 for the first row of an option,
+  // 1, 2, … for the extra rows an option with options.extra_allowed > 0 may have
+  // (legacy shows those as "CANTLE Option (2)", "(3)", …).
   saddleOptions?: Array<{
     optionId: number;
     optionItemId: number;
+    cloneNumber?: number;
     custom?: string;
     color?: string;
     leatherType?: string;
@@ -2136,7 +2140,7 @@ export class EnrichedOrdersService {
               orderId,
               opt.optionId,
               opt.optionItemId,
-              0,
+              Number(opt.cloneNumber) || 0,
               opt.color || "",
               opt.leatherType || "",
               opt.custom || "",
@@ -2348,7 +2352,7 @@ export class EnrichedOrdersService {
               newOrderId,
               opt.optionId,
               opt.optionItemId,
-              0,
+              Number(opt.cloneNumber) || 0,
               opt.color || "",
               opt.leatherType || "",
               opt.custom || "",
