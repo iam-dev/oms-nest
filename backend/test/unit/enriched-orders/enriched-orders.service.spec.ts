@@ -742,7 +742,7 @@ describe("EnrichedOrdersService", () => {
       expect(sql).toContain("sl.leather_id = lt.id");
       expect(sql).toContain("sl.saddle_id = $1");
       expect(sql).toContain("sl.deleted = 0");
-      expect(sql).toContain("ORDER BY sl.sequence, lt.name");
+      expect(sql).toContain("ORDER BY sl.sequence, lt.sequence, lt.name");
     });
 
     it("should return every item, leather type and no optionLeathers when no saddle is chosen", async () => {

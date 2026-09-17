@@ -1567,7 +1567,7 @@ export class EnrichedOrdersService {
           FROM leather_types lt
           INNER JOIN saddle_leathers sl ON sl.leather_id = lt.id
           WHERE sl.saddle_id = $1 AND sl.deleted = 0 AND lt.deleted = 0
-          ORDER BY sl.sequence, lt.name
+          ORDER BY sl.sequence, lt.sequence, lt.name
         `,
             [saddleId],
           )
