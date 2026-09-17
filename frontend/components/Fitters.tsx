@@ -32,7 +32,6 @@ export default function Fitters() {
 
   // Use our hooks for filters and pagination
   const { filters, updateFilter } = useTableFilters<Record<string, string>>({});
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { pagination, setTotalItems, setPage } = usePagination(30, 1);
 
   // Use our data fetching hook
@@ -47,11 +46,20 @@ export default function Fitters() {
     page: pagination.currentPage,
     orderBy: 'id',
     extraParams: {
+      // The API defaults to 10 per page; ask for the size we display so the
+      // "Displaying results" range and page count line up with the rows.
+      limit: pagination.itemsPerPage,
       searchTerm,
       ...filters
     },
     autoFetch: true
   });
+
+  // usePagination clamps setPage() to its own page count, so feed it the
+  // server total or every NEXT/LAST click is silently clamped back to page 1.
+  useEffect(() => {
+    setTotalItems(totalItems);
+  }, [totalItems, setTotalItems]);
 
   
   // Handle filter changes
@@ -171,13 +179,7 @@ export default function Fitters() {
         onSearch={setSearchTerm}
         headerFilters={filters}
         onFilterChange={handleFilterChange}
-        pagination={{
-          currentPage: pagination.currentPage,
-          totalPages: Math.max(1, Math.ceil(totalItems / pagination.itemsPerPage)),
-          onPageChange: setPage,
-          totalItems: totalItems,
-          itemsPerPage: pagination.itemsPerPage,
-        }}
+        pagination={pagination}
         loading={loading}
         error={error}
         entityType="fitter"

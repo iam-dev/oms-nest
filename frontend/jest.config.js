@@ -9,6 +9,7 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@/components/(.*)$': '<rootDir>/components/$1',
+    '^@/hooks$': '<rootDir>/hooks',
     '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
     // Test utilities mapping - needs to come before the general utils pattern
     '^@/utils/AuthTestProvider$': '<rootDir>/__tests__/utils/AuthTestProvider',
