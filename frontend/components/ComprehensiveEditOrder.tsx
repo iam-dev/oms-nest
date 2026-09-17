@@ -25,6 +25,8 @@ import { logger } from '@/utils/logger';
 import { fetchOrderDetail, updateOrder, createOrderFromPayload, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
 import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
+import { CUSTOMIZED_BY_FITTER_ID, CUSTOMIZED_BY_FITTER_LABEL, specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
+import { OptionSlotRow } from '@/components/shared/OptionSlotRow';
 
 interface EditFormOptions {
   /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
@@ -42,20 +44,6 @@ interface EditFormOptions {
 
 // Leather option IDs - these use leather_types instead of options_items
 const LEATHER_OPTION_TYPE = 1;
-
-// Legacy sentinel: orders_info.option_item_id = 0 means "Customized by fitter",
-// with the fitter's free text stored in orders_info.custom.
-const CUSTOMIZED_BY_FITTER_ID = '0';
-const CUSTOMIZED_BY_FITTER_LABEL = 'Customized by fitter';
-
-// Which text boxes an option needs, derived from the selected item the same way
-// the legacy form does it: the sentinel item asks for free text, and items
-// flagged options_items.user_color / user_leather ask for a colour / leather.
-interface SpecInputs {
-  custom: boolean;
-  color: boolean;
-  leather: boolean;
-}
 
 interface ComprehensiveEditOrderProps {
   order?: {
@@ -625,27 +613,17 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     optionSelections[slotKey(optionId, clone)] ?? getOptionItemId(optionId, clone);
 
   const getSpecInputs = (optionId: number, selectedItemId: string, clone = 0): SpecInputs => {
-    if (selectedItemId === CUSTOMIZED_BY_FITTER_ID) {
-      return { custom: true, color: false, leather: false };
-    }
     const item = editOptions?.optionItems.find(
       i => i.optionId === optionId && String(i.id) === selectedItemId,
     );
-    if (item) {
-      // Legacy orders.js also shows the colour box when the item name mentions
-      // "color"/"Color" (case-sensitive), regardless of the user_color flag.
-      const nameAsksColor = item.name.includes('color') || item.name.includes('Color');
-      return { custom: false, color: !!item.userColor || nameAsksColor, leather: !!item.userLeather };
+    if (selectedItemId === CUSTOMIZED_BY_FITTER_ID || item) {
+      return specInputsForItem(selectedItemId, item);
     }
     // Item not in this saddle's list (e.g. an option no longer linked to the
     // saddle): keep whatever the saved row already carries rather than blanking it.
     const saved = findSavedSpec(optionId, clone);
     const isSavedItem = saved && String(saved.optionItemId) === selectedItemId;
-    return {
-      custom: false,
-      color: !!(isSavedItem && saved.color),
-      leather: !!(isSavedItem && saved.leatherType),
-    };
+    return { custom: false, color: !!(isSavedItem && saved.color), leather: !!(isSavedItem && saved.leatherType) };
   };
 
   // Option names whose required specification text is still empty
@@ -1021,11 +999,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     const slots = getSlots(opt.optionId);
                     const extraAllowed = opt.extraAllowed ?? 0;
                     const canAddClone = extraAllowed > 0 && slots.length - 1 < extraAllowed;
-                    const specInputs: Array<{ key: keyof SpecInputs; label: string; values: Record<string, string>; set: React.Dispatch<React.SetStateAction<Record<string, string>>> }> = [
-                      { key: 'custom', label: 'Please specify:', values: optionCustom, set: setOptionCustom },
-                      { key: 'color', label: 'Specify color:', values: optionColor, set: setOptionColor },
-                      { key: 'leather', label: 'Specify leathertype:', values: optionLeather, set: setOptionLeather },
-                    ];
 
                     return (
                       <div key={opt.optionId} className="space-y-2">
@@ -1037,74 +1010,26 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                           const selectedItemId = getSelectedItemId(opt.optionId, clone);
                           const inputs = getSpecInputs(opt.optionId, selectedItemId, clone);
                           const isLastSlot = slotIdx === slots.length - 1;
-
                           return (
-                            <div key={key} className="grid grid-cols-[160px_1fr] gap-2 items-start">
-                              <Label className="text-sm font-medium pt-2">
-                                {label}: <span className="text-red-500">*</span>
-                              </Label>
-                              <div className="space-y-1">
-                                <div className="flex items-start gap-1">
-                                  <div className="flex-1">
-                                    <Select
-                                      value={selectedItemId}
-                                      onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
-                                    >
-                                      <SelectTrigger className="h-9">
-                                        <SelectValue placeholder={currentDisplay || 'Select...'} />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {slotItems.map(item => (
-                                          <SelectItem key={item.id} value={String(item.id)}>
-                                            {item.name}
-                                          </SelectItem>
-                                        ))}
-                                        <SelectItem value={CUSTOMIZED_BY_FITTER_ID}>
-                                          {CUSTOMIZED_BY_FITTER_LABEL}
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  {clone > 0 && (
-                                    <button
-                                      type="button"
-                                      aria-label={`Remove ${label}`}
-                                      className="h-9 px-2 text-gray-500 hover:text-red-700"
-                                      onClick={() => removeClone(opt.optionId, clone)}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </div>
-                                {/* Required text boxes for the selected item */}
-                                {specInputs.filter(si => inputs[si.key]).map(si => {
-                                  const inputId = `spec-${si.key}-${opt.optionId}-${clone}`;
-                                  return (
-                                    <div key={si.key} className="ml-4 p-2 bg-gray-50 rounded">
-                                      <div className="flex items-center gap-2">
-                                        <Label htmlFor={inputId} className="text-xs font-medium text-gray-600 whitespace-nowrap">{si.label}</Label>
-                                        <span className="text-red-500">*</span>
-                                        <Input
-                                          id={inputId}
-                                          className="h-8 text-sm flex-1"
-                                          value={si.values[key] ?? ''}
-                                          onChange={(e) => si.set(prev => ({ ...prev, [key]: e.target.value }))}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                                {isLastSlot && canAddClone && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-[#8B0000] hover:underline"
-                                    onClick={() => addClone(opt.optionId)}
-                                  >
-                                    + Add another {opt.optionName}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                            <OptionSlotRow
+                              key={key}
+                              label={label}
+                              selectedItemId={selectedItemId}
+                              placeholder={currentDisplay || 'Select...'}
+                              items={slotItems}
+                              inputs={inputs}
+                              custom={optionCustom[key] ?? ''}
+                              color={optionColor[key] ?? ''}
+                              leather={optionLeather[key] ?? ''}
+                              onSelect={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
+                              onCustomChange={(v) => setOptionCustom(prev => ({ ...prev, [key]: v }))}
+                              onColorChange={(v) => setOptionColor(prev => ({ ...prev, [key]: v }))}
+                              onLeatherChange={(v) => setOptionLeather(prev => ({ ...prev, [key]: v }))}
+                              onRemove={clone > 0 ? () => removeClone(opt.optionId, clone) : undefined}
+                              onAddClone={isLastSlot && canAddClone ? () => addClone(opt.optionId) : undefined}
+                              addCloneLabel={`+ Add another ${opt.optionName}`}
+                              inputIdPrefix={`spec-${opt.optionId}-${clone}`}
+                            />
                           );
                         })}
                       </div>
