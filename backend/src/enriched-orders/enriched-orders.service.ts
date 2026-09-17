@@ -2073,8 +2073,10 @@ export class EnrichedOrdersService {
       }
 
       // Legacy re-stamps currency/factory whenever the fitter or the saddle changes.
-      const fitterChanged = dto.fitterId !== undefined && dto.fitterId !== existingFitterId;
-      const saddleChanged = dto.saddleId !== undefined && dto.saddleId !== existingSaddleId;
+      const fitterChanged =
+        dto.fitterId !== undefined && dto.fitterId !== existingFitterId;
+      const saddleChanged =
+        dto.saddleId !== undefined && dto.saddleId !== existingSaddleId;
       let stamped: { currency: number; factoryId: number } | null = null;
       if (fitterChanged || saddleChanged) {
         stamped = await this.resolveCurrencyAndFactory(
