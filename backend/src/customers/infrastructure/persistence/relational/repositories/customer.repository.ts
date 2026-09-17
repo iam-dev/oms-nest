@@ -177,7 +177,7 @@ export class CustomerRepository implements ICustomerRepository {
     page: number;
     limit: number;
     fitterId?: number;
-    orderFitterId?: number;
+    scopedFitterId?: number;
     name?: string;
     email?: string;
     country?: string;
@@ -189,7 +189,7 @@ export class CustomerRepository implements ICustomerRepository {
       page,
       limit,
       fitterId,
-      orderFitterId,
+      scopedFitterId,
       name,
       email,
       country,
@@ -227,10 +227,13 @@ export class CustomerRepository implements ICustomerRepository {
       queryBuilder.andWhere("customer.fitter_id = :fitterId", { fitterId });
     }
 
-    if (orderFitterId !== undefined) {
+    // Fitter scope: customers assigned to the fitter OR who have an order with
+    // them. Scoping on orders alone hides customers who don't have an order yet,
+    // so a fitter could never find a new customer to put on their first order.
+    if (scopedFitterId !== undefined) {
       queryBuilder.andWhere(
-        "customer.id IN (SELECT DISTINCT customer_id FROM orders WHERE fitter_id = :orderFitterId AND deleted_at IS NULL)",
-        { orderFitterId },
+        "(customer.fitter_id = :scopedFitterId OR customer.id IN (SELECT DISTINCT customer_id FROM orders WHERE fitter_id = :scopedFitterId AND deleted_at IS NULL))",
+        { scopedFitterId },
       );
     }
 
