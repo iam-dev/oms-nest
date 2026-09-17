@@ -86,7 +86,9 @@ jest.mock('@/components/ui/select', () => {
 });
 
 jest.mock('@/components/ui/checkbox', () => ({
-  Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
+  Checkbox: ({ onCheckedChange, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { onCheckedChange?: (checked: boolean) => void }) => (
+    <input type="checkbox" {...props} onChange={(e) => onCheckedChange?.(e.target.checked)} />
+  ),
 }));
 
 jest.mock('@/components/ui/textarea', () => ({
@@ -2012,6 +2014,65 @@ describe('ComprehensiveEditOrder component', () => {
       await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
       const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
       expect(payload.shipCountry).toBe('');
+    });
+
+    describe('extras (options.type = 2)', () => {
+      const EXTRA_REFLOCK = 23;
+      const EXTRA_GIRTH = 28;
+      const withExtras = {
+        ...parityOptions,
+        options: [
+          ...parityOptions.options,
+          { optionId: EXTRA_REFLOCK, optionName: 'Complete Re-Flock', sequence: 100, group: null, type: 2, price1: 250, extraAllowed: 0 },
+          { optionId: EXTRA_GIRTH, optionName: 'Icon Flex Air Girth', sequence: 101, group: null, type: 2, price1: 259, extraAllowed: 0 },
+        ],
+      };
+      beforeEach(() => {
+        (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(withExtras) });
+        (fetchOrderDetail as jest.Mock).mockResolvedValue({
+          ...mockOrderDetail,
+          // parityOptions' two regular options (Seat Shape, Flap Length) are
+          // required; save them too so navigateToStep(4) below isn't blocked
+          // by unrelated "missing required field" validation on step 1.
+          saddleSpecs: [
+            { optionId: OPTION_SEAT_SHAPE, optionName: 'AVIAR Seat Shape', optionItemId: 6150, cloneNumber: 0, itemName: 'X-SLEEK(spacer fabric)', leatherName: null, custom: '', color: '', leatherType: '', displayValue: '' },
+            { optionId: OPTION_FLAP_LENGTH, optionName: 'Flap Length', optionItemId: 69, cloneNumber: 0, itemName: '16', leatherName: null, custom: '', color: '', leatherType: '', displayValue: '' },
+            { optionId: EXTRA_REFLOCK, optionName: 'Complete Re-Flock', optionItemId: 0, cloneNumber: 0, itemName: null, leatherName: null, custom: '', color: '', leatherType: '', displayValue: '' },
+          ],
+        });
+        (updateOrder as jest.Mock).mockResolvedValue({ success: true });
+      });
+
+      it('lists the model\'s extras as checkboxes, plain labels, saved ones ticked', async () => {
+        await renderAndWaitForLoad();
+        expect(screen.getByText('Extras')).toBeInTheDocument();
+        expect(screen.getByLabelText('Complete Re-Flock')).toBeChecked();
+        expect(screen.getByLabelText('Icon Flex Air Girth')).not.toBeChecked();
+        expect(screen.queryByText(/\+\$/)).not.toBeInTheDocument();
+      });
+
+      it('does not render extras as option rows', async () => {
+        await renderAndWaitForLoad();
+        expect(screen.queryByText('Complete Re-Flock:')).not.toBeInTheDocument();
+      });
+
+      it('saves ticked extras as option_item_id 0 rows and drops unticked ones', async () => {
+        await renderAndWaitForLoad();
+        fireEvent.click(screen.getByLabelText('Complete Re-Flock')); // untick
+        fireEvent.click(screen.getByLabelText('Icon Flex Air Girth')); // tick
+        await navigateToStep(4);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /update order/i })); });
+        const payload = (updateOrder as jest.Mock).mock.calls[0][1];
+        expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: EXTRA_GIRTH, optionItemId: 0 }));
+        expect(payload.saddleOptions).not.toContainEqual(expect.objectContaining({ optionId: EXTRA_REFLOCK }));
+      });
+
+      it('shows ticked extras in the preview', async () => {
+        await renderAndWaitForLoad();
+        await navigateToStep(4);
+        expect(screen.getByText('Extras:')).toBeInTheDocument();
+        expect(screen.getByText('Complete Re-Flock')).toBeInTheDocument();
+      });
     });
   });
 });

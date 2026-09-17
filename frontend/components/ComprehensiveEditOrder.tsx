@@ -85,6 +85,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Extra rows open per option, e.g. { 4: [1, 2] } = "CANTLE Option (2)" and "(3)".
   // Numbers are UI identity only; they are renumbered 0..n-1 on save.
   const [optionClones, setOptionClones] = useState<Record<number, number[]>>({});
+  // Ticked extras (options.type = 2), keyed by optionId; saved as an
+  // orders_info row with option_item_id = 0, like legacy.
+  const [selectedExtras, setSelectedExtras] = useState<Record<number, boolean>>({});
 
   // Form state - pricing
   const [priceSaddle, setPriceSaddle] = useState('0.00');
@@ -186,6 +189,10 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       const colors: Record<string, string> = {};
       const leathers: Record<string, string> = {};
       const clones: Record<number, number[]> = {};
+      // A saved row with optionItemId 0 is either an extra (options.type = 2,
+      // never has custom text) or a normal option set to "Customized by
+      // fitter" (carries custom text). Only the former belongs here.
+      const extras: Record<number, boolean> = {};
       for (const spec of detail.saddleSpecs) {
         const clone = spec.cloneNumber ?? 0;
         const key = slotKey(spec.optionId, clone);
@@ -197,12 +204,16 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
           if (!clones[spec.optionId]) clones[spec.optionId] = [];
           clones[spec.optionId].push(clone);
         }
+        if (spec.optionItemId === 0 && !spec.custom) {
+          extras[spec.optionId] = true;
+        }
       }
       setOptionSelections(selections);
       setOptionCustom(customs);
       setOptionColor(colors);
       setOptionLeather(leathers);
       setOptionClones(clones);
+      setSelectedExtras(extras);
 
       // Pricing
       setPriceSaddle(String(detail.priceSaddle ?? '0.00'));
@@ -367,6 +378,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
           allOptionIds.add(slotOptionId(key));
         }
         for (const optId of allOptionIds) {
+          if (isExtraOption(optId)) continue;
           let nextClone = 0;
           for (const slot of getSlots(optId)) {
             const key = slotKey(optId, slot);
@@ -387,6 +399,11 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
               color: inputs.color ? (optionColor[key] ?? '') : '',
               leatherType: inputs.leather ? (optionLeather[key] ?? '') : '',
             });
+          }
+        }
+        for (const opt of extraOptions) {
+          if (selectedExtras[opt.optionId]) {
+            saddleOptions.push({ optionId: opt.optionId, optionItemId: 0, cloneNumber: 0, custom: '', color: '', leatherType: '' });
           }
         }
       }
@@ -614,7 +631,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const getMissingSpecifications = (): string[] => {
     const missing: string[] = [];
     const blank = (v?: string) => !v || v.trim() === '';
-    for (const opt of sortedOptions) {
+    for (const opt of regularOptions) {
       for (const clone of getSlots(opt.optionId)) {
         const selectedItemId = getSelectedItemId(opt.optionId, clone);
         if (!selectedItemId) continue;
@@ -649,7 +666,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     if (blank(saddleId)) missing.push('Brand & Model');
     if (blank(leatherId)) missing.push('Leathertype');
     // Option rows, including extra rows the user opened but never filled
-    for (const opt of sortedOptions) {
+    for (const opt of regularOptions) {
       if (!getOptionItemId(opt.optionId) && getItemsForOption(opt.optionId).length === 0) continue;
       for (const clone of getSlots(opt.optionId)) {
         if (blank(getSelectedItemId(opt.optionId, clone))) {
@@ -702,6 +719,13 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
   // Sorted options by sequence
   const sortedOptions = editOptions?.options?.sort((a, b) => a.sequence - b.sequence) || [];
+
+  // Extras (options.type = 2, e.g. "Complete Re-Flock") are shown as a plain
+  // checkbox list, not an option row: legacy has no items for them.
+  const EXTRA_OPTION_TYPE = 2;
+  const extraOptions = sortedOptions.filter(o => o.type === EXTRA_OPTION_TYPE);
+  const regularOptions = sortedOptions.filter(o => o.type !== EXTRA_OPTION_TYPE);
+  const isExtraOption = (optionId: number) => extraOptions.some(o => o.optionId === optionId);
 
   // Currency display
   // The order's stored currency wins; a new/duplicate order takes the fitter's.
@@ -980,7 +1004,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
                   {/* Dynamic saddle options from orders_info; an option with
                       extra_allowed > 0 may have several rows ("CANTLE Option (2)") */}
-                  {sortedOptions.map(opt => {
+                  {regularOptions.map(opt => {
                     const items = getItemsForOption(opt.optionId);
                     // Skip options that are not in the order's specs and have no items
                     if (!getOptionItemId(opt.optionId) && items.length === 0) return null;
@@ -1024,6 +1048,27 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       </div>
                     );
                   })}
+
+                  {extraOptions.length > 0 && (
+                    <div className="border-t border-gray-200 mt-4 pt-3">
+                      <h4 className="text-sm font-semibold mb-2">Extras</h4>
+                      <div className="space-y-1">
+                        {extraOptions.map(extra => {
+                          const id = `extra-${extra.optionId}`;
+                          return (
+                            <div key={extra.optionId} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={id}
+                                checked={!!selectedExtras[extra.optionId]}
+                                onCheckedChange={(checked) => setSelectedExtras(prev => ({ ...prev, [extra.optionId]: !!checked }))}
+                              />
+                              <label htmlFor={id} className="text-sm">{extra.optionName}</label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Special Notes */}
                   <div className="border-t border-gray-200 mt-6 pt-4">
@@ -1410,7 +1455,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       <dt className="text-gray-500">Fitter:</dt>
                       <dd className="font-medium">{editOptions?.fitters?.find(f => String(f.id) === fitterId)?.fullName || orderDetail?.fitterName || '—'}</dd>
                     </div>
-                    {sortedOptions.flatMap(opt => getSlots(opt.optionId).map(clone => {
+                    {regularOptions.flatMap(opt => getSlots(opt.optionId).map(clone => {
                       const display = getSpecSummary(opt.optionId, clone);
                       if (!display) return null;
                       return (
@@ -1420,6 +1465,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                         </div>
                       );
                     }))}
+                    {extraOptions.some(e => selectedExtras[e.optionId]) && (
+                      <div className="grid grid-cols-[130px_1fr]">
+                        <dt className="text-gray-500">Extras:</dt>
+                        <dd className="font-medium">{extraOptions.filter(e => selectedExtras[e.optionId]).map(e => <div key={e.optionId}>{e.optionName}</div>)}</dd>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {isStock && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Stock</span>}
                       {isDemo && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Demo</span>}
