@@ -1965,6 +1965,35 @@ export class EnrichedOrdersService {
   }
 
   /**
+   * Legacy stamps every order with the fitter's currency and the saddle's
+   * factory for that currency's region (fitters.currency 1 USD … 7 DE, see
+   * frontend FITTER_CURRENCIES). Returns 0/0 when the fitter is unknown.
+   */
+  private async resolveCurrencyAndFactory(
+    queryRunner: QueryRunner,
+    fitterId?: number,
+    saddleId?: number,
+  ): Promise<{ currency: number; factoryId: number }> {
+    if (!fitterId) return { currency: 0, factoryId: 0 };
+    const rows = await queryRunner.query(
+      `SELECT f.currency,
+         CASE f.currency
+           WHEN 1 THEN s.factory_us WHEN 2 THEN s.factory_eu WHEN 3 THEN s.factory_gb
+           WHEN 4 THEN s.factory_ca WHEN 5 THEN s.factory_aud WHEN 6 THEN s.factory_nl
+           WHEN 7 THEN s.factory_de ELSE 0 END AS "factoryId"
+       FROM fitters f
+       LEFT JOIN saddles s ON s.id = $2
+       WHERE f.id = $1`,
+      [fitterId, saddleId ?? 0],
+    );
+    const row = rows?.[0];
+    return {
+      currency: Number(row?.currency) || 0,
+      factoryId: Number(row?.factoryId) || 0,
+    };
+  }
+
+  /**
    * Reject attaching an order to a soft-deleted customer. Customers have no
    * login account, so unlike fitters there is no "blocked" state: deleted is
    * the only kind of inactive. The customer search already hides deleted rows;
@@ -2006,7 +2035,7 @@ export class EnrichedOrdersService {
 
       // Verify order exists and get old status for audit
       const existing = await queryRunner.query(
-        `SELECT order_status, fitter_id, customer_id FROM orders WHERE id = $1`,
+        `SELECT order_status, fitter_id, customer_id, saddle_id FROM orders WHERE id = $1`,
         [orderId],
       );
       if (!existing || existing.length === 0) {
@@ -2015,6 +2044,7 @@ export class EnrichedOrdersService {
       const oldStatusId = existing[0].order_status;
       const existingFitterId = existing[0].fitter_id;
       const existingCustomerId = existing[0].customer_id;
+      const existingSaddleId = existing[0].saddle_id;
 
       // Fitter role-based status restriction
       if (
@@ -2040,6 +2070,18 @@ export class EnrichedOrdersService {
       // deleted keeps that customer; only switching to another one is checked.
       if (dto.customerId && dto.customerId !== existingCustomerId) {
         await this.assertCustomerAssignable(queryRunner, dto.customerId);
+      }
+
+      // Legacy re-stamps currency/factory whenever the fitter or the saddle changes.
+      const fitterChanged = dto.fitterId !== undefined && dto.fitterId !== existingFitterId;
+      const saddleChanged = dto.saddleId !== undefined && dto.saddleId !== existingSaddleId;
+      let stamped: { currency: number; factoryId: number } | null = null;
+      if (fitterChanged || saddleChanged) {
+        stamped = await this.resolveCurrencyAndFactory(
+          queryRunner,
+          dto.fitterId ?? existingFitterId,
+          dto.saddleId ?? existingSaddleId,
+        );
       }
 
       const resolveStatusId = async (name: string): Promise<number> => {
@@ -2149,6 +2191,11 @@ export class EnrichedOrdersService {
 
       // Order reference
       addField("fitter_reference", dto.orderReference);
+
+      if (stamped && stamped.currency > 0) {
+        addField("currency", stamped.currency);
+        addField("factory_id", stamped.factoryId);
+      }
 
       // Status
       addField("order_status", statusId);
@@ -2326,10 +2373,17 @@ export class EnrichedOrdersService {
           `SELECT id FROM statuses WHERE name = $1`,
           [dto.orderStatus],
         );
-        if (statusResult && statusResult.length > 0) {
-          statusId = statusResult[0].id;
+        if (!statusResult || statusResult.length === 0) {
+          throw new BadRequestException(`Unknown status: ${dto.orderStatus}`);
         }
+        statusId = statusResult[0].id;
       }
+
+      const { currency, factoryId } = await this.resolveCurrencyAndFactory(
+        queryRunner,
+        dto.fitterId,
+        dto.saddleId,
+      );
 
       // Convert dollar prices to cents
       const toCents = (val: number | undefined): number =>
@@ -2373,7 +2427,7 @@ export class EnrichedOrdersService {
           dto.fitterId || 0,
           dto.saddleId || 0,
           dto.leatherId || 0,
-          0, // factory_id
+          factoryId,
           dto.fitterStock ? 1 : 0,
           dto.customerId || 0,
           dto.orderReference || "",
@@ -2416,8 +2470,8 @@ export class EnrichedOrdersService {
           dto.demo ? 1 : 0,
           dto.sponsored ? 1 : 0,
           dto.rushed ? 1 : 0,
-          2, // oms_version
-          0, // currency (will use fitter's currency)
+          3, // oms_version: legacy's current writer
+          currency,
           "", // order_data
           dto.repairSourceOrderId || null,
           dto.seatSizes && dto.seatSizes.length > 0
