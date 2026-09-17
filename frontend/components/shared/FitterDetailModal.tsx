@@ -4,6 +4,7 @@ import React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Fitter, FITTER_CURRENCIES } from '@/services/fitters';
 import { Button } from '@/components/ui/button';
+import { formatLastLogin } from '@/utils/formatLastLogin';
 
 // Helper function to convert country codes to names
 const getCountryName = (countryCode?: string): string => {
@@ -174,7 +175,7 @@ export function FitterDetailModal({ fitter, isOpen, onClose, onEdit }: FitterDet
             <div>
               <label className="block font-semibold text-sm text-gray-600 mb-1">Last Login</label>
               <p className="text-sm text-gray-900 p-2 bg-gray-50 rounded border">
-                {new Date(fitter.lastLogin).toLocaleDateString()} at {new Date(fitter.lastLogin).toLocaleTimeString()}
+                {formatLastLogin(fitter.lastLogin)}
               </p>
             </div>
           )}

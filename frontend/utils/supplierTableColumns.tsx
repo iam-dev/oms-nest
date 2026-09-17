@@ -1,6 +1,7 @@
 import React from 'react';
 import { TableHeaderFilter } from '../components/shared/TableHeaderFilter';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { formatLastLogin } from '@/utils/formatLastLogin';
 
 export type SupplierHeaderFilters = Record<string, string>;
 export type SetSupplierHeaderFilters = (key: string, value: string) => void;
@@ -95,7 +96,7 @@ export function getSupplierTableColumns(headerFilters: SupplierHeaderFilters, se
           entityType="factory"
         />
       ),
-      render: (v: unknown) => (v != null ? String(v) : 'Never'),
+      render: (v: unknown) => formatLastLogin(v),
     },
   ];
 }
