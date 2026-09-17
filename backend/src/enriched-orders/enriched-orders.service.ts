@@ -1555,6 +1555,7 @@ export class EnrichedOrdersService {
       //   saddle_options_items (option, 0, leather)-> leather ticked on a leather option
       // With a saddleId the dropdowns offer only what is ticked; an enabled
       // option with no ticks offers nothing rather than the full list.
+      //   NB: leather dropdowns ignore the option_id of the leather ticks (see optionLeathers).
       const leatherTypes = saddleId
         ? await queryRunner.query(
             `
@@ -1602,14 +1603,26 @@ export class EnrichedOrdersService {
           [saddleId],
         );
 
+        // Legacy's dropdown for a leather option (type 1) is NOT the leathers
+        // ticked under that option. Legacy joins SaddleOptionsItems on saddle +
+        // leather only, so it offers every leather ticked anywhere on the saddle,
+        // as long as the leather is an item of the option. Reproduced 401/401
+        // against production on 2026-09-17 — keep it this way.
         optionLeathers = await queryRunner.query(
           `
-          SELECT DISTINCT soi.option_id as "optionId", lt.id as "leatherId", lt.name,
-                 soi.sequence
-          FROM saddle_options_items soi
-          INNER JOIN leather_types lt ON soi.leather_id = lt.id
-          WHERE soi.saddle_id = $1 AND soi.deleted = 0 AND lt.deleted = 0
-          ORDER BY soi.option_id, soi.sequence, lt.name
+          SELECT DISTINCT o.id as "optionId", lt.id as "leatherId", lt.name, lt.sequence
+          FROM options o
+          INNER JOIN saddle_options_items en
+            ON en.saddle_id = $1 AND en.option_id = o.id AND en.deleted = 0
+          INNER JOIN options_items oi
+            ON oi.option_id = o.id AND oi.leather_id > 0 AND oi.deleted = 0
+          INNER JOIN leather_types lt ON lt.id = oi.leather_id AND lt.deleted = 0
+          WHERE o.type = 1
+            AND EXISTS (
+              SELECT 1 FROM saddle_options_items t
+              WHERE t.saddle_id = $1 AND t.leather_id = lt.id AND t.deleted = 0
+            )
+          ORDER BY o.id, lt.sequence, lt.name
         `,
           [saddleId],
         );

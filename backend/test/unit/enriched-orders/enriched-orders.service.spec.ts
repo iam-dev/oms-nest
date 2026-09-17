@@ -665,24 +665,34 @@ describe("EnrichedOrdersService", () => {
       expect(sql).toContain("ORDER BY oi.option_id, oi.sequence, oi.name");
     });
 
-    it("should return the leathers ticked per leather option as optionLeathers", async () => {
+    it("should offer a leather option every leather ticked anywhere on the saddle that is an item of that option (legacy rule)", async () => {
+      // Legacy joins SaddleOptionsItems on saddle + leather only, so a leather
+      // ticked under Skirt also shows under Seat Leather. Verified 401/401
+      // against production on 2026-09-17.
       queryRunner.query.mockImplementation((sql: string) =>
         Promise.resolve(
-          sql.includes("soi.leather_id = lt.id")
-            ? [{ optionId: 11, leatherId: 48, name: "ASBLV" }]
+          sql.includes("t.leather_id = lt.id")
+            ? [{ optionId: 11, leatherId: 48, name: "ASBLV", sequence: 1 }]
             : [],
         ),
       );
 
       const result = await service.getEditFormOptions(100);
 
-      const sql = sqlContaining("soi.leather_id = lt.id");
-      expect(sql).toContain("saddle_options_items soi");
-      expect(sql).toContain("soi.saddle_id = $1");
-      expect(sql).toContain("soi.deleted = 0");
-      expect(sql).toContain("lt.deleted = 0");
+      const sql = sqlContaining("t.leather_id = lt.id");
+      // option must be enabled for the saddle
+      expect(sql).toContain("en.saddle_id = $1 AND en.option_id = o.id");
+      expect(sql).toContain("en.deleted = 0");
+      // leather must be an item of the option
+      expect(sql).toContain("oi.option_id = o.id AND oi.leather_id > 0 AND oi.deleted = 0");
+      expect(sql).toContain("lt.id = oi.leather_id AND lt.deleted = 0");
+      // ticked anywhere on the saddle, regardless of option
+      expect(sql).toContain("WHERE t.saddle_id = $1 AND t.leather_id = lt.id AND t.deleted = 0");
+      expect(sql).not.toContain("t.option_id");
+      expect(sql).toContain("o.type = 1");
+      expect(sql).toContain("ORDER BY o.id, lt.sequence, lt.name");
       expect(result.optionLeathers).toEqual([
-        { optionId: 11, leatherId: 48, name: "ASBLV" },
+        { optionId: 11, leatherId: 48, name: "ASBLV", sequence: 1 },
       ]);
     });
 
