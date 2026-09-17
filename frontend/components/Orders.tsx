@@ -296,11 +296,10 @@ export default function Orders() {
         )}
       </Dialog>
 
-      {/* Edit order dialog */}
-      <Dialog open={isEditOpen} onOpenChange={() => {
-        setIsEditOpen(false);
-        setOrderDataError(null);
-      }}>
+      {/* Edit order dialog.  The × / Escape / overlay paths arrive here via
+          onOpenChange and must refresh the list like Cancel does: the editor's
+          "Change orderstatus" has already been persisted by then. */}
+      <Dialog open={isEditOpen} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>
         {/* Mount the editor only while open: Radix keeps non-Content children
             mounted on close, which would preserve unsaved wizard edits after Cancel. */}
         {isEditOpen && (

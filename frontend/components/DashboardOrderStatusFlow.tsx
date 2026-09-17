@@ -32,7 +32,6 @@ const STATUS_GROUPS = [
   ['INVENTORY', 'ON_HOLD', 'ON_TRIAL', 'COMPLETED_SALE'],
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const STATUS_LABELS: Record<string, string> = {
   UNORDERED: 'Unordered',
   ORDERED: 'Ordered/Changed',
@@ -49,20 +48,40 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 // Map the status keys to the actual database values for filtering
-// These MUST match the exact names in the statuses table
+// These MUST match the exact names in the statuses table.  A card that covers
+// several statuses lists them comma-separated; the enriched-orders endpoint
+// splits on the comma and ORs the names.
 const STATUS_FILTER_MAPPING: Record<string, string> = {
   UNORDERED: 'Unordered',
-  ORDERED: 'Ordered',
+  ORDERED: 'Ordered,Changed',
   APPROVED: 'Approved',
   IN_PRODUCTION_P1: 'In Production P1',
   IN_PRODUCTION_P2: 'In Production P2',
   IN_PRODUCTION_P3: 'In Production P3',
   SHIPPED_TO_STOCK_OWNER: 'Shipped to Fitter',
   SHIPPED_TO_CUSTOMER: 'Shipped to Customer',
-  INVENTORY: 'Inventory',
+  INVENTORY: 'Inventory Aiken,Inventory UK,Inventory HOLLAND',
   ON_HOLD: 'On hold',
   ON_TRIAL: 'On trial',
   COMPLETED_SALE: 'Completed sale',
+};
+
+// Which /orders/stats statusCounts keys feed each card.  The backend already
+// folds Ordered + Changed into ordered_changed, but reports inventory per
+// location, so the Inventory card has to add its three keys up itself.
+const STATUS_COUNT_KEYS: Record<string, string[]> = {
+  UNORDERED: ['unordered'],
+  ORDERED: ['ordered_changed'],
+  APPROVED: ['approved'],
+  IN_PRODUCTION_P1: ['in_production_p1'],
+  IN_PRODUCTION_P2: ['in_production_p2'],
+  IN_PRODUCTION_P3: ['in_production_p3'],
+  SHIPPED_TO_STOCK_OWNER: ['shipped_to_fitter'],
+  SHIPPED_TO_CUSTOMER: ['shipped_to_customer'],
+  INVENTORY: ['inventory_aiken', 'inventory_uk', 'inventory_holland'],
+  ON_HOLD: ['on_hold'],
+  ON_TRIAL: ['on_trial'],
+  COMPLETED_SALE: ['completed_sale'],
 };
 
 export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders, selectedStatus, refreshKey = 0 }: DashboardOrderStatusFlowProps) {
@@ -86,28 +105,12 @@ export default function DashboardOrderStatusFlow({ onStatusClick, onTotalOrders,
         const statusCounts = data.statusCounts || {};
         const statusObj: Record<string, Status> = {};
 
-        // Map the actual status counts from backend to our display format
-        const statusMapping = {
-          'unordered': { key: 'UNORDERED', label: 'Unordered' },
-          'ordered_changed': { key: 'ORDERED', label: 'Ordered/Changed' },
-          'approved': { key: 'APPROVED', label: 'Approved' },
-          'in_production_p1': { key: 'IN_PRODUCTION_P1', label: 'In Production P1' },
-          'in_production_p2': { key: 'IN_PRODUCTION_P2', label: 'In Production P2' },
-          'in_production_p3': { key: 'IN_PRODUCTION_P3', label: 'In Production P3' },
-          'shipped_to_fitter': { key: 'SHIPPED_TO_STOCK_OWNER', label: 'Shipped to Fitter' },
-          'shipped_to_customer': { key: 'SHIPPED_TO_CUSTOMER', label: 'Shipped to Customer' },
-          'inventory': { key: 'INVENTORY', label: 'Inventory' },
-          'on_hold': { key: 'ON_HOLD', label: 'On hold' },
-          'on_trial': { key: 'ON_TRIAL', label: 'On trial' },
-          'completed_sale': { key: 'COMPLETED_SALE', label: 'Completed sale' }
-        };
-
         // Build status object with actual counts
-        Object.entries(statusMapping).forEach(([dbStatus, config]) => {
-          const count = statusCounts[dbStatus] || 0;
-          statusObj[config.key] = {
-            key: config.key,
-            label: config.label,
+        Object.entries(STATUS_COUNT_KEYS).forEach(([key, countKeys]) => {
+          const count = countKeys.reduce((sum, k) => sum + (Number(statusCounts[k]) || 0), 0);
+          statusObj[key] = {
+            key,
+            label: STATUS_LABELS[key],
             count,
             color: '#7b2326'
           };

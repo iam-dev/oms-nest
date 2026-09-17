@@ -340,6 +340,24 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
     }
   };
 
+  // Single exit for each nested dialog, shared by the child's own close
+  // buttons and by Radix's onOpenChange (×, Escape, overlay click).
+  const closeEditor = () => {
+    setIsEditOpen(false);
+    onOrderChanged?.();
+  };
+
+  const closeDuplicate = () => {
+    setIsDuplicateOpen(false);
+    setDraftOrderId(null);
+    onOrderChanged?.();
+  };
+
+  const closeRepair = () => {
+    setIsRepairOpen(false);
+    onOrderChanged?.();
+  };
+
   const handleBulkDuplicate = async () => {
     if (bulkDuplicateCount < 1 || bulkDuplicateCount > 50) return;
     try {
@@ -834,45 +852,38 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
       </DialogContent>
 
       {/* Mount the editor only while open: Radix keeps non-Content children
-          mounted on close, which would preserve unsaved wizard edits after Cancel. */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          mounted on close, which would preserve unsaved wizard edits after Cancel.
+          Every close path (Cancel, Update Order, the × button, Escape, overlay
+          click) goes through closeEditor: the editor's "Change orderstatus" and
+          "Save as Draft" write to the server while it stays open, so a dismiss
+          must report the change too or this panel keeps its pre-edit status. */}
+      <Dialog open={isEditOpen} onOpenChange={(open) => { if (!open) closeEditor(); }}>
         {isEditOpen && (
           <ComprehensiveEditOrder
             order={{ id: String(orderId), orderId: Number(displayOrderId) }}
-            onClose={() => {
-              setIsEditOpen(false);
-              onOrderChanged?.();
-            }}
+            onClose={closeEditor}
           />
         )}
       </Dialog>
 
-      <Dialog open={isDuplicateOpen} onOpenChange={(open) => {
-        setIsDuplicateOpen(open);
-        if (!open) setDraftOrderId(null);
-      }}>
+      {/* Same rule: the draft already exists once this opens, so a dismiss must
+          still refresh the host or the new order stays out of the list. */}
+      <Dialog open={isDuplicateOpen} onOpenChange={(open) => { if (!open) closeDuplicate(); }}>
         {draftOrderId && (
           <ComprehensiveEditOrder
             order={{ id: String(orderId), orderId: Number(displayOrderId) }}
             isDuplicate={true}
             draftOrderId={draftOrderId}
-            onClose={() => {
-              setIsDuplicateOpen(false);
-              setDraftOrderId(null);
-              onOrderChanged?.();
-            }}
+            onClose={closeDuplicate}
           />
         )}
       </Dialog>
 
-      <Dialog open={isRepairOpen} onOpenChange={setIsRepairOpen}>
+      <Dialog open={isRepairOpen} onOpenChange={(open) => { if (!open) closeRepair(); }}>
         <CreateRepairDialog
           sourceOrderId={orderId}
           sourceDisplayOrderId={Number(displayOrderId)}
-          onClose={() => {
-            setIsRepairOpen(false);
-            onOrderChanged?.();
-          }}
+          onClose={closeRepair}
         />
       </Dialog>
 

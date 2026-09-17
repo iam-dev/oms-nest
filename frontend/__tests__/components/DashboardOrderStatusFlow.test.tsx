@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import DashboardOrderStatusFlow from '@/components/DashboardOrderStatusFlow';
 import * as apiModule from '@/services/api';
 
@@ -49,6 +49,38 @@ describe('DashboardOrderStatusFlow', () => {
     expect(row).toHaveClass('md:grid-cols-2');
     // Labels must never wrap, or a card grows taller than its row slot.
     expect(screen.getByText('Approved').closest('[data-status-card]')).toHaveStyle({ whiteSpace: 'nowrap' });
+  });
+
+  // The backend reports inventory per location (inventory_aiken / _uk /
+  // _holland) and folds Ordered + Changed into ordered_changed.  The Inventory
+  // card read a non-existent `inventory` key, so it always showed 0 and its
+  // click filtered on the non-existent status "Inventory"; the Ordered/Changed
+  // card counted both statuses but filtered only "Ordered".
+  it('sums the per-location inventory counts and filters on all three statuses', async () => {
+    mockFetchOrderStatusStats.mockResolvedValue({
+      totalOrders: 6,
+      statusCounts: { inventory_aiken: 1, inventory_uk: 2, inventory_holland: 3 },
+    });
+    const onStatusClick = jest.fn();
+    render(<DashboardOrderStatusFlow onStatusClick={onStatusClick} />);
+
+    const card = await screen.findByText('Inventory');
+    expect(card.closest('[data-status-card]')).toHaveTextContent('6');
+
+    fireEvent.click(card);
+    expect(onStatusClick).toHaveBeenCalledWith('Inventory Aiken,Inventory UK,Inventory HOLLAND');
+  });
+
+  it('filters the Ordered/Changed card on both statuses', async () => {
+    mockFetchOrderStatusStats.mockResolvedValue({
+      totalOrders: 3,
+      statusCounts: { ordered_changed: 3 },
+    });
+    const onStatusClick = jest.fn();
+    render(<DashboardOrderStatusFlow onStatusClick={onStatusClick} />);
+
+    fireEvent.click(await screen.findByText('Ordered/Changed'));
+    expect(onStatusClick).toHaveBeenCalledWith('Ordered,Changed');
   });
 
   it('refetches the counts when refreshKey changes', async () => {
