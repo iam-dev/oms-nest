@@ -575,7 +575,10 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const selectCustomer = (customer: Customer) => {
     setFormData(prev => ({
       ...prev,
-      customer
+      // Rows from searchCustomers carry the phone number as phoneNo (the
+      // backend CustomerDto field), not phone — normalise so the payload's
+      // customerPhone isn't silently dropped for a searched customer.
+      customer: { ...customer, phone: customer.phone ?? customer.phoneNo }
     }));
     setCustomerSearchTerm(customer.name);
     setCustomerSearchResults([]);

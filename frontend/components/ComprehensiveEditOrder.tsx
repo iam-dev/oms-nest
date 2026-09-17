@@ -919,6 +919,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       setOptionColor({});
                       setOptionLeather({});
                       setOptionClones({});
+                      setSelectedExtras({});
                       const newOptions = await fetchEditOptions(val);
                       if (newOptions) setEditOptions(newOptions);
                     }}>

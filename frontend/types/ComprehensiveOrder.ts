@@ -14,6 +14,9 @@ export interface Customer {
   name: string;
   email?: string;
   phone?: string;
+  // Raw customer search/detail rows (backend CustomerDto) carry the phone
+  // number as phoneNo, not phone — see selectCustomer in EditOrder.tsx.
+  phoneNo?: string;
   address?: string;
   city?: string;
   state?: string;

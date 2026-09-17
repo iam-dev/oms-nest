@@ -2073,6 +2073,21 @@ describe('ComprehensiveEditOrder component', () => {
         expect(screen.getByText('Extras:')).toBeInTheDocument();
         expect(screen.getByText('Complete Re-Flock')).toBeInTheDocument();
       });
+
+      it('unticks extras when the Brand & Model selection changes', async () => {
+        await renderAndWaitForLoad();
+        expect(screen.getByLabelText('Complete Re-Flock')).toBeChecked();
+
+        // Only "Premium Classic" (id 10, the order's own saddle) is offered here:
+        // the other fixture saddle (id 91) is inactive and filtered out of the
+        // dropdown. Re-picking the same model still runs the change handler,
+        // which must clear selectedExtras like the Create wizard does.
+        await act(async () => {
+          fireEvent.click(screen.getByText('Premium Classic'));
+        });
+
+        expect(screen.getByLabelText('Complete Re-Flock')).not.toBeChecked();
+      });
     });
   });
 });

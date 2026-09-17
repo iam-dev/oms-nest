@@ -1594,7 +1594,7 @@ describe('EditOrder component', () => {
 
     it('keeps customer and shipping addresses apart in the payload', async () => {
       (orderEditViewModule.searchCustomers as jest.Mock).mockResolvedValue([
-        { id: 7, name: 'Jane Smith', email: 'jane@example.com', address: '789 Elm St', city: 'Denver', state: 'CO', zipcode: '80201', country: 'United States' },
+        { id: 7, name: 'Jane Smith', email: 'jane@example.com', phoneNo: '555-0100', address: '789 Elm St', city: 'Denver', state: 'CO', zipcode: '80201', country: 'United States' },
       ]);
       await toStep2();
       fireEvent.change(screen.getByPlaceholderText('Type customer name...'), { target: { value: 'Jane' } });
@@ -1607,7 +1607,7 @@ describe('EditOrder component', () => {
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
       expect(createOrderFromPayload.mock.calls[0][0]).toMatchObject({
-        customerId: 7, customerName: 'Jane Smith', customerAddress: '789 Elm St', customerCity: 'Denver', customerCountry: 'United States',
+        customerId: 7, customerName: 'Jane Smith', customerPhone: '555-0100', customerAddress: '789 Elm St', customerCity: 'Denver', customerCountry: 'United States',
         shipName: 'Barn office', shipAddress: '1 Stable Rd', shipCountry: 'Netherlands',
       });
     });
