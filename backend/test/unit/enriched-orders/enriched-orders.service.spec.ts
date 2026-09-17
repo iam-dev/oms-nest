@@ -547,6 +547,18 @@ describe("EnrichedOrdersService", () => {
         `NULLIF(o.horse_name, 'NULL') as "horseName"`,
       );
     });
+
+    it("should map currency/fitterCurrency codes to match legacy fitters.currency ids (1 USD…7 DE)", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1, currency: 4, fitterCurrency: 6 }]) // detail row
+        .mockResolvedValue([]); // saddle specs, log, comments
+
+      const result = await service.getOrderDetail(1);
+
+      expect(result.currency).toBe("CAN");
+      expect(result.fitterCurrency).toBe("NL");
+    });
   });
 
   describe("option clones (orders_info.clone_number)", () => {

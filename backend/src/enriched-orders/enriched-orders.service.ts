@@ -1373,15 +1373,17 @@ export class EnrichedOrdersService {
 
       const order = orderResult[0];
 
-      // Map currency integer to currency code
+      // Map currency integer to currency code. Must match legacy fitters.currency
+      // (see frontend/services/fitters.ts FITTER_CURRENCIES, the single source of
+      // truth): 1 USD, 2 EUR, 3 GBP, 4 CAN, 5 AUD, 6 NL, 7 DE.
       const currencyMap: Record<number, string> = {
         0: "USD",
         1: "USD",
         2: "EUR",
         3: "GBP",
-        4: "AUD",
-        5: "CAD",
-        6: "CHF",
+        4: "CAN",
+        5: "AUD",
+        6: "NL",
         7: "DE",
       };
       order.currency = currencyMap[order.currency] || String(order.currency);
@@ -2035,7 +2037,7 @@ export class EnrichedOrdersService {
 
       // Verify order exists and get old status for audit
       const existing = await queryRunner.query(
-        `SELECT order_status, fitter_id, customer_id, saddle_id FROM orders WHERE id = $1`,
+        `SELECT order_status, fitter_id, customer_id, saddle_id, currency FROM orders WHERE id = $1`,
         [orderId],
       );
       if (!existing || existing.length === 0) {
@@ -2072,13 +2074,18 @@ export class EnrichedOrdersService {
         await this.assertCustomerAssignable(queryRunner, dto.customerId);
       }
 
-      // Legacy re-stamps currency/factory whenever the fitter or the saddle changes.
+      // Legacy re-stamps currency/factory whenever the fitter or the saddle changes,
+      // and also backfills orders that were saved with currency = 0 (never stamped,
+      // e.g. created without a fitter) even when neither changes on this save.
+      // A missing currency column (older test doubles / partial mocks) is treated
+      // as already stamped so it doesn't spuriously trigger the backfill.
       const fitterChanged =
         dto.fitterId !== undefined && dto.fitterId !== existingFitterId;
       const saddleChanged =
         dto.saddleId !== undefined && dto.saddleId !== existingSaddleId;
+      const unstamped = Number(existing[0].currency ?? 1) === 0;
       let stamped: { currency: number; factoryId: number } | null = null;
-      if (fitterChanged || saddleChanged) {
+      if (fitterChanged || saddleChanged || unstamped) {
         stamped = await this.resolveCurrencyAndFactory(
           queryRunner,
           dto.fitterId ?? existingFitterId,

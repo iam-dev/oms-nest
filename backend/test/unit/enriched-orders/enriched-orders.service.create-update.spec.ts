@@ -198,7 +198,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
     it("updateOrder re-derives currency/factory when the saddle changes", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40 }]) // existing
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40, currency: 1 }]) // existing
         .mockResolvedValueOnce([{ currency: 1, factoryId: 4 }]) // resolve
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log
@@ -216,7 +216,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
     it("updateOrder leaves currency/factory alone when neither fitter nor saddle changes", async () => {
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40 }]) // existing
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40, currency: 1 }]) // existing
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log
 
@@ -226,6 +226,24 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
         (c: unknown[]) => typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
       );
       expect(update[0]).not.toContain("currency = $");
+    });
+
+    it("updateOrder backfills currency/factory when the order was saved with currency 0 even if fitter and saddle are unchanged", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, customer_id: 0, saddle_id: 40, currency: 0 }]) // existing, never stamped
+        .mockResolvedValueOnce([{ currency: 2, factoryId: 5 }]) // resolve
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log
+
+      await service.updateOrder(100, { fitterId: 10, saddleId: 40, specialNotes: "x" }, 1, 2);
+
+      const update = queryRunner.query.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+      );
+      expect(update[0]).toContain("currency = $");
+      expect(update[0]).toContain("factory_id = $");
+      expect(update[1]).toEqual(expect.arrayContaining([2, 5]));
     });
   });
 
@@ -287,7 +305,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       // An order assigned before its fitter was blocked must stay editable.
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10, currency: 1 }]) // existing order, already stamped
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log INSERT
 
