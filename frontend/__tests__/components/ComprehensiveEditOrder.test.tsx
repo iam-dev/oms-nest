@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, cleanup } from '@testing-library/react';
 import { ComprehensiveEditOrder } from '@/components/ComprehensiveEditOrder';
 import * as enrichedOrdersModule from '@/services/enrichedOrders';
 import * as sonnerModule from 'sonner';
@@ -813,20 +813,22 @@ describe('ComprehensiveEditOrder component', () => {
     it('sends empty shipping fields when the user clears them', async () => {
       // Same `'' || undefined` bug as the reference: a cleared shipping address
       // must reach the server as '' so the partial update actually blanks it.
+      // shipCountry is a legacy country select (not free text) since Task 10, so it
+      // isn't clearable this way; it's asserted separately as passed through unchanged.
       (fetchOrderDetail as jest.Mock).mockResolvedValue({
         ...mockOrderDetail,
         shipName: 'Jane Rider',
         shipAddress: '1 Stable Lane',
         shipCity: 'Lexington',
         shipZipcode: '40502',
-        shipCountry: 'USA',
+        shipCountry: 'Canada',
       });
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
 
       await renderAndWaitForLoad({ isDuplicate: false });
       await navigateToStep(2);
 
-      for (const value of ['Jane Rider', '1 Stable Lane', 'Lexington', '40502', 'USA']) {
+      for (const value of ['Jane Rider', '1 Stable Lane', 'Lexington', '40502']) {
         fireEvent.change(screen.getByDisplayValue(value), { target: { value: '' } });
       }
 
@@ -842,7 +844,7 @@ describe('ComprehensiveEditOrder component', () => {
           shipAddress: '',
           shipCity: '',
           shipZipcode: '',
-          shipCountry: '',
+          shipCountry: 'Canada',
         })
       );
     });
@@ -1907,6 +1909,86 @@ describe('ComprehensiveEditOrder component', () => {
 
       expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
       expectStillOnStep1();
+    });
+  });
+
+  describe('legacy parity (2026-09-17)', () => {
+    const OPTION_SEAT_SHAPE = 41;
+    const OPTION_FLAP_LENGTH = 8;
+    const parityOptions = {
+      ...mockEditOptions,
+      fitters: [{ id: 5, username: 'expertfitter', fullName: 'Expert Fitter', currency: 7 }],
+      saddles: [
+        { id: 10, brand: 'Premium', modelName: 'Classic', displayName: 'Premium Classic', active: 1 },
+        { id: 91, brand: 'Aviar', modelName: 'Rook 1.0 *INACTIVE*', displayName: 'Aviar Rook 1.0 *INACTIVE*', active: 0 },
+      ],
+      leatherTypes: [
+        { id: 3, name: 'Italian Leather', price1: 6595, price7: 5695 },
+        { id: 48, name: 'ASBLV', price1: 6000, price7: 5000 },
+      ],
+      options: [
+        { optionId: OPTION_SEAT_SHAPE, optionName: 'AVIAR Seat Shape', sequence: 1, group: null, type: 0, extraAllowed: 0 },
+        { optionId: OPTION_FLAP_LENGTH, optionName: 'Flap Length', sequence: 2, group: null, type: 0, extraAllowed: 0 },
+      ],
+      optionItems: [
+        { id: 6150, name: 'X-SLEEK(spacer fabric)', optionId: OPTION_SEAT_SHAPE, userColor: 0, userLeather: 0 },
+        { id: 69, name: '16', optionId: OPTION_FLAP_LENGTH, userColor: 0, userLeather: 0 },
+      ],
+      presets: [{ id: 24, name: 'AVIAR SMOOTH Black', sequence: 1 }],
+      presetItems: [
+        { presetId: 24, optionId: OPTION_FLAP_LENGTH, itemId: 69 },
+        { presetId: 24, optionId: OPTION_SEAT_SHAPE, itemId: 5430 }, // not ticked on this model
+        { presetId: 24, optionId: OPTION_SEAT_SHAPE, itemId: 0 },    // legacy junk row
+      ],
+    };
+
+    beforeEach(() => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(parityOptions) });
+    });
+
+    it('applies a preset only for items the model offers and never selects "Customized by fitter" from item_id 0', async () => {
+      await renderAndWaitForLoad();
+      await act(async () => { fireEvent.click(screen.getByText('AVIAR SMOOTH Black')); });
+      const selects = screen.getAllByTestId('select');
+      const flap = selects.find(s => s.textContent?.includes('16'));
+      expect(flap).toHaveAttribute('data-value', '69');
+      const seatShape = selects.find(s => s.textContent?.includes('X-SLEEK'));
+      expect(seatShape).not.toHaveAttribute('data-value', '0');
+      expect(seatShape).not.toHaveAttribute('data-value', '5430');
+    });
+
+    it('labels the total with the fitter currency via FITTER_CURRENCIES (7 = DE)', async () => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, currency: null, fitterCurrency: null });
+      await renderAndWaitForLoad();
+      expect(screen.getByText('Total (DE):')).toBeInTheDocument();
+    });
+
+    it('re-derives the saddle price from saddle_leathers when the leather type changes', async () => {
+      await renderAndWaitForLoad();
+      await act(async () => { fireEvent.click(screen.getByText('ASBLV')); });
+      expect(screen.getByDisplayValue('5000.00')).toBeInTheDocument(); // fitter currency 7 → price7
+    });
+
+    it('offers only active models plus the order\'s own model', async () => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleId: 91 });
+      await renderAndWaitForLoad();
+      expect(screen.getByText('Aviar Rook 1.0 *INACTIVE*')).toBeInTheDocument();
+
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleId: 10 });
+      cleanup();
+      await renderAndWaitForLoad();
+      expect(screen.queryByText('Aviar Rook 1.0 *INACTIVE*')).not.toBeInTheDocument();
+    });
+
+    it('uses the legacy country select for the shipping address', async () => {
+      // Unlike the other tests in this describe, parityOptions' two saddle options
+      // (each with items and no saved spec on mockOrderDetail) are unrelated to what
+      // this test checks and would otherwise block "Next Step" validation before
+      // step 2 is reached. Use the base fixture, which requires no option picks.
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(mockEditOptions) });
+      await renderAndWaitForLoad();
+      await navigateToStep(2);
+      expect(screen.getByText('Republic of Ireland')).toBeInTheDocument();
     });
   });
 });

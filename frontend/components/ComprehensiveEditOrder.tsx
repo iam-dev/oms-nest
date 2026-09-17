@@ -27,20 +27,10 @@ import { API_URL } from '@/services/api-config';
 import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
 import { CUSTOMIZED_BY_FITTER_ID, CUSTOMIZED_BY_FITTER_LABEL, specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
 import { OptionSlotRow } from '@/components/shared/OptionSlotRow';
-
-interface EditFormOptions {
-  /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
-  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
-  saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
-  leatherTypes: Array<{ id: number; name: string }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type?: number; extraAllowed: number }>;
-  optionItems: Array<{ id: number; name: string; optionId: number; userColor?: number; userLeather?: number }>;
-  /** Leathers ticked per leather option (type 1) in Models > Manage Options. */
-  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
-  statuses: Array<{ id: number; name: string }>;
-  presets: Array<{ id: number; name: string; sequence: number }>;
-  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
-}
+import { presetSelections } from '@/utils/presetApply';
+import { saddlePriceFor, currencyCodeFor, formatMoney } from '@/utils/orderPricing';
+import { ShippingCountrySelect } from '@/components/shared/ShippingCountrySelect';
+import type { EditFormOptions } from '@/services/enrichedOrders';
 
 // Leather option IDs - these use leather_types instead of options_items
 const LEATHER_OPTION_TYPE = 1;
@@ -133,7 +123,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const [shipName, setShipName] = useState('');
   const [shipAddress, setShipAddress] = useState('');
   const [shipCity, setShipCity] = useState('');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [shipState, setShipState] = useState('');
   const [shipZipcode, setShipZipcode] = useState('');
   const [shipCountry, setShipCountry] = useState('');
@@ -152,8 +141,8 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const orderId = order?.orderId || Number(order?.id) || 0;
 
   // Fetch edit options filtered by saddleId.
-  // includeDiscontinued=true so repair orders can reference legacy/discontinued
-  // saddle models that the standard "active" filter would hide.
+  // includeDiscontinued=true so the order's own discontinued model is still resolvable;
+  // the model list itself is filtered client-side to active + the order's current model.
   const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
     const params = new URLSearchParams({ includeDiscontinued: 'true' });
     if (forSaddleId) params.set('saddleId', forSaddleId);
@@ -443,6 +432,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         shipName,
         shipAddress,
         shipCity,
+        shipState,
         shipZipcode,
         shipCountry,
         // Order overview
@@ -720,7 +710,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const sortedOptions = editOptions?.options?.sort((a, b) => a.sequence - b.sequence) || [];
 
   // Currency display
-  const currencyCode = orderDetail?.currency || 'USD';
+  // The order's stored currency wins; a new/duplicate order takes the fitter's.
+  const selectedFitter = editOptions?.fitters.find(f => String(f.id) === fitterId);
+  const currencyCode = orderDetail?.currency || currencyCodeFor(selectedFitter?.currency);
 
   // Calculate total
   const total = (
@@ -916,7 +908,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                         <SelectValue placeholder="Select model..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {editOptions?.saddles?.map(s => (
+                        {editOptions?.saddles?.filter(s => s.active !== 0 || String(s.id) === saddleId).map(s => (
                           <SelectItem key={s.id} value={String(s.id)}>
                             {s.displayName}
                           </SelectItem>
@@ -936,15 +928,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       defaultValue="none"
                       onValueChange={(val) => {
                         if (val === 'none' || !editOptions?.presetItems) return;
-                        const presetId = parseInt(val, 10);
-                        const items = editOptions.presetItems.filter(pi => pi.presetId === presetId);
-                        if (items.length > 0) {
-                          const newSelections: Record<number, string> = { ...optionSelections };
-                          for (const item of items) {
-                            newSelections[item.optionId] = String(item.itemId);
-                          }
-                          setOptionSelections(newSelections);
-                        }
+                        const picks = presetSelections(
+                          editOptions.presetItems,
+                          parseInt(val, 10),
+                          (optionId) => getItemsForOption(optionId).map(i => i.id),
+                        );
+                        setOptionSelections(prev => ({ ...prev, ...picks }));
                       }}
                     >
                       <SelectTrigger className="h-9">
@@ -967,7 +956,13 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       Leathertype: <span className="text-red-500">*</span>
                     </Label>
                     <div className="space-y-1">
-                      <Select value={leatherId} onValueChange={setLeatherId}>
+                      <Select value={leatherId} onValueChange={(val) => {
+                        setLeatherId(val);
+                        // Legacy fills the saddle price from saddle_leathers.price<fitter currency>
+                        // whenever the leather is chosen.
+                        const leather = editOptions?.leatherTypes.find(lt => String(lt.id) === val);
+                        setPriceSaddle(formatMoney(saddlePriceFor(leather, selectedFitter?.currency)));
+                      }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="Select leather type..." />
                         </SelectTrigger>
@@ -1325,10 +1320,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       <Label className="text-sm font-medium">City:</Label>
                       <Input value={shipCity} onChange={(e) => setShipCity(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
-                      <Label className="text-sm font-medium">Country:</Label>
-                      <Input value={shipCountry} onChange={(e) => setShipCountry(e.target.value)} />
-                    </div>
+                    <ShippingCountrySelect
+                      country={shipCountry}
+                      state={shipState}
+                      onCountryChange={setShipCountry}
+                      onStateChange={setShipState}
+                    />
                     <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">Zipcode:</Label>
                       <Input value={shipZipcode} onChange={(e) => setShipZipcode(e.target.value)} />
