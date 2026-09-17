@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { baseOptionName } from '@/utils/optionSlots';
 
 interface SaddleSpec {
   optionId: number;
@@ -158,7 +159,8 @@ export function generateOrderPDF(orderData: OrderData, existingDoc?: jsPDF) {
   const grouped: Record<string, SaddleSpec[]> = { SEAT: [], CANTLE: [], FLAPS: [], PANEL: [] };
 
   for (const spec of orderData.saddleSpecs) {
-    const group = optionGroups[spec.optionName];
+    // Clone rows are named "CANTLE Option (2)"; group them with their base option
+    const group = optionGroups[baseOptionName(spec.optionName)];
     if (group && grouped[group]) {
       grouped[group].push(spec);
     } else {

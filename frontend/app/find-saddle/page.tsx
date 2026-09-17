@@ -5,6 +5,7 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchOrderDetail, type OrderDetailData } from '@/services/enrichedOrders';
+import { baseOptionName } from '@/utils/optionSlots';
 import { generateOrderPDF } from '@/lib/generate-pdf';
 import { logger } from '@/utils/logger';
 
@@ -159,7 +160,8 @@ export default function FindSaddlePage() {
   const grouped: Record<string, typeof saddleSpecs> = {};
 
   for (const spec of saddleSpecs) {
-    const group = optionGroups[spec.optionName];
+    // Clone rows are named "CANTLE Option (2)"; group them with their base option
+    const group = optionGroups[baseOptionName(spec.optionName)];
     if (group === undefined) {
       // Unknown option - show ungrouped
       ungrouped.push(spec);

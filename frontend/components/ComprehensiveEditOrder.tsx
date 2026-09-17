@@ -24,13 +24,14 @@ import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
 import { fetchOrderDetail, updateOrder, createOrderFromPayload, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
+import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
 
 interface EditFormOptions {
   /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
   fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
   leatherTypes: Array<{ id: number; name: string }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null }>;
+  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; extraAllowed: number }>;
   optionItems: Array<{ id: number; name: string; optionId: number; userColor?: number; userLeather?: number }>;
   statuses: Array<{ id: number; name: string }>;
   presets: Array<{ id: number; name: string; sequence: number }>;
@@ -101,12 +102,15 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const [isSponsored, setIsSponsored] = useState(false);
   const [specialNotes, setSpecialNotes] = useState('');
 
-  // Saddle option selections: optionId -> selected value
-  const [optionSelections, setOptionSelections] = useState<Record<number, string>>({});
-  // Free-text answers per option, one map per legacy orders_info column
-  const [optionCustom, setOptionCustom] = useState<Record<number, string>>({});
-  const [optionColor, setOptionColor] = useState<Record<number, string>>({});
-  const [optionLeather, setOptionLeather] = useState<Record<number, string>>({});
+  // Saddle option selections, keyed by slot (see utils/optionSlots): "optionId:cloneNumber"
+  const [optionSelections, setOptionSelections] = useState<Record<string, string>>({});
+  // Free-text answers per slot, one map per legacy orders_info column
+  const [optionCustom, setOptionCustom] = useState<Record<string, string>>({});
+  const [optionColor, setOptionColor] = useState<Record<string, string>>({});
+  const [optionLeather, setOptionLeather] = useState<Record<string, string>>({});
+  // Extra rows open per option, e.g. { 4: [1, 2] } = "CANTLE Option (2)" and "(3)".
+  // Numbers are UI identity only; they are renumbered 0..n-1 on save.
+  const [optionClones, setOptionClones] = useState<Record<number, number[]>>({});
 
   // Form state - pricing
   const [priceSaddle, setPriceSaddle] = useState('0.00');
@@ -203,21 +207,29 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       setIsSponsored(detail.sponsored);
       setSpecialNotes(detail.specialNotes || '');
 
-      // Populate saddle option selections
-      const selections: Record<number, string> = {};
-      const customs: Record<number, string> = {};
-      const colors: Record<number, string> = {};
-      const leathers: Record<number, string> = {};
+      // Populate saddle option selections, one slot per orders_info row
+      const selections: Record<string, string> = {};
+      const customs: Record<string, string> = {};
+      const colors: Record<string, string> = {};
+      const leathers: Record<string, string> = {};
+      const clones: Record<number, number[]> = {};
       for (const spec of detail.saddleSpecs) {
-        selections[spec.optionId] = String(spec.optionItemId);
-        customs[spec.optionId] = spec.custom || '';
-        colors[spec.optionId] = spec.color || '';
-        leathers[spec.optionId] = spec.leatherType || '';
+        const clone = spec.cloneNumber ?? 0;
+        const key = slotKey(spec.optionId, clone);
+        selections[key] = String(spec.optionItemId);
+        customs[key] = spec.custom || '';
+        colors[key] = spec.color || '';
+        leathers[key] = spec.leatherType || '';
+        if (clone > 0) {
+          if (!clones[spec.optionId]) clones[spec.optionId] = [];
+          clones[spec.optionId].push(clone);
+        }
       }
       setOptionSelections(selections);
       setOptionCustom(customs);
       setOptionColor(colors);
       setOptionLeather(leathers);
+      setOptionClones(clones);
 
       // Pricing
       setPriceSaddle(String(detail.priceSaddle ?? '0.00'));
@@ -367,7 +379,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     if (!validateSpecifications()) return;
     setSaving(true);
     try {
-      // Build saddle options array from current selections merged with original specs
+      // Build saddle options from every open slot, merged with the saved rows.
+      // Slots are renumbered 0..n-1 per option so orders_info.clone_number never
+      // has gaps and the (order, option, item, clone) key stays unique.
       const saddleOptions: UpdateOrderPayload['saddleOptions'] = [];
       if (orderDetail) {
         const allOptionIds = new Set<number>();
@@ -377,26 +391,30 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         }
         // Collect IDs from user selections
         for (const key of Object.keys(optionSelections)) {
-          allOptionIds.add(Number(key));
+          allOptionIds.add(slotOptionId(key));
         }
         for (const optId of allOptionIds) {
-          const selectedItemId = optionSelections[optId];
-          const originalSpec = orderDetail.saddleSpecs.find(s => s.optionId === optId);
-          // 0 is a valid item id ("Customized by fitter"), so test for presence, not truthiness
-          const itemId = selectedItemId !== undefined
-            ? parseInt(selectedItemId, 10)
-            : originalSpec?.optionItemId;
-          if (itemId === undefined || Number.isNaN(itemId)) continue;
-          // Only send the text the selected item actually asks for; this also
-          // clears stale values legacy left behind after switching items.
-          const inputs = getSpecInputs(optId, String(itemId));
-          saddleOptions.push({
-            optionId: optId,
-            optionItemId: itemId,
-            custom: inputs.custom ? (optionCustom[optId] ?? '') : '',
-            color: inputs.color ? (optionColor[optId] ?? '') : '',
-            leatherType: inputs.leather ? (optionLeather[optId] ?? '') : '',
-          });
+          let nextClone = 0;
+          for (const slot of getSlots(optId)) {
+            const key = slotKey(optId, slot);
+            const selectedItemId = optionSelections[key];
+            // 0 is a valid item id ("Customized by fitter"), so test for presence, not truthiness
+            const itemId = selectedItemId !== undefined
+              ? parseInt(selectedItemId, 10)
+              : findSavedSpec(optId, slot)?.optionItemId;
+            if (itemId === undefined || Number.isNaN(itemId)) continue;
+            // Only send the text the selected item actually asks for; this also
+            // clears stale values legacy left behind after switching items.
+            const inputs = getSpecInputs(optId, String(itemId), slot);
+            saddleOptions.push({
+              optionId: optId,
+              optionItemId: itemId,
+              cloneNumber: nextClone++,
+              custom: inputs.custom ? (optionCustom[key] ?? '') : '',
+              color: inputs.color ? (optionColor[key] ?? '') : '',
+              leatherType: inputs.leather ? (optionLeather[key] ?? '') : '',
+            });
+          }
         }
       }
 
@@ -540,15 +558,39 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     }
   };
 
+  // Saved orders_info row for one slot of an option
+  const findSavedSpec = (optionId: number, clone = 0) =>
+    orderDetail?.saddleSpecs.find(s => s.optionId === optionId && (s.cloneNumber ?? 0) === clone);
+
   // Get display value for a saddle option
-  const getOptionDisplayValue = (optionId: number): string => {
-    const spec = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
-    return spec?.displayValue || '';
+  const getOptionDisplayValue = (optionId: number, clone = 0): string =>
+    findSavedSpec(optionId, clone)?.displayValue || '';
+
+  const getOptionItemId = (optionId: number, clone = 0): string => {
+    const spec = findSavedSpec(optionId, clone);
+    return spec ? String(spec.optionItemId) : '';
   };
 
-  const getOptionItemId = (optionId: number): string => {
-    const spec = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
-    return spec ? String(spec.optionItemId) : '';
+  // Every open row of an option: the base row plus any extra ("clone") rows
+  const getSlots = (optionId: number): number[] => [0, ...(optionClones[optionId] ?? [])];
+
+  const addClone = (optionId: number) => {
+    setOptionClones(prev => {
+      const existing = prev[optionId] ?? [];
+      const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
+      return { ...prev, [optionId]: [...existing, next] };
+    });
+  };
+
+  const removeClone = (optionId: number, clone: number) => {
+    const key = slotKey(optionId, clone);
+    const without = (m: Record<string, string>) =>
+      Object.fromEntries(Object.entries(m).filter(([k]) => k !== key));
+    setOptionClones(prev => ({ ...prev, [optionId]: (prev[optionId] ?? []).filter(c => c !== clone) }));
+    setOptionSelections(without);
+    setOptionCustom(without);
+    setOptionColor(without);
+    setOptionLeather(without);
   };
 
   // Get available items for a given option
@@ -560,11 +602,11 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     return editOptions.optionItems.filter(i => i.optionId === optionId);
   };
 
-  // Which item is currently chosen for an option: the user's pick, else the saved one
-  const getSelectedItemId = (optionId: number): string =>
-    optionSelections[optionId] ?? getOptionItemId(optionId);
+  // Which item is currently chosen for a slot: the user's pick, else the saved one
+  const getSelectedItemId = (optionId: number, clone = 0): string =>
+    optionSelections[slotKey(optionId, clone)] ?? getOptionItemId(optionId, clone);
 
-  const getSpecInputs = (optionId: number, selectedItemId: string): SpecInputs => {
+  const getSpecInputs = (optionId: number, selectedItemId: string, clone = 0): SpecInputs => {
     if (selectedItemId === CUSTOMIZED_BY_FITTER_ID) {
       return { custom: true, color: false, leather: false };
     }
@@ -579,7 +621,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     }
     // Item not in this saddle's list (e.g. an option no longer linked to the
     // saddle): keep whatever the saved row already carries rather than blanking it.
-    const saved = orderDetail?.saddleSpecs.find(s => s.optionId === optionId);
+    const saved = findSavedSpec(optionId, clone);
     const isSavedItem = saved && String(saved.optionItemId) === selectedItemId;
     return {
       custom: false,
@@ -591,17 +633,20 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Option names whose required specification text is still empty
   const getMissingSpecifications = (): string[] => {
     const missing: string[] = [];
+    const blank = (v?: string) => !v || v.trim() === '';
     for (const opt of sortedOptions) {
-      const selectedItemId = getSelectedItemId(opt.optionId);
-      if (!selectedItemId) continue;
-      const inputs = getSpecInputs(opt.optionId, selectedItemId);
-      const blank = (v?: string) => !v || v.trim() === '';
-      if (
-        (inputs.custom && blank(optionCustom[opt.optionId])) ||
-        (inputs.color && blank(optionColor[opt.optionId])) ||
-        (inputs.leather && blank(optionLeather[opt.optionId]))
-      ) {
-        missing.push(opt.optionName);
+      for (const clone of getSlots(opt.optionId)) {
+        const selectedItemId = getSelectedItemId(opt.optionId, clone);
+        if (!selectedItemId) continue;
+        const key = slotKey(opt.optionId, clone);
+        const inputs = getSpecInputs(opt.optionId, selectedItemId, clone);
+        if (
+          (inputs.custom && blank(optionCustom[key])) ||
+          (inputs.color && blank(optionColor[key])) ||
+          (inputs.leather && blank(optionLeather[key]))
+        ) {
+          missing.push(slotLabel(opt.optionName, clone));
+        }
       }
     }
     return missing;
@@ -614,20 +659,21 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     return false;
   };
 
-  // Text shown for an option in the preview, in the same shape as the saved displayValue
-  const getSpecSummary = (optionId: number): string => {
-    const selectedItemId = getSelectedItemId(optionId);
+  // Text shown for one slot in the preview, in the same shape as the saved displayValue
+  const getSpecSummary = (optionId: number, clone = 0): string => {
+    const selectedItemId = getSelectedItemId(optionId, clone);
     if (!selectedItemId) return '';
-    const inputs = getSpecInputs(optionId, selectedItemId);
+    const key = slotKey(optionId, clone);
+    const inputs = getSpecInputs(optionId, selectedItemId, clone);
     if (inputs.custom) {
-      return `${CUSTOMIZED_BY_FITTER_LABEL}: ${optionCustom[optionId] ?? ''}`;
+      return `${CUSTOMIZED_BY_FITTER_LABEL}: ${optionCustom[key] ?? ''}`;
     }
     const base =
       getItemsForOption(optionId).find(i => String(i.id) === selectedItemId)?.name ||
-      getOptionDisplayValue(optionId);
+      getOptionDisplayValue(optionId, clone);
     if (!base) return '';
-    const color = inputs.color && optionColor[optionId] ? ` | Color: ${optionColor[optionId]}` : '';
-    const leather = inputs.leather && optionLeather[optionId] ? ` | Leather: ${optionLeather[optionId]}` : '';
+    const color = inputs.color && optionColor[key] ? ` | Color: ${optionColor[key]}` : '';
+    const leather = inputs.leather && optionLeather[key] ? ` | Leather: ${optionLeather[key]}` : '';
     return `${base}${color}${leather}`;
   };
 
@@ -817,10 +863,13 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     </Label>
                     <Select value={saddleId} onValueChange={async (val) => {
                       setSaddleId(val);
+                      // A new saddle starts from a clean option sheet; the saved rows
+                      // (including extra clone rows) are intentionally not carried over.
                       setOptionSelections({});
                       setOptionCustom({});
                       setOptionColor({});
                       setOptionLeather({});
+                      setOptionClones({});
                       const newOptions = await fetchEditOptions(val);
                       if (newOptions) setEditOptions(newOptions);
                     }}>
@@ -901,76 +950,110 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     </div>
                   </div>
 
-                  {/* Dynamic saddle options from orders_info */}
+                  {/* Dynamic saddle options from orders_info; an option with
+                      extra_allowed > 0 may have several rows ("CANTLE Option (2)") */}
                   {sortedOptions.map(opt => {
-                    const currentItemId = getOptionItemId(opt.optionId);
-                    const currentDisplay = getOptionDisplayValue(opt.optionId);
                     const items = getItemsForOption(opt.optionId);
-
                     // Skip options that are not in the order's specs and have no items
-                    if (!currentItemId && items.length === 0) return null;
+                    if (!getOptionItemId(opt.optionId) && items.length === 0) return null;
 
-                    const selectedItemId = getSelectedItemId(opt.optionId);
-                    const inputs = getSpecInputs(opt.optionId, selectedItemId);
-                    const specInputs: Array<{ key: keyof SpecInputs; label: string; values: Record<number, string>; set: React.Dispatch<React.SetStateAction<Record<number, string>>> }> = [
+                    const slots = getSlots(opt.optionId);
+                    const extraAllowed = opt.extraAllowed ?? 0;
+                    const canAddClone = extraAllowed > 0 && slots.length - 1 < extraAllowed;
+                    const specInputs: Array<{ key: keyof SpecInputs; label: string; values: Record<string, string>; set: React.Dispatch<React.SetStateAction<Record<string, string>>> }> = [
                       { key: 'custom', label: 'Please specify:', values: optionCustom, set: setOptionCustom },
                       { key: 'color', label: 'Specify color:', values: optionColor, set: setOptionColor },
                       { key: 'leather', label: 'Specify leathertype:', values: optionLeather, set: setOptionLeather },
                     ];
 
                     return (
-                      <div key={opt.optionId}>
-                        <div className="grid grid-cols-[160px_1fr] gap-2 items-start">
-                          <Label className="text-sm font-medium pt-2">
-                            {opt.optionName}: <span className="text-red-500">*</span>
-                          </Label>
-                          <div className="space-y-1">
-                            <Select
-                              value={selectedItemId}
-                              onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [opt.optionId]: val }))}
-                            >
-                              <SelectTrigger className="h-9">
-                                <SelectValue placeholder={currentDisplay || 'Select...'} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {items.length > 0 ? (
-                                  items.map(item => (
-                                    <SelectItem key={item.id} value={String(item.id)}>
-                                      {item.name}
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  currentItemId && currentItemId !== CUSTOMIZED_BY_FITTER_ID && (
-                                    <SelectItem value={currentItemId}>
-                                      {currentDisplay}
-                                    </SelectItem>
-                                  )
-                                )}
-                                <SelectItem value={CUSTOMIZED_BY_FITTER_ID}>
-                                  {CUSTOMIZED_BY_FITTER_LABEL}
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            {/* Required text boxes for the selected item */}
-                            {specInputs.filter(si => inputs[si.key]).map(si => {
-                              const inputId = `spec-${si.key}-${opt.optionId}`;
-                              return (
-                                <div key={si.key} className="ml-4 p-2 bg-gray-50 rounded">
-                                  <div className="flex items-center gap-2">
-                                    <Label htmlFor={inputId} className="text-xs font-medium text-gray-600 whitespace-nowrap">{si.label}</Label>
-                                    <span className="text-red-500">*</span>
-                                    <Input
-                                      id={inputId}
-                                      className="h-8 text-sm flex-1"
-                                      value={si.values[opt.optionId] ?? ''}
-                                      onChange={(e) => si.set(prev => ({ ...prev, [opt.optionId]: e.target.value }))}
-                                    />
+                      <div key={opt.optionId} className="space-y-2">
+                        {slots.map((clone, slotIdx) => {
+                          const key = slotKey(opt.optionId, clone);
+                          const label = slotLabel(opt.optionName, clone);
+                          const currentItemId = getOptionItemId(opt.optionId, clone);
+                          const currentDisplay = getOptionDisplayValue(opt.optionId, clone);
+                          const selectedItemId = getSelectedItemId(opt.optionId, clone);
+                          const inputs = getSpecInputs(opt.optionId, selectedItemId, clone);
+                          const isLastSlot = slotIdx === slots.length - 1;
+
+                          return (
+                            <div key={key} className="grid grid-cols-[160px_1fr] gap-2 items-start">
+                              <Label className="text-sm font-medium pt-2">
+                                {label}: <span className="text-red-500">*</span>
+                              </Label>
+                              <div className="space-y-1">
+                                <div className="flex items-start gap-1">
+                                  <div className="flex-1">
+                                    <Select
+                                      value={selectedItemId}
+                                      onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue placeholder={currentDisplay || 'Select...'} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {items.length > 0 ? (
+                                          items.map(item => (
+                                            <SelectItem key={item.id} value={String(item.id)}>
+                                              {item.name}
+                                            </SelectItem>
+                                          ))
+                                        ) : (
+                                          currentItemId && currentItemId !== CUSTOMIZED_BY_FITTER_ID && (
+                                            <SelectItem value={currentItemId}>
+                                              {currentDisplay}
+                                            </SelectItem>
+                                          )
+                                        )}
+                                        <SelectItem value={CUSTOMIZED_BY_FITTER_ID}>
+                                          {CUSTOMIZED_BY_FITTER_LABEL}
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
+                                  {clone > 0 && (
+                                    <button
+                                      type="button"
+                                      aria-label={`Remove ${label}`}
+                                      className="h-9 px-2 text-gray-500 hover:text-red-700"
+                                      onClick={() => removeClone(opt.optionId, clone)}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+                                {/* Required text boxes for the selected item */}
+                                {specInputs.filter(si => inputs[si.key]).map(si => {
+                                  const inputId = `spec-${si.key}-${opt.optionId}-${clone}`;
+                                  return (
+                                    <div key={si.key} className="ml-4 p-2 bg-gray-50 rounded">
+                                      <div className="flex items-center gap-2">
+                                        <Label htmlFor={inputId} className="text-xs font-medium text-gray-600 whitespace-nowrap">{si.label}</Label>
+                                        <span className="text-red-500">*</span>
+                                        <Input
+                                          id={inputId}
+                                          className="h-8 text-sm flex-1"
+                                          value={si.values[key] ?? ''}
+                                          onChange={(e) => si.set(prev => ({ ...prev, [key]: e.target.value }))}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {isLastSlot && canAddClone && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-[#8B0000] hover:underline"
+                                    onClick={() => addClone(opt.optionId)}
+                                  >
+                                    + Add another {opt.optionName}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -1358,16 +1441,16 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       <dt className="text-gray-500">Fitter:</dt>
                       <dd className="font-medium">{editOptions?.fitters?.find(f => String(f.id) === fitterId)?.fullName || orderDetail?.fitterName || '—'}</dd>
                     </div>
-                    {sortedOptions.map(opt => {
-                      const display = getSpecSummary(opt.optionId);
+                    {sortedOptions.flatMap(opt => getSlots(opt.optionId).map(clone => {
+                      const display = getSpecSummary(opt.optionId, clone);
                       if (!display) return null;
                       return (
-                        <div key={opt.optionId} className="grid grid-cols-[130px_1fr]">
-                          <dt className="text-gray-500">{opt.optionName}:</dt>
+                        <div key={slotKey(opt.optionId, clone)} className="grid grid-cols-[130px_1fr]">
+                          <dt className="text-gray-500">{slotLabel(opt.optionName, clone)}:</dt>
                           <dd className="font-medium">{display}</dd>
                         </div>
                       );
-                    })}
+                    }))}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {isStock && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Stock</span>}
                       {isDemo && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Demo</span>}

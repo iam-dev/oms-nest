@@ -61,19 +61,34 @@ jest.mock('@/components/ui/label', () => ({
   Label: ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement> & { children: React.ReactNode }) => <label {...props}>{children}</label>,
 }));
 
-jest.mock('@/components/ui/select', () => ({
-  Select: ({ children, value }: { children: React.ReactNode; value?: string }) => (
-    <div data-testid="select" data-value={value}>
-      {children}
-    </div>
-  ),
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
-    <div data-value={value}>{children}</div>
-  ),
-}));
+jest.mock('@/components/ui/select', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ReactActual = require('react') as typeof React;
+  // No type annotations with identifiers here: babel-plugin-jest-hoist rejects them.
+  const ChangeContext = ReactActual.createContext(undefined as unknown);
+  return {
+    Select: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: unknown }) => (
+      <ChangeContext.Provider value={onValueChange}>
+        <div data-testid="select" data-value={value}>
+          {children}
+        </div>
+      </ChangeContext.Provider>
+    ),
+    SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+    SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    // Clicking an item fires the parent Select's onValueChange, so tests can
+    // drive selection changes without Radix's pointer-event machinery.
+    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => {
+      const onChange = ReactActual.useContext(ChangeContext);
+      return (
+        <div data-value={value} onClick={() => { if (typeof onChange === 'function') onChange(value); }}>
+          {children}
+        </div>
+      );
+    },
+  };
+});
 
 jest.mock('@/components/ui/checkbox', () => ({
   Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
@@ -1116,6 +1131,82 @@ describe('EditOrder component', () => {
       expect(
         screen.getByRole('button', { name: /create order/i })
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('multiple rows of one option (legacy clone_number)', () => {
+    const OPTION_CANTLE = 4;
+    const editOptions = {
+      fitters: [],
+      saddles: [{ id: 10, brand: 'Premium', modelName: 'Classic', displayName: 'Premium Classic' }],
+      leatherTypes: [{ id: 3, name: 'Italian Leather', price1: 0 }],
+      presets: [{ id: 1, name: 'Aviar preset' }],
+      presetItems: [{ presetId: 1, optionId: OPTION_CANTLE, itemId: 401 }],
+      options: [
+        { optionId: OPTION_CANTLE, optionName: 'CANTLE Option', sequence: 1, group: 'CANTLE', type: 0, price1: 0, extraAllowed: 20 },
+      ],
+      optionItems: [
+        { id: 401, name: '2 cm cut of cantle', optionId: OPTION_CANTLE, price1: 0 },
+        { id: 402, name: 'Inlaid cantle', optionId: OPTION_CANTLE, price1: 0 },
+      ],
+      statuses: [],
+    };
+    const originalFetch = global.fetch;
+
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(editOptions) });
+      (createOrderFromPayload as jest.Mock).mockResolvedValue({ success: true, orderId: 1 });
+    });
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('adds a second CANTLE Option row and sends it with cloneNumber 1', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar preset')).toBeInTheDocument());
+
+      // Options only render once a preset is chosen; the preset picks item 401 for slot 0
+      await act(async () => {
+        fireEvent.click(screen.getByText('Aviar preset'));
+      });
+      expect(screen.getByText('CANTLE Option:')).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
+      });
+      expect(screen.getByText('CANTLE Option (2):')).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getAllByText('Inlaid cantle')[1]);
+      });
+
+      await navigateToStep(3);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /create order/i }));
+      });
+      await waitFor(() => expect(createOrderFromPayload).toHaveBeenCalledTimes(1));
+
+      const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
+      expect(payload.saddleOptions).toEqual([
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '' },
+      ]);
+    });
+
+    it('removes an added row again', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar preset')).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.click(screen.getByText('Aviar preset'));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Remove CANTLE Option (2)' }));
+      });
+
+      expect(screen.queryByText('CANTLE Option (2):')).not.toBeInTheDocument();
     });
   });
 });

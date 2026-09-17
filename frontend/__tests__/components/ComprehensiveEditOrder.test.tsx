@@ -1295,11 +1295,12 @@ describe('ComprehensiveEditOrder component', () => {
     const spec = (
       optionId: number,
       optionItemId: number,
-      extra: Partial<{ custom: string; color: string; leatherType: string; itemName: string | null }> = {},
+      extra: Partial<{ custom: string; color: string; leatherType: string; itemName: string | null; cloneNumber: number }> = {},
     ) => ({
       optionId,
       optionName: specOptions.options.find(o => o.optionId === optionId)!.optionName,
       optionItemId,
+      cloneNumber: 0,
       itemName: specOptions.optionItems.find(i => i.id === optionItemId)?.name ?? null,
       leatherName: null,
       custom: '',
@@ -1448,9 +1449,9 @@ describe('ComprehensiveEditOrder component', () => {
       await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
       const payload = (updateOrder as jest.Mock).mock.calls[0][1];
       expect(payload.saddleOptions).toEqual(expect.arrayContaining([
-        { optionId: OPTION_LOOPS, optionItemId: 702, custom: '', color: 'black', leatherType: '' },
-        { optionId: OPTION_TREE, optionItemId: 0, custom: '27.5', color: '', leatherType: '' },
-        { optionId: OPTION_PANEL, optionItemId: 1801, custom: '', color: '', leatherType: 'smooth black' },
+        { optionId: OPTION_LOOPS, optionItemId: 702, cloneNumber: 0, custom: '', color: 'black', leatherType: '' },
+        { optionId: OPTION_TREE, optionItemId: 0, cloneNumber: 0, custom: '27.5', color: '', leatherType: '' },
+        { optionId: OPTION_PANEL, optionItemId: 1801, cloneNumber: 0, custom: '', color: '', leatherType: 'smooth black' },
       ]));
       expect(payload.saddleOptions).toHaveLength(3);
     });
@@ -1478,7 +1479,7 @@ describe('ComprehensiveEditOrder component', () => {
       });
       await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
       expect((updateOrder as jest.Mock).mock.calls[0][1].saddleOptions).toEqual([
-        { optionId: 99, optionItemId: 9901, custom: '', color: 'brown', leatherType: '' },
+        { optionId: 99, optionItemId: 9901, cloneNumber: 0, custom: '', color: 'brown', leatherType: '' },
       ]);
     });
 
@@ -1491,6 +1492,166 @@ describe('ComprehensiveEditOrder component', () => {
 
       expect(screen.getByText('Aviar Solid Loop(specify color) | Color: Green Snake')).toBeInTheDocument();
       expect(screen.getByText('Customized by fitter: 27.5')).toBeInTheDocument();
+    });
+  });
+
+  describe('multiple rows of one option (legacy clone_number)', () => {
+    // CANTLE Option has options.extra_allowed = 20, so an order can carry
+    // "CANTLE Option" and "CANTLE Option (2)" — two orders_info rows with
+    // clone_number 0 and 1.  Loading must show both and saving must keep both.
+    const OPTION_CANTLE = 4;
+    const OPTION_TREE = 17;
+
+    const cloneOptions = {
+      ...mockEditOptions,
+      options: [
+        { optionId: OPTION_TREE, optionName: 'Tree Size', sequence: 1, group: null, extraAllowed: 0 },
+        { optionId: OPTION_CANTLE, optionName: 'CANTLE Option', sequence: 2, group: 'CANTLE', extraAllowed: 20 },
+      ],
+      optionItems: [
+        { id: 1701, name: '26cm', optionId: OPTION_TREE, userColor: 0, userLeather: 0 },
+        { id: 401, name: '2 cm cut of cantle', optionId: OPTION_CANTLE, userColor: 0, userLeather: 0 },
+        { id: 402, name: 'Inlaid cantle (specify color)', optionId: OPTION_CANTLE, userColor: 1, userLeather: 0 },
+      ],
+    };
+
+    const cantle = (cloneNumber: number, optionItemId: number, color = '') => ({
+      optionId: OPTION_CANTLE,
+      optionName: cloneNumber > 0 ? `CANTLE Option (${cloneNumber + 1})` : 'CANTLE Option',
+      optionItemId,
+      cloneNumber,
+      itemName: cloneOptions.optionItems.find(i => i.id === optionItemId)?.name ?? null,
+      leatherName: null,
+      custom: '',
+      color,
+      leatherType: '',
+      sequence: 2,
+      displayValue: '',
+    });
+
+    const renderWithSpecs = async (saddleSpecs: ReturnType<typeof cantle>[]) => {
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(cloneOptions) });
+      await renderAndWaitForLoad({ isDuplicate: false });
+    };
+
+    const submit = async () => {
+      await navigateToStep(4);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /update order/i }));
+      });
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      return (updateOrder as jest.Mock).mock.calls[0][1].saddleOptions;
+    };
+
+    it('renders one labelled row per saved clone', async () => {
+      await renderWithSpecs([cantle(0, 401), cantle(1, 402, 'black')]);
+
+      expect(screen.getByText('CANTLE Option:')).toBeInTheDocument();
+      expect(screen.getByText('CANTLE Option (2):')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('black')).toBeInTheDocument();
+    });
+
+    it('round-trips every clone row on an untouched save', async () => {
+      await renderWithSpecs([cantle(0, 401), cantle(1, 402, 'black')]);
+
+      expect(await submit()).toEqual([
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '', color: 'black', leatherType: '' },
+      ]);
+    });
+
+    it('lists every clone row with its own label on the preview step', async () => {
+      await renderWithSpecs([cantle(0, 401), cantle(1, 402, 'black')]);
+      await navigateToStep(4);
+
+      expect(screen.getByText('CANTLE Option (2):')).toBeInTheDocument();
+      expect(screen.getByText('Inlaid cantle (specify color) | Color: black')).toBeInTheDocument();
+    });
+
+    it('names the clone row when its required text is missing', async () => {
+      await renderWithSpecs([cantle(0, 401), cantle(1, 402, '')]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /next step/i }));
+      });
+
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('CANTLE Option (2)'));
+    });
+
+    it('adds a new clone row and saves it with the next cloneNumber', async () => {
+      await renderWithSpecs([cantle(0, 401)]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
+      });
+      expect(screen.getByText('CANTLE Option (2):')).toBeInTheDocument();
+
+      // Second select's copy of the item
+      await act(async () => {
+        fireEvent.click(screen.getAllByText('2 cm cut of cantle')[1]);
+      });
+
+      expect(await submit()).toEqual([
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 1, custom: '', color: '', leatherType: '' },
+      ]);
+    });
+
+    it('drops an added clone row that never got a selection', async () => {
+      await renderWithSpecs([cantle(0, 401)]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
+      });
+
+      expect(await submit()).toEqual([
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
+      ]);
+    });
+
+    it('removes a clone row and renumbers the remaining ones on save', async () => {
+      await renderWithSpecs([cantle(0, 401), cantle(1, 402, 'black'), cantle(2, 401)]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Remove CANTLE Option (2)' }));
+      });
+      expect(screen.queryByDisplayValue('black')).not.toBeInTheDocument();
+
+      expect(await submit()).toEqual([
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 1, custom: '', color: '', leatherType: '' },
+      ]);
+    });
+
+    it('does not offer "Add another" for an option without extra_allowed, nor past the cap', async () => {
+      const capped = {
+        ...cloneOptions,
+        options: cloneOptions.options.map(o => (o.optionId === OPTION_CANTLE ? { ...o, extraAllowed: 1 } : o)),
+      };
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleSpecs: [cantle(0, 401), cantle(1, 402, 'black')] });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(capped) });
+      await renderAndWaitForLoad({ isDuplicate: false });
+
+      expect(screen.queryByRole('button', { name: /add another tree size/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /add another cantle option/i })).not.toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Remove CANTLE Option (2)' }));
+      });
+      expect(screen.getByRole('button', { name: '+ Add another CANTLE Option' })).toBeInTheDocument();
+    });
+
+    it('resets clone rows when the saddle changes', async () => {
+      await renderWithSpecs([cantle(0, 401), cantle(1, 402, 'black')]);
+      expect(screen.getByText('CANTLE Option (2):')).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Premium Classic'));
+      });
+
+      expect(screen.queryByText('CANTLE Option (2):')).not.toBeInTheDocument();
     });
   });
 });

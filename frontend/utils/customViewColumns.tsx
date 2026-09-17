@@ -3,6 +3,8 @@
  * Each column defines a key (matching enriched order field), display label, and category.
  */
 
+import { baseOptionName } from '@/utils/optionSlots';
+
 export interface SaddleSpec {
   optionId: number;
   optionName: string;
@@ -30,13 +32,17 @@ function formatDate(val: unknown): string {
 }
 
 /** Extract a saddle spec value from the _saddleSpecs array merged into order rows.
- *  Accepts multiple possible option names to handle DB naming variations. */
+ *  Accepts multiple possible option names to handle DB naming variations.
+ *  An option may have several rows (legacy clone_number, labelled "Name (2)");
+ *  they are joined so the Cantle column shows every cantle upgrade. */
 function specVal(row: Record<string, unknown>, ...optionNames: string[]): string {
   const specs = row._saddleSpecs as SaddleSpec[] | undefined;
   if (!specs || !Array.isArray(specs)) return '';
   for (const name of optionNames) {
-    const match = specs.find((s) => s.optionName === name);
-    if (match?.displayValue) return match.displayValue;
+    const values = specs
+      .filter((s) => baseOptionName(s.optionName) === name && s.displayValue)
+      .map((s) => s.displayValue);
+    if (values.length > 0) return values.join(' / ');
   }
   return '';
 }

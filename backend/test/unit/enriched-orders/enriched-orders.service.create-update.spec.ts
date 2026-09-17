@@ -442,4 +442,79 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       expect(queryRunner.release).toHaveBeenCalled();
     });
   });
+
+  describe("saddle options clone_number", () => {
+    // Legacy stores a second "CANTLE Option" as another orders_info row with
+    // clone_number = 1; the editor sends that as cloneNumber and the service
+    // must write it instead of the hard-coded 0 it used to insert.
+    const insertCalls = () =>
+      queryRunner.query.mock.calls.filter(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("INSERT INTO orders_info"),
+      );
+
+    it("should write cloneNumber as the 4th insert parameter in updateOrder", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValue([]); // UPDATE, DELETE, INSERTs, log
+
+      await service.updateOrder(
+        100,
+        {
+          saddleOptions: [
+            { optionId: 4, optionItemId: 10, cloneNumber: 0 },
+            { optionId: 4, optionItemId: 11, cloneNumber: 1, color: "black" },
+          ],
+        },
+        1,
+        2,
+      );
+
+      const inserts = insertCalls();
+      expect(inserts).toHaveLength(2);
+      expect(inserts[0][1]).toEqual([100, 4, 10, 0, "", "", ""]);
+      expect(inserts[1][1]).toEqual([100, 4, 11, 1, "black", "", ""]);
+    });
+
+    it("should default cloneNumber to 0 in updateOrder when omitted", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValue([]);
+
+      await service.updateOrder(
+        100,
+        { saddleOptions: [{ optionId: 7, optionItemId: 701 }] },
+        1,
+        2,
+      );
+
+      expect(insertCalls()[0][1]).toEqual([100, 7, 701, 0, "", "", ""]);
+    });
+
+    it("should write cloneNumber as the 4th insert parameter in createOrder", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 555 }]) // INSERT orders RETURNING id
+        .mockResolvedValue([]); // orders_info INSERTs, log
+
+      await service.createOrder({
+        saddleOptions: [
+          { optionId: 4, optionItemId: 10, cloneNumber: 0 },
+          {
+            optionId: 4,
+            optionItemId: 0,
+            cloneNumber: 1,
+            custom: "A+B same as seat",
+          },
+        ],
+      });
+
+      const inserts = insertCalls();
+      expect(inserts).toHaveLength(2);
+      expect(inserts[0][1]).toEqual([555, 4, 10, 0, "", "", ""]);
+      expect(inserts[1][1]).toEqual([555, 4, 0, 1, "", "", "A+B same as seat"]);
+    });
+  });
 });
