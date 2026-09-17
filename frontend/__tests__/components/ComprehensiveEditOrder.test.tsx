@@ -813,8 +813,8 @@ describe('ComprehensiveEditOrder component', () => {
     it('sends empty shipping fields when the user clears them', async () => {
       // Same `'' || undefined` bug as the reference: a cleared shipping address
       // must reach the server as '' so the partial update actually blanks it.
-      // shipCountry is a legacy country select (not free text) since Task 10, so it
-      // isn't clearable this way; it's asserted separately as passed through unchanged.
+      // shipCountry is a legacy country select (not free text) since Task 10; it's
+      // cleared by picking the "- Choose -" item rather than editing a text input.
       (fetchOrderDetail as jest.Mock).mockResolvedValue({
         ...mockOrderDetail,
         shipName: 'Jane Rider',
@@ -831,6 +831,9 @@ describe('ComprehensiveEditOrder component', () => {
       for (const value of ['Jane Rider', '1 Stable Lane', 'Lexington', '40502']) {
         fireEvent.change(screen.getByDisplayValue(value), { target: { value: '' } });
       }
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('dialog-content').querySelector('[data-value="-1"]')!);
+      });
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
@@ -844,7 +847,7 @@ describe('ComprehensiveEditOrder component', () => {
           shipAddress: '',
           shipCity: '',
           shipZipcode: '',
-          shipCountry: 'Canada',
+          shipCountry: '',
         })
       );
     });
@@ -1989,6 +1992,26 @@ describe('ComprehensiveEditOrder component', () => {
       await renderAndWaitForLoad();
       await navigateToStep(2);
       expect(screen.getByText('Republic of Ireland')).toBeInTheDocument();
+    });
+
+    it('clears a previously saved shipping country via "- Choose -"', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(mockEditOptions) });
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, shipCountry: 'Republic of Ireland' });
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+
+      await renderAndWaitForLoad();
+      await navigateToStep(2);
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('dialog-content').querySelector('[data-value="-1"]')!);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(payload.shipCountry).toBe('');
     });
   });
 });

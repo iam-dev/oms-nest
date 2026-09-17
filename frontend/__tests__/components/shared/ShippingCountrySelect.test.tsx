@@ -33,7 +33,7 @@ describe('ShippingCountrySelect', () => {
 
   it('renders a "- Choose -" placeholder and treats the legacy "-1" sentinel as unset', () => {
     render(<ShippingCountrySelect country="-1" state="" onCountryChange={jest.fn()} onStateChange={jest.fn()} />);
-    expect(screen.getByText('- Choose -')).toBeInTheDocument();
+    expect(screen.getAllByText('- Choose -').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('select')[0]).toHaveAttribute('data-value', '');
   });
 
@@ -50,5 +50,16 @@ describe('ShippingCountrySelect', () => {
     render(<ShippingCountrySelect country="" state="" onCountryChange={onCountryChange} onStateChange={jest.fn()} />);
     fireEvent.click(screen.getByText('Netherlands'));
     expect(onCountryChange).toHaveBeenCalledWith('Netherlands');
+  });
+
+  it('clears a previously saved country by choosing "- Choose -"', () => {
+    const onCountryChange = jest.fn();
+    const { container } = render(
+      <ShippingCountrySelect country="Germany" state="" onCountryChange={onCountryChange} onStateChange={jest.fn()} />
+    );
+    const chooseItem = container.querySelector('[data-value="-1"]');
+    expect(chooseItem).not.toBeNull();
+    fireEvent.click(chooseItem as Element);
+    expect(onCountryChange).toHaveBeenCalledWith('');
   });
 });

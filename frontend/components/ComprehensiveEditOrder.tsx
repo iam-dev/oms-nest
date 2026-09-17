@@ -55,12 +55,6 @@ const steps = [
   { id: 4, title: 'Preview & Submit', icon: ClipboardList },
 ];
 
-// Currency map (integer to code)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const currencyMap: Record<number, string> = {
-  0: 'USD', 1: 'USD', 2: 'EUR', 3: 'GBP', 4: 'AUD', 5: 'CAD', 6: 'CHF', 7: 'DE',
-};
-
 export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderId, isLoading = false, error, onClose, onBack }: ComprehensiveEditOrderProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [loadingData, setLoadingData] = useState(false);

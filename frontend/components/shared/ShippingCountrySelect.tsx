@@ -24,6 +24,11 @@ export const US_STATES: readonly string[] = [
 
 const UNITED_STATES = 'United States';
 
+// Legacy DB stores "-1" as a sentinel for an unset country/state. Radix Select
+// forbids an empty-string item value, so "-1" also backs the "- Choose -" item
+// that lets a previously saved country/state be cleared again.
+const UNSET = '-1';
+
 interface Props {
   country: string;
   state: string;
@@ -34,17 +39,17 @@ interface Props {
 
 /** Legacy shipping Country select (+ US State select), shared by the Create and Edit order forms. */
 export function ShippingCountrySelect({ country, state, onCountryChange, onStateChange, idPrefix = 'ship' }: Props) {
-  // Legacy DB stores "-1" as a sentinel for an unset country.
-  const value = country && country !== '-1' ? country : '';
+  const value = country && country !== UNSET ? country : '';
   return (
     <>
       <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
         <Label htmlFor={`${idPrefix}-country`} className="text-sm font-medium">Country:</Label>
-        <Select value={value} onValueChange={onCountryChange}>
+        <Select value={value} onValueChange={(v) => onCountryChange(v === UNSET ? '' : v)}>
           <SelectTrigger id={`${idPrefix}-country`} className="h-9">
             <SelectValue placeholder="- Choose -" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value={UNSET}>- Choose -</SelectItem>
             {SHIPPING_COUNTRIES.map(c => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
@@ -54,11 +59,12 @@ export function ShippingCountrySelect({ country, state, onCountryChange, onState
       {value === UNITED_STATES && (
         <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
           <Label htmlFor={`${idPrefix}-state`} className="text-sm font-medium">State:</Label>
-          <Select value={state} onValueChange={onStateChange}>
+          <Select value={state} onValueChange={(v) => onStateChange(v === UNSET ? '' : v)}>
             <SelectTrigger id={`${idPrefix}-state`} className="h-9">
               <SelectValue placeholder="- Choose -" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={UNSET}>- Choose -</SelectItem>
               {US_STATES.map(s => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
