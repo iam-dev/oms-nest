@@ -814,7 +814,12 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   className={`flex items-center ${
                     currentStep >= step.id ? 'text-[#8B0000]' : 'text-gray-400'
                   }`}
-                  onClick={() => setCurrentStep(step.id)}
+                  onClick={() => {
+                    // Jumping forward off Step 1 is gated the same as Next Step;
+                    // moving backwards, or between steps 2 and 3, is not.
+                    if (currentStep === 1 && step.id > 1 && !validateSaddleInformation()) return;
+                    setCurrentStep(step.id);
+                  }}
                 >
                   <div className={`
                     w-10 h-10 rounded-full flex items-center justify-center border-2

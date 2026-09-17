@@ -563,6 +563,8 @@ describe('EditOrder component', () => {
     it('jumps to step 2 when the Customer & Shipping step indicator is clicked', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       const indicators = screen.getAllByRole('button', {
         name: /customer & shipping/i,
       });
@@ -575,6 +577,8 @@ describe('EditOrder component', () => {
 
     it('jumps to step 3 when the Order Settings step indicator is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       const indicators = screen.getAllByRole('button', {
         name: /order settings/i,
@@ -1535,12 +1539,27 @@ describe('EditOrder component', () => {
       });
     });
 
+    // Step 3 is unreachable without a fitter via BOTH Next Step and the step
+    // indicator (the indicator has its own gate — see the test below).
     it('blocks Next Step until the red-asterisk fields are filled', async () => {
       const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
       await chooseModelAndPreset();
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
       expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Leathertype'));
       expect(screen.getByText(/Step 1/)).toBeInTheDocument();
+    });
+
+    it('blocks the step indicator from jumping to Step 3 until the red-asterisk fields are filled', async () => {
+      const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar Rook 2.0 (K644B)')).toBeInTheDocument());
+      // Nothing selected — clicking the "Order Settings" indicator must not
+      // bypass the Step 1 gate the way it used to.
+      const indicators = screen.getAllByRole('button', { name: /order settings/i });
+      await act(async () => { fireEvent.click(indicators[0]); });
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
+      expect(screen.getByText(/Step 1/)).toBeInTheDocument();
+      expect(createOrderFromPayload).not.toHaveBeenCalled();
     });
   });
 });
