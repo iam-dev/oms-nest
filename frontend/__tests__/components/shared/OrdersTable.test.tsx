@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OrdersTable } from '@/components/shared/OrdersTable';
+import { ACTIONS_COLUMN_WIDTH } from '@/components/shared/DataTable';
 import { AuthTestProvider } from '@/utils/AuthTestProvider';
 import type { OrdersTableColumn, OrdersTableProps } from '@/components/shared/OrdersTable';
 import type { Order } from '@/types/Order';
@@ -145,6 +146,24 @@ describe('OrdersTable', () => {
 
       // OrdersTable appends an OPTIONS column when actions are provided
       expect(screen.getByText('OPTIONS')).toBeInTheDocument();
+    });
+
+    it('gives the OPTIONS column a fixed width so its buttons are not truncated', () => {
+      renderTable();
+
+      // The actions cell sits inside DataTable's truncate wrapper; with the
+      // table in fixed layout an unsized column gets an equal share of the
+      // width, which at laptop widths is too narrow for the button row.
+      const cols = screen.getByRole('table').querySelectorAll('colgroup col');
+      expect(cols[cols.length - 1]).toHaveStyle({ width: `${ACTIONS_COLUMN_WIDTH}px` });
+    });
+
+    it('pins the OPTIONS column so it stays visible while the table scrolls', () => {
+      renderTable();
+
+      const header = screen.getByText('OPTIONS').closest('th');
+      expect(header).toHaveClass('sticky');
+      expect(header).toHaveClass('right-0');
     });
   });
 

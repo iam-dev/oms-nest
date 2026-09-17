@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DataTable } from '@/components/shared/DataTable';
+import { DataTable, ACTIONS_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from '@/components/shared/DataTable';
 import type { Column } from '@/components/shared/DataTable';
 
 interface PaginationProps {
@@ -457,6 +457,76 @@ describe('DataTable', () => {
       expect(screen.getByText('OPTIONS')).toBeInTheDocument();
     });
 
+    it('reserves enough column width for a full row of five icon buttons', () => {
+      const renderActions = (item: MockData) => (
+        <div>
+          <button>Edit {item.name}</button>
+        </div>
+      );
+
+      render(
+        <DataTable
+          columns={mockColumns}
+          data={mockData}
+          pagination={mockPagination}
+          renderActions={renderActions}
+        />
+      );
+
+      // table-fixed never grows a column to fit its content, so the actions
+      // column must be wide enough up front: 5 x 32px buttons + 4 x 8px gaps
+      // + 16px cell padding. Anything narrower clips the trailing (delete) button.
+      const cols = screen.getByRole('table').querySelectorAll('colgroup col');
+      expect(cols[cols.length - 1]).toHaveStyle({ width: `${ACTIONS_COLUMN_WIDTH}px` });
+      expect(ACTIONS_COLUMN_WIDTH).toBeGreaterThanOrEqual(5 * 32 + 4 * 8 + 16);
+    });
+
+    it('pins the renderActions column to the right edge of the scroll container', () => {
+      const renderActions = (item: MockData) => <button>Edit {item.name}</button>;
+
+      render(
+        <DataTable
+          columns={mockColumns}
+          data={mockData}
+          pagination={mockPagination}
+          renderActions={renderActions}
+        />
+      );
+
+      // Narrow viewports scroll the table horizontally; the actions must stay
+      // in view rather than sit off-screen behind an invisible overlay scrollbar.
+      const header = screen.getByText('OPTIONS');
+      expect(header).toHaveClass('sticky');
+      expect(header).toHaveClass('right-0');
+      const cell = screen.getByText('Edit John Doe').closest('td');
+      expect(cell).toHaveClass('sticky');
+      expect(cell).toHaveClass('right-0');
+    });
+
+    it('pins a column declared sticky: "right" and keeps its row striping', () => {
+      const columns: Column<MockData>[] = [
+        ...mockColumns,
+        { key: 'ops', title: 'OPS', sticky: 'right', render: (_v, row) => <button>Ops {row?.name}</button> },
+      ];
+
+      render(<DataTable columns={columns} data={mockData} pagination={mockPagination} />);
+
+      const header = screen.getByText('OPS').closest('th');
+      expect(header).toHaveClass('sticky');
+      expect(header).toHaveClass('right-0');
+      const firstCell = screen.getByText('Ops John Doe').closest('td');
+      const secondCell = screen.getByText('Ops Jane Smith').closest('td');
+      expect(firstCell).toHaveClass('sticky');
+      expect(firstCell).toHaveClass('right-0');
+      expect(firstCell).toHaveClass('bg-white');
+      // A pinned cell needs an opaque background matching its striped row,
+      // otherwise the columns scrolling underneath show through.
+      expect(secondCell).toHaveClass('sticky');
+      expect(secondCell).toHaveClass('bg-gray-50');
+      // Non-pinned cells are unaffected.
+      expect(screen.getByText('John Doe').closest('td')).not.toHaveClass('sticky');
+    });
+
     it('does not render OPTIONS column when renderActions is not provided', () => {
       render(
         <DataTable
@@ -533,8 +603,33 @@ describe('DataTable', () => {
       const container = screen.getByRole('table').closest('.overflow-x-auto');
       expect(container).toBeInTheDocument();
       // Table itself enforces a 720px floor before horizontal scroll kicks in.
-      expect(screen.getByRole('table')).toHaveClass('min-w-[720px]');
+      expect(screen.getByRole('table')).toHaveStyle({ minWidth: '720px' });
       expect(screen.getByRole('table')).toHaveClass('table-fixed');
+    });
+
+    it('raises the floor so wide tables never squeeze a column below the minimum', () => {
+      // A Dashboard-style table: 11 data columns plus the pinned actions column.
+      const columns: Column<MockData>[] = Array.from({ length: 11 }, (_, i) => ({ key: `c${i}`, title: `C${i}` }));
+      const renderActions = () => <button>x</button>;
+
+      render(<DataTable columns={columns} data={mockData} pagination={mockPagination} renderActions={renderActions} />);
+
+      // 720px would leave (720 - 208) / 11 ≈ 46px per column — unreadable — so
+      // the floor grows with the column count and scrolls instead.
+      expect(screen.getByRole('table')).toHaveStyle({ minWidth: `${11 * MIN_COLUMN_WIDTH + ACTIONS_COLUMN_WIDTH}px` });
+    });
+
+    it('counts explicit column widths toward the floor', () => {
+      const columns: Column<MockData>[] = [
+        { key: 'a', title: 'A', width: 300 },
+        { key: 'b', title: 'B', width: '300px' },
+        { key: 'c', title: 'C' },
+        { key: 'd', title: 'D', sticky: 'right', width: ACTIONS_COLUMN_WIDTH },
+      ];
+
+      render(<DataTable columns={columns} data={mockData} pagination={mockPagination} />);
+
+      expect(screen.getByRole('table')).toHaveStyle({ minWidth: `${300 + 300 + MIN_COLUMN_WIDTH + ACTIONS_COLUMN_WIDTH}px` });
     });
   });
 

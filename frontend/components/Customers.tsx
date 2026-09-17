@@ -47,6 +47,7 @@ export default function Customers() {
       logger.log('Fetching customers with filters:', filters);
       const data = await fetchCustomers({
         page: currentPage,
+        limit: itemsPerPage,
         searchTerm,
         filters,
         orderBy: 'id',

@@ -43,7 +43,10 @@ export default function ClientLayoutWrapper({ children }: { children: React.Reac
     return (
       <div style={{ display: 'flex', minHeight: '100vh' }}>
         <Sidebar />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        {/* minWidth: 0 lets this flex column shrink below its content's intrinsic
+            width, so wide tables scroll inside their own container instead of
+            pushing the whole page wider than the viewport. */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <TopNav />
           <main style={{ flex: 1, padding: '32px', minHeight: '100vh', boxSizing: 'border-box' }}>{children}</main>
         </div>

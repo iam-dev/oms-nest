@@ -28,6 +28,7 @@ export function useOrderFilters(options?: { baseFilters?: Record<string, string>
     setPage,
     pagination,
     setTotalItems,
+    itemsPerPage,
   } = usePagination(30, 1);
 
   // Parse a string that may contain multiple order IDs (pasted from Excel, etc.)
@@ -122,6 +123,7 @@ export function useOrderFilters(options?: { baseFilters?: Record<string, string>
 
       const data = await getEnrichedOrders({
         page,
+        limit: itemsPerPage,
         partial: false,
         filters,
         orderBy: 'orderId',
@@ -191,7 +193,7 @@ export function useOrderFilters(options?: { baseFilters?: Record<string, string>
   // options?.baseFilters and creates a new object reference each render, so including it
   // would cause an infinite fetch loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, headerFilters, setTotalItems]);
+  }, [page, itemsPerPage, headerFilters, setTotalItems]);
 
   // Fetch on mount and filter/page change
   useEffect(() => {

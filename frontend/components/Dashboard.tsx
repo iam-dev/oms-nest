@@ -21,7 +21,6 @@ import {
   processDashboardOrders,
   fetchCompleteOrderData
 } from '../utils/orderProcessing';
-import { getOrderStatusStats } from '../services/dashboard';
 import { getEnrichedOrders, getAllStatusValues, universalSearch } from '@/services/enrichedOrders';
 import { useDebounce } from '@/hooks/useDebounce';
 import { API_URL } from '@/services/api-config';
@@ -34,25 +33,8 @@ import { EditOrder } from '@/components/EditOrder';
 import { ComprehensiveEditOrder } from '@/components/ComprehensiveEditOrder';
 import { Dialog } from '@/components/ui/dialog';
 
-const orderStatusData = {
-  unordered: { count: 503, label: 'Unordered' },
-  orderedChanged: { count: 65, label: 'Ordered/Changed' },
-  approved: { count: 900, label: 'Approved' },
-  inProductionP1: { count: 558, label: 'In Production P1' },
-  inProductionP2: { count: 543, label: 'In Production P2' },
-  inProductionP3: { count: 311, label: 'In Production P3' },
-  shippedToFitter: { count: 7505, label: 'Shipped to Fitter' },
-  shippedToCustomer: { count: 1142, label: 'Shipped to Customer' },
-  inventory: { count: 671, label: 'Inventory' },
-  onHold: { count: 204, label: 'On hold' },
-  onTrial: { count: 6, label: 'On trial' },
-  completedSale: { count: 33346, label: 'Completed sale' }
-};
-
 export default function Dashboard() {
   const { isFitter } = useUserRole();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [orderStatusStats, setOrderStatusStats] = useState<any>(null);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms delay
@@ -94,20 +76,10 @@ export default function Dashboard() {
   const refreshInterval = useRef<NodeJS.Timeout | null>(null);
   
 
+  // totalOrders comes from DashboardOrderStatusFlow via onTotalOrders — it
+  // already fetches /orders/stats and refetches with the table, so a second
+  // fetch here could only disagree with it.
   useEffect(() => {
-    // Load status stats
-    getOrderStatusStats()
-      .then(data => {
-        setOrderStatusStats(data);
-        const total = Object.values(data.orderStatusCounts || {}).reduce((sum: number, v) => sum + Number(v), 0);
-        setTotalOrders(total);
-      })
-      .catch(() => {
-        setOrderStatusStats(null);
-        const total = Object.values(orderStatusData).reduce((sum: number, s) => sum + (s.count || 0), 0);
-        setTotalOrders(total);
-      });
-    
     // Load actual status values from database for debugging
     getAllStatusValues().then(statuses => {
       logger.log('Dashboard: Actual status values in database:', statuses);
@@ -166,6 +138,7 @@ export default function Dashboard() {
 
       getEnrichedOrders({
         page: currentPage,
+        limit: itemsPerPage,
         partial: false,
         filters,
         bustCache: dateFilterTrigger > 0,
@@ -245,6 +218,7 @@ export default function Dashboard() {
 
       getEnrichedOrders({
         page: currentPage,
+        limit: itemsPerPage,
         partial: false,
         filters,
       })
@@ -408,17 +382,6 @@ export default function Dashboard() {
   const filteredOrders = orders;
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const statusData = orderStatusStats || orderStatusData;
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  const statusList = Object.entries(orderStatusStats || orderStatusData).map(([key, val]: any) => ({
-    key,
-    label: val.label,
-    count: val.count,
-    color: '#7b2326',
-  }));
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function DatePickerField({ label, date, setDate }: { label: string; date: Date | undefined; setDate: (date: Date | undefined) => void }) {
     return (
       <div className="flex flex-col gap-1">
@@ -507,6 +470,7 @@ export default function Dashboard() {
                 logger.log('Resetting all filters via All Orders button');
                 setHeaderFilters({});
                 setDate({ from: undefined, to: undefined });
+                setSearchTerm('');
                 setCurrentPage(1);
               }}
               style={{

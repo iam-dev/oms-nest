@@ -87,6 +87,22 @@ describe('Enriched Orders Service', () => {
       });
     });
 
+    it('forwards the page size so the backend paginates the way the UI counts pages', async () => {
+      mockFetchEntities.mockResolvedValue({ 'hydra:member': [], 'hydra:totalItems': 50239 });
+
+      // Regression: the UI derived totalPages from its own itemsPerPage (30)
+      // while the backend paged by its default (50), so LAST asked for page
+      // 1675 of 1005 and got an empty table.
+      await getEnrichedOrders({ page: 1675, limit: 30, filters: {} });
+
+      expect(mockFetchEntities).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page: 1675,
+          extraParams: expect.objectContaining({ limit: 30 }),
+        }),
+      );
+    });
+
     it('does not apply any client-side fitter filtering', async () => {
       mockFetchEntities.mockResolvedValue({
         'hydra:member': mockOrders,

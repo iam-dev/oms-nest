@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Dashboard from "@/components/Dashboard";
 import { AuthTestProvider } from "@/utils/AuthTestProvider";
@@ -167,20 +167,30 @@ jest.mock("@/services/api", () => ({
 
 // Mock status cards component
 jest.mock("@/components/DashboardOrderStatusFlow", () => {
+  const ReactActual = jest.requireActual("react");
   const MockDashboardOrderStatusFlow = ({
     onStatusClick,
+    onTotalOrders,
     refreshKey,
   }: {
     onStatusClick: (status: string) => void;
+    onTotalOrders?: (total: number) => void;
     refreshKey?: number;
-  }) => (
-    <div data-testid="status-cards">
-      <div data-testid="status-cards-refresh-key">{refreshKey}</div>
-      <button onClick={() => onStatusClick("pending")}>Pending</button>
-      <button onClick={() => onStatusClick("approved")}>Approved</button>
-      <button onClick={() => onStatusClick("completed")}>Completed</button>
-    </div>
-  );
+  }) => {
+    // The real component reports the backend's totalOrders once its stats load.
+    ReactActual.useEffect(() => {
+      onTotalOrders?.(50239);
+    }, [onTotalOrders]);
+
+    return (
+      <div data-testid="status-cards">
+        <div data-testid="status-cards-refresh-key">{refreshKey}</div>
+        <button onClick={() => onStatusClick("pending")}>Pending</button>
+        <button onClick={() => onStatusClick("approved")}>Approved</button>
+        <button onClick={() => onStatusClick("completed")}>Completed</button>
+      </div>
+    );
+  };
 
   return MockDashboardOrderStatusFlow;
 });
@@ -195,7 +205,8 @@ jest.mock("@/components/Reports", () => {
 jest.mock("@/services/dashboard", () => ({
   getOrderStatusStats: jest.fn(() =>
     Promise.resolve({
-      orderStatusCounts: {
+      totalOrders: 50239,
+      statusCounts: {
         pending: 10,
         approved: 20,
         completed: 30,
@@ -324,9 +335,10 @@ describe("Dashboard Component", () => {
       "hydra:totalItems": mockOrders.length,
     });
 
-    // Set up order status stats mock
+    // Set up order status stats mock (real /orders/stats shape)
     mockGetOrderStatusStats.mockResolvedValue({
-      orderStatusCounts: {
+      totalOrders: 50239,
+      statusCounts: {
         pending: 10,
         approved: 20,
         completed: 30,
@@ -344,6 +356,16 @@ describe("Dashboard Component", () => {
       await waitFor(() => {
         expect(screen.getByTestId("status-cards")).toBeInTheDocument();
         expect(screen.getByTestId("orders-table")).toBeInTheDocument();
+      });
+    });
+
+    it("requests pages of the same size it uses to compute totalPages", async () => {
+      renderWithAuth(<Dashboard />);
+
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders).toHaveBeenCalledWith(
+          expect.objectContaining({ page: 1, limit: 30 }),
+        );
       });
     });
 
@@ -501,6 +523,51 @@ describe("Dashboard Component", () => {
             page: 1,
           }),
         );
+      });
+    });
+  });
+
+  describe("All Orders button", () => {
+    it("shows the total order count reported by the status flow", async () => {
+      renderWithAuth(<Dashboard />);
+
+      // Regression: a second stats fetch in Dashboard summed a field the API
+      // doesn't return (orderStatusCounts) and overwrote the real total with 0,
+      // which hid the badge entirely.
+      // Let every mount-time fetch settle before asserting, so a late
+      // overwrite of the total can't slip past the assertion.
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders).toHaveBeenCalled();
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole("button", { name: /All Orders 50239/ })).toBeInTheDocument();
+    });
+
+    it("clears the status, date and search filters when clicked", async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Dashboard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("status-cards")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText("Pending"));
+      fireEvent.change(screen.getByTestId("search-input"), { target: { value: "smith" } });
+      await waitFor(() => {
+        expect(screen.getByTestId("filter-status")).toHaveTextContent("Status Filter: pending");
+        expect(screen.getByTestId("search-input")).toHaveValue("smith");
+      });
+
+      await user.click(screen.getByRole("button", { name: /All Orders/ }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("filter-status")).toHaveTextContent("Status Filter: none");
+        expect(screen.getByTestId("search-input")).toHaveValue("");
+        expect(screen.getByTestId("date-from")).toHaveTextContent("Date From: none");
+        expect(screen.getByTestId("current-page")).toHaveTextContent("Page: 1");
       });
     });
   });
