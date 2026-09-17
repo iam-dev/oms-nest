@@ -1389,12 +1389,11 @@ export class EnrichedOrdersService {
         currencyMap[order.fitterCurrency] || String(order.fitterCurrency || "");
 
       // Fetch saddle specifications from orders_info + options + options_items/leather_types
-      // Leather-related option IDs use leather_types for display value.
+      // Leather options (options.type = 1) use leather_types for the display value.
       // Extra rows of the same option (orders_info.clone_number > 0) are labelled
       // legacy-style, "CANTLE Option (2)", so every consumer that just prints
       // optionName shows them correctly.  Consumers that match on the exact
       // name strip the suffix with frontend/utils/optionSlots.baseOptionName.
-      const leatherOptionIds = [5, 6, 10, 11, 12, 13, 14, 21, 22];
       let saddleSpecs: any[] = [];
       try {
         saddleSpecs = await queryRunner.query(
@@ -1412,7 +1411,7 @@ export class EnrichedOrdersService {
             o.sequence,
             CASE
               WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
-              WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
+              WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)
               ELSE oitm.name
             END
             || CASE
@@ -1429,11 +1428,11 @@ export class EnrichedOrdersService {
           LEFT JOIN options o ON oi.option_id = o.id
           LEFT JOIN options_items oitm ON oi.option_item_id = oitm.id
           LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
-            AND oi.option_id = ANY($2::int[])
+            AND o.type = 1
           WHERE oi.order_id = $1
           ORDER BY o.sequence NULLS LAST, oi.option_id, oi.clone_number
           `,
-          [orderId, leatherOptionIds],
+          [orderId],
         );
       } catch (err) {
         this.logger.warn(
@@ -2736,7 +2735,6 @@ export class EnrichedOrdersService {
     await queryRunner.connect();
 
     try {
-      const leatherOptionIds = [5, 6, 10, 11, 12, 13, 14, 21, 22];
       const rows: SaddleSpecRow[] = await queryRunner.query(
         `
         SELECT
@@ -2746,18 +2744,18 @@ export class EnrichedOrdersService {
           oi.clone_number as "cloneNumber",
           CASE
             WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
-            WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
+            WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)
             ELSE oitm.name
           END as "displayValue"
         FROM orders_info oi
         LEFT JOIN options o ON oi.option_id = o.id
         LEFT JOIN options_items oitm ON oi.option_item_id = oitm.id
         LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
-          AND oi.option_id = ANY($2::int[])
+          AND o.type = 1
         WHERE oi.order_id = ANY($1::int[])
         ORDER BY oi.order_id, o.sequence, oi.option_id, oi.clone_number
         `,
-        [orderIds, leatherOptionIds],
+        [orderIds],
       );
 
       const result: Record<number, SaddleSpecResult[]> = {};

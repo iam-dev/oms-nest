@@ -635,6 +635,30 @@ describe("EnrichedOrdersService", () => {
         expect(sql).toContain(`o.extra_allowed as "extraAllowed"`);
       },
     );
+
+    it("should resolve leather names by options.type = 1, not a hardcoded id list (getOrderDetail)", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1, currency: 1, fitterCurrency: 1 }]) // detail row
+        .mockResolvedValue([]); // specs, log, comments
+
+      await service.getOrderDetail(1);
+
+      const sql = sqlContaining('as "displayValue"');
+      expect(sql).toContain("WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)");
+      expect(sql).toContain("LEFT JOIN leather_types lt ON oi.option_item_id = lt.id AND o.type = 1");
+      expect(sql).not.toContain("ANY($2::int[])");
+    });
+
+    it("should resolve leather names by options.type = 1 in getBatchSaddleSpecs", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getBatchSaddleSpecs([1, 2]);
+
+      const sql = sqlContaining('as "displayValue"');
+      expect(sql).toContain("WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)");
+      expect(sql).not.toContain("ANY($2::int[])");
+    });
   });
 
   describe("getEditFormOptions - per-model dropdown lists", () => {
