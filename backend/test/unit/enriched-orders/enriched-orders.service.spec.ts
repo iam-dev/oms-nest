@@ -487,6 +487,10 @@ describe("EnrichedOrdersService", () => {
     //
     // The detail read must prefer the order's own snapshot and fall back to the
     // customer record only when the snapshot is empty (legacy rows).
+    //
+    // "Empty" includes the literal string 'NULL': the legacy PHP wrote the word
+    // into these NOT NULL columns on ~78% of orders (156k values in the 2026-06
+    // dump), and its own UI ignores it and shows the customers record.
 
     const detailSelectSql = (): string => {
       const call = queryRunner.query.mock.calls.find(
@@ -524,10 +528,24 @@ describe("EnrichedOrdersService", () => {
         // Whitespace-insensitive match on the exact expression.
         const normalised = sql.replace(/\s+/g, " ");
         expect(normalised).toContain(
-          `COALESCE(NULLIF(o.${column}, ''), c.${column}) as "${alias}"`,
+          `COALESCE(NULLIF(NULLIF(o.${column}, ''), 'NULL'), c.${column}) as "${alias}"`,
         );
         expect(normalised).not.toContain(`c.${column} as "${alias}"`);
       },
     );
+
+    it("should not surface the legacy literal 'NULL' as the horse name", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1, currency: 1, fitterCurrency: 1 }]) // detail row
+        .mockResolvedValue([]); // saddle specs, log, comments
+
+      await service.getOrderDetail(1);
+
+      const normalised = detailSelectSql().replace(/\s+/g, " ");
+      expect(normalised).toContain(
+        `NULLIF(o.horse_name, 'NULL') as "horseName"`,
+      );
+    });
   });
 });

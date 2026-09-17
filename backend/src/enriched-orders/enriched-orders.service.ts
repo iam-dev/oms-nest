@@ -1259,7 +1259,7 @@ export class EnrichedOrdersService {
 
           -- Order address fields
           o.name as "orderName",
-          o.horse_name as "horseName",
+          NULLIF(o.horse_name, 'NULL') as "horseName",
           o.address as "orderAddress",
           o.city as "orderCity",
           o.state as "orderState",
@@ -1301,16 +1301,19 @@ export class EnrichedOrdersService {
           -- from there first; fall back to the customers record for legacy rows
           -- whose snapshot was never filled.  Reading c.* alone made every
           -- customer-info edit look lost on the next open.
+          -- "Never filled" is '' or the literal string 'NULL': the legacy PHP
+          -- wrote the word into these NOT NULL columns on most orders, and its
+          -- own UI ignores it and shows the customers record instead.
           c.id as "customerId",
-          COALESCE(NULLIF(o.name, ''), c.name) as "customerName",
-          COALESCE(NULLIF(o.email, ''), c.email) as "customerEmail",
-          COALESCE(NULLIF(o.address, ''), c.address) as "customerAddress",
-          COALESCE(NULLIF(o.city, ''), c.city) as "customerCity",
-          COALESCE(NULLIF(o.state, ''), c.state) as "customerState",
-          COALESCE(NULLIF(o.zipcode, ''), c.zipcode) as "customerZipcode",
-          COALESCE(NULLIF(o.country, ''), c.country) as "customerCountry",
-          COALESCE(NULLIF(o.phone_no, ''), c.phone_no) as "customerPhone",
-          COALESCE(NULLIF(o.cell_no, ''), c.cell_no) as "customerCell",
+          COALESCE(NULLIF(NULLIF(o.name, ''), 'NULL'), c.name) as "customerName",
+          COALESCE(NULLIF(NULLIF(o.email, ''), 'NULL'), c.email) as "customerEmail",
+          COALESCE(NULLIF(NULLIF(o.address, ''), 'NULL'), c.address) as "customerAddress",
+          COALESCE(NULLIF(NULLIF(o.city, ''), 'NULL'), c.city) as "customerCity",
+          COALESCE(NULLIF(NULLIF(o.state, ''), 'NULL'), c.state) as "customerState",
+          COALESCE(NULLIF(NULLIF(o.zipcode, ''), 'NULL'), c.zipcode) as "customerZipcode",
+          COALESCE(NULLIF(NULLIF(o.country, ''), 'NULL'), c.country) as "customerCountry",
+          COALESCE(NULLIF(NULLIF(o.phone_no, ''), 'NULL'), c.phone_no) as "customerPhone",
+          COALESCE(NULLIF(NULLIF(o.cell_no, ''), 'NULL'), c.cell_no) as "customerCell",
 
           -- Fitter fields
           f.id as "fitterId",
