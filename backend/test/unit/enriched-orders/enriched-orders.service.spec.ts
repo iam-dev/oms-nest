@@ -530,4 +530,67 @@ describe("EnrichedOrdersService", () => {
       },
     );
   });
+
+  describe("option clones (orders_info.clone_number)", () => {
+    // Legacy shows an option's extra rows as "CANTLE Option (2)", "(3)", …;
+    // the read queries must expose clone_number and label the rows the same way.
+    const sqlContaining = (needle: string): string => {
+      const call = queryRunner.query.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === "string" && c[0].includes(needle),
+      );
+      return call ? (call[0] as string).replace(/\s+/g, " ") : "";
+    };
+
+    const CLONE_LABEL_SQL = `o.name || CASE WHEN oi.clone_number > 0 THEN ' (' || (oi.clone_number + 1) || ')' ELSE '' END as "optionName"`;
+
+    it("getOrderDetail returns cloneNumber and a suffixed optionName, ordered by clone_number", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1, currency: 1, fitterCurrency: 1 }]) // detail row
+        .mockResolvedValue([]); // specs, log, comments
+
+      await service.getOrderDetail(1);
+
+      const sql = sqlContaining("FROM orders_info oi");
+      expect(sql).not.toBe("");
+      expect(sql).toContain(`oi.clone_number as "cloneNumber"`);
+      expect(sql).toContain(CLONE_LABEL_SQL);
+      expect(sql).toContain(
+        "ORDER BY o.sequence NULLS LAST, oi.option_id, oi.clone_number",
+      );
+    });
+
+    it("getBatchSaddleSpecs returns cloneNumber and a suffixed optionName, ordered by clone_number", async () => {
+      queryRunner.query.mockResolvedValue([
+        { orderId: 1, optionId: 4, optionName: "CANTLE Option", cloneNumber: 0, displayValue: "A" },
+        { orderId: 1, optionId: 4, optionName: "CANTLE Option (2)", cloneNumber: 1, displayValue: "B" },
+      ]);
+
+      const result = await service.getBatchSaddleSpecs([1]);
+
+      const sql = sqlContaining("WHERE oi.order_id = ANY($1::int[])");
+      expect(sql).toContain(`oi.clone_number as "cloneNumber"`);
+      expect(sql).toContain(CLONE_LABEL_SQL);
+      expect(sql).toContain(
+        "ORDER BY oi.order_id, o.sequence, oi.option_id, oi.clone_number",
+      );
+      expect(result[1]).toEqual([
+        { optionId: 4, optionName: "CANTLE Option", cloneNumber: 0, displayValue: "A" },
+        { optionId: 4, optionName: "CANTLE Option (2)", cloneNumber: 1, displayValue: "B" },
+      ]);
+    });
+
+    it.each([
+      ["with a saddle filter", 10],
+      ["without a saddle filter", undefined],
+    ])("getEditFormOptions selects options.extra_allowed %s", async (_label, saddleId) => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getEditFormOptions(saddleId);
+
+      const sql = sqlContaining('o.name as "optionName"');
+      expect(sql).not.toBe("");
+      expect(sql).toContain(`o.extra_allowed as "extraAllowed"`);
+    });
+  });
 });

@@ -169,12 +169,14 @@ export interface SaddleSpecRow {
   orderId: number;
   optionId: number;
   optionName: string;
+  cloneNumber: number;
   displayValue: string;
 }
 
 export interface SaddleSpecResult {
   optionId: number;
   optionName: string;
+  cloneNumber: number;
   displayValue: string;
 }
 
@@ -1384,7 +1386,11 @@ export class EnrichedOrdersService {
         currencyMap[order.fitterCurrency] || String(order.fitterCurrency || "");
 
       // Fetch saddle specifications from orders_info + options + options_items/leather_types
-      // Leather-related option IDs use leather_types for display value
+      // Leather-related option IDs use leather_types for display value.
+      // Extra rows of the same option (orders_info.clone_number > 0) are labelled
+      // legacy-style, "CANTLE Option (2)", so every consumer that just prints
+      // optionName shows them correctly.  Consumers that match on the exact
+      // name strip the suffix with frontend/utils/optionSlots.baseOptionName.
       const leatherOptionIds = [5, 6, 10, 11, 12, 13, 14, 21, 22];
       let saddleSpecs: any[] = [];
       try {
@@ -1392,8 +1398,9 @@ export class EnrichedOrdersService {
           `
           SELECT
             oi.option_id as "optionId",
-            o.name as "optionName",
+            o.name || CASE WHEN oi.clone_number > 0 THEN ' (' || (oi.clone_number + 1) || ')' ELSE '' END as "optionName",
             oi.option_item_id as "optionItemId",
+            oi.clone_number as "cloneNumber",
             oitm.name as "itemName",
             lt.name as "leatherName",
             oi.custom,
@@ -1421,7 +1428,7 @@ export class EnrichedOrdersService {
           LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
             AND oi.option_id = ANY($2::int[])
           WHERE oi.order_id = $1
-          ORDER BY o.sequence NULLS LAST, oi.option_id
+          ORDER BY o.sequence NULLS LAST, oi.option_id, oi.clone_number
           `,
           [orderId, leatherOptionIds],
         );
@@ -1550,7 +1557,7 @@ export class EnrichedOrdersService {
       if (saddleId) {
         options = await queryRunner.query(
           `
-          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1
+          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.extra_allowed as "extraAllowed"
           FROM options o
           INNER JOIN saddle_options_items soi ON soi.option_id = o.id
           WHERE soi.saddle_id = $1 AND soi.deleted = 0
@@ -1576,7 +1583,7 @@ export class EnrichedOrdersService {
         );
       } else {
         options = await queryRunner.query(`
-          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1
+          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.extra_allowed as "extraAllowed"
           FROM options o
           ORDER BY o.sequence
         `);
@@ -2655,7 +2662,8 @@ export class EnrichedOrdersService {
         SELECT
           oi.order_id as "orderId",
           oi.option_id as "optionId",
-          o.name as "optionName",
+          o.name || CASE WHEN oi.clone_number > 0 THEN ' (' || (oi.clone_number + 1) || ')' ELSE '' END as "optionName",
+          oi.clone_number as "cloneNumber",
           CASE
             WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
             WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
@@ -2667,7 +2675,7 @@ export class EnrichedOrdersService {
         LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
           AND oi.option_id = ANY($2::int[])
         WHERE oi.order_id = ANY($1::int[])
-        ORDER BY oi.order_id, o.sequence
+        ORDER BY oi.order_id, o.sequence, oi.option_id, oi.clone_number
         `,
         [orderIds, leatherOptionIds],
       );
@@ -2679,6 +2687,7 @@ export class EnrichedOrdersService {
         result[oid].push({
           optionId: row.optionId,
           optionName: row.optionName,
+          cloneNumber: row.cloneNumber,
           displayValue: row.displayValue,
         });
       }
