@@ -14,7 +14,14 @@ export interface Customer {
   name: string;
   email?: string;
   phone?: string;
-  address?: Address;
+  // Raw customer search/detail rows (backend CustomerDto) carry the phone
+  // number as phoneNo, not phone — see selectCustomer in EditOrder.tsx.
+  phoneNo?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipcode?: string;
+  country?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -319,13 +326,11 @@ export interface OrderEditFormState {
   customer?: Customer;
   customerAddress?: Address;
   fitter?: Fitter;
-  fitterAddress?: Address;
   shippingAddress?: Address;
-  shippingMethod?: string;
-  
+
   // Step 3: Order settings
   reference?: string;
-  status: OrderStatus;
+  status: string;
   isUrgent?: boolean;
   isStock?: boolean;
   isDemo?: boolean;

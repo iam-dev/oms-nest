@@ -547,6 +547,18 @@ describe("EnrichedOrdersService", () => {
         `NULLIF(o.horse_name, 'NULL') as "horseName"`,
       );
     });
+
+    it("should map currency/fitterCurrency codes to match legacy fitters.currency ids (1 USD…7 DE)", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1, currency: 4, fitterCurrency: 6 }]) // detail row
+        .mockResolvedValue([]); // saddle specs, log, comments
+
+      const result = await service.getOrderDetail(1);
+
+      expect(result.currency).toBe("CAN");
+      expect(result.fitterCurrency).toBe("NL");
+    });
   });
 
   describe("option clones (orders_info.clone_number)", () => {
@@ -635,6 +647,36 @@ describe("EnrichedOrdersService", () => {
         expect(sql).toContain(`o.extra_allowed as "extraAllowed"`);
       },
     );
+
+    it("should resolve leather names by options.type = 1, not a hardcoded id list (getOrderDetail)", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([{ id: 1, currency: 1, fitterCurrency: 1 }]) // detail row
+        .mockResolvedValue([]); // specs, log, comments
+
+      await service.getOrderDetail(1);
+
+      const sql = sqlContaining('as "displayValue"');
+      expect(sql).toContain(
+        "WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)",
+      );
+      expect(sql).toContain(
+        "LEFT JOIN leather_types lt ON oi.option_item_id = lt.id AND o.type = 1",
+      );
+      expect(sql).not.toContain("ANY($2::int[])");
+    });
+
+    it("should resolve leather names by options.type = 1 in getBatchSaddleSpecs", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getBatchSaddleSpecs([1, 2]);
+
+      const sql = sqlContaining('as "displayValue"');
+      expect(sql).toContain(
+        "WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)",
+      );
+      expect(sql).not.toContain("ANY($2::int[])");
+    });
   });
 
   describe("getEditFormOptions - per-model dropdown lists", () => {
@@ -665,24 +707,38 @@ describe("EnrichedOrdersService", () => {
       expect(sql).toContain("ORDER BY oi.option_id, oi.sequence, oi.name");
     });
 
-    it("should return the leathers ticked per leather option as optionLeathers", async () => {
+    it("should offer a leather option every leather ticked anywhere on the saddle that is an item of that option (legacy rule)", async () => {
+      // Legacy joins SaddleOptionsItems on saddle + leather only, so a leather
+      // ticked under Skirt also shows under Seat Leather. Verified 401/401
+      // against production on 2026-09-17.
       queryRunner.query.mockImplementation((sql: string) =>
         Promise.resolve(
-          sql.includes("soi.leather_id = lt.id")
-            ? [{ optionId: 11, leatherId: 48, name: "ASBLV" }]
+          sql.includes("t.leather_id = lt.id")
+            ? [{ optionId: 11, leatherId: 48, name: "ASBLV", sequence: 1 }]
             : [],
         ),
       );
 
       const result = await service.getEditFormOptions(100);
 
-      const sql = sqlContaining("soi.leather_id = lt.id");
-      expect(sql).toContain("saddle_options_items soi");
-      expect(sql).toContain("soi.saddle_id = $1");
-      expect(sql).toContain("soi.deleted = 0");
-      expect(sql).toContain("lt.deleted = 0");
+      const sql = sqlContaining("t.leather_id = lt.id");
+      // option must be enabled for the saddle
+      expect(sql).toContain("en.saddle_id = $1 AND en.option_id = o.id");
+      expect(sql).toContain("en.deleted = 0");
+      // leather must be an item of the option
+      expect(sql).toContain(
+        "oi.option_id = o.id AND oi.leather_id > 0 AND oi.deleted = 0",
+      );
+      expect(sql).toContain("lt.id = oi.leather_id AND lt.deleted = 0");
+      // ticked anywhere on the saddle, regardless of option
+      expect(sql).toContain(
+        "WHERE t.saddle_id = $1 AND t.leather_id = lt.id AND t.deleted = 0",
+      );
+      expect(sql).not.toContain("t.option_id");
+      expect(sql).toContain("o.type = 1");
+      expect(sql).toContain("ORDER BY o.id, lt.sequence, lt.name");
       expect(result.optionLeathers).toEqual([
-        { optionId: 11, leatherId: 48, name: "ASBLV" },
+        { optionId: 11, leatherId: 48, name: "ASBLV", sequence: 1 },
       ]);
     });
 
@@ -696,7 +752,7 @@ describe("EnrichedOrdersService", () => {
       expect(sql).toContain("sl.leather_id = lt.id");
       expect(sql).toContain("sl.saddle_id = $1");
       expect(sql).toContain("sl.deleted = 0");
-      expect(sql).toContain("ORDER BY sl.sequence, lt.name");
+      expect(sql).toContain("ORDER BY sl.sequence, lt.sequence, lt.name");
     });
 
     it("should return every item, leather type and no optionLeathers when no saddle is chosen", async () => {
@@ -710,6 +766,42 @@ describe("EnrichedOrdersService", () => {
       const leathers = sqlContaining("FROM leather_types");
       expect(leathers).not.toContain("saddle_leathers");
       expect(result.optionLeathers).toEqual([]);
+    });
+
+    it("should return the saddle's per-currency leather prices (saddle_leathers.price1..price7)", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getEditFormOptions(100);
+
+      const sql = sqlContaining("FROM leather_types lt");
+      for (let n = 1; n <= 7; n++) expect(sql).toContain(`sl.price${n}`);
+      expect(sql).not.toContain('0 as "price1"');
+    });
+
+    it("should return the fitter's currency and skip fitters with no name", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getEditFormOptions(undefined);
+
+      const sql = sqlContaining("FROM fitters f");
+      expect(sql).toContain("f.currency");
+      expect(sql).toContain(
+        "COALESCE(NULLIF(c.full_name, ''), NULLIF(c.user_name, '')) IS NOT NULL",
+      );
+    });
+
+    it("should return per-currency prices for options (extras)", async () => {
+      queryRunner.query.mockResolvedValue([]);
+
+      await service.getEditFormOptions(100);
+      const withSaddle = sqlContaining('o.extra_allowed as "extraAllowed"');
+      for (let n = 1; n <= 7; n++) expect(withSaddle).toContain(`o.price${n}`);
+
+      queryRunner.query.mockClear();
+      await service.getEditFormOptions(undefined);
+      const withoutSaddle = sqlContaining('o.extra_allowed as "extraAllowed"');
+      for (let n = 1; n <= 7; n++)
+        expect(withoutSaddle).toContain(`o.price${n}`);
     });
   });
 });

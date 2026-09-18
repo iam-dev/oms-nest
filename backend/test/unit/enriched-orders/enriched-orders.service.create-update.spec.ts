@@ -78,6 +78,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
         .mockResolvedValueOnce([]) // RLS set_config
         .mockResolvedValueOnce([{ active: true }]) // fitter assignable check
         .mockResolvedValueOnce([{ id: 1 }]) // status lookup (if orderStatus provided)
+        .mockResolvedValueOnce([{ currency: 1, factoryId: 2 }]) // resolveCurrencyAndFactory
         .mockResolvedValueOnce([{ id: 999 }]) // INSERT RETURNING id
         .mockResolvedValueOnce(undefined); // audit log INSERT
 
@@ -139,6 +140,152 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
     });
   });
 
+  describe("currency and factory stamping (legacy parity)", () => {
+    // Legacy writes orders.currency = fitters.currency and orders.factory_id =
+    // the saddle's factory column for that currency's region
+    // (1 USD→factory_us, 2 EUR→factory_eu, 3 GBP→factory_gb, 4 CAN→factory_ca,
+    //  5 AUD→factory_aud, 6 NL→factory_nl, 7 DE→factory_de). 3,728/3,728 legacy
+    // orders follow this rule.
+    it("should stamp the fitter's currency and the saddle's regional factory on create", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([{ active: true }]) // fitter assignable
+        .mockResolvedValueOnce([{ currency: 7, factoryId: 3 }]) // resolveCurrencyAndFactory
+        .mockResolvedValueOnce([{ id: 501 }]) // INSERT
+        .mockResolvedValueOnce(undefined); // audit log
+
+      await service.createOrder({ fitterId: 299, saddleId: 97 }, 1);
+
+      const resolve = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("WHEN 7 THEN s.factory_de"),
+      );
+      expect(resolve).toBeDefined();
+      expect(resolve[1]).toEqual([299, 97]);
+      const insert = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("INSERT INTO orders ("),
+      );
+      const params = insert[1] as unknown[];
+      expect(params[3]).toBe(3); // factory_id
+      expect(params[params.length - 4]).toBe(7); // currency (before order_data, repair_source_order_id, seat_sizes)
+      expect(params[params.length - 5]).toBe(3); // oms_version = 3 like legacy's current writer
+    });
+
+    it("should skip the lookup and write 0/0 on create when no fitter is given", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([{ id: 502 }]) // INSERT
+        .mockResolvedValueOnce(undefined); // audit log
+
+      await service.createOrder({ specialNotes: "walk-in" });
+
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("WHEN 7 THEN s.factory_de"),
+        expect.anything(),
+      );
+    });
+
+    it("should reject an unknown status name with 400 on create", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([]); // status lookup: no row
+
+      await expect(
+        service.createOrder({ orderStatus: "DRAFT" }),
+      ).rejects.toThrow(BadRequestException);
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it("should re-derive currency/factory on update when the saddle changes", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([
+          {
+            order_status: 1,
+            fitter_id: 10,
+            customer_id: 0,
+            saddle_id: 40,
+            currency: 1,
+          },
+        ]) // existing
+        .mockResolvedValueOnce([{ currency: 1, factoryId: 4 }]) // resolve
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log
+
+      await service.updateOrder(100, { saddleId: 47 }, 1, 2);
+
+      const update = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+      );
+      expect(update[0]).toContain("currency = $");
+      expect(update[0]).toContain("factory_id = $");
+      expect(update[1]).toEqual(expect.arrayContaining([1, 4]));
+    });
+
+    it("should leave currency/factory alone on update when neither fitter nor saddle changes", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([
+          {
+            order_status: 1,
+            fitter_id: 10,
+            customer_id: 0,
+            saddle_id: 40,
+            currency: 1,
+          },
+        ]) // existing
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log
+
+      await service.updateOrder(
+        100,
+        { fitterId: 10, saddleId: 40, specialNotes: "x" },
+        1,
+        2,
+      );
+
+      const update = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+      );
+      expect(update[0]).not.toContain("currency = $");
+    });
+
+    it("should backfill currency/factory on update when the order was saved with currency 0 even if fitter and saddle are unchanged", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS
+        .mockResolvedValueOnce([
+          {
+            order_status: 1,
+            fitter_id: 10,
+            customer_id: 0,
+            saddle_id: 40,
+            currency: 0,
+          },
+        ]) // existing, never stamped
+        .mockResolvedValueOnce([{ currency: 2, factoryId: 5 }]) // resolve
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log
+
+      await service.updateOrder(
+        100,
+        { fitterId: 10, saddleId: 40, specialNotes: "x" },
+        1,
+        2,
+      );
+
+      const update = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].startsWith("UPDATE orders SET"),
+      );
+      expect(update[0]).toContain("currency = $");
+      expect(update[0]).toContain("factory_id = $");
+      expect(update[1]).toEqual(expect.arrayContaining([2, 5]));
+    });
+  });
+
   describe("fitter assignment guard", () => {
     // "Inactive" on the Fitters page means credentials.blocked = 1 on the
     // fitter's login account; such fitters must not receive new orders.
@@ -197,7 +344,9 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       // An order assigned before its fitter was blocked must stay editable.
       queryRunner.query
         .mockResolvedValueOnce([]) // RLS set_config
-        .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 10, currency: 1 },
+        ]) // existing order, already stamped
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log INSERT
 
@@ -220,6 +369,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
         .mockResolvedValueOnce([]) // RLS set_config
         .mockResolvedValueOnce([{ order_status: 1, fitter_id: 10 }]) // existing order
         .mockResolvedValueOnce([{ active: true }]) // new fitter is active
+        .mockResolvedValueOnce([{ currency: 1, factoryId: 1 }]) // resolveCurrencyAndFactory
         .mockResolvedValueOnce(undefined) // UPDATE
         .mockResolvedValueOnce(undefined); // log INSERT
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { EditOrder } from '@/components/EditOrder';
 import * as orderEditViewModule from '@/services/orderEditView';
 import * as enrichedOrdersModule from '@/services/enrichedOrders';
@@ -91,7 +91,9 @@ jest.mock('@/components/ui/select', () => {
 });
 
 jest.mock('@/components/ui/checkbox', () => ({
-  Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
+  Checkbox: ({ onCheckedChange, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { onCheckedChange?: (checked: boolean) => void }) => (
+    <input type="checkbox" {...props} onChange={(e) => onCheckedChange?.(e.target.checked)} />
+  ),
 }));
 
 jest.mock('@/components/ui/textarea', () => ({
@@ -211,6 +213,42 @@ async function navigateToStep(targetStep: 2 | 3) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Fitter and Brand & Model are always required on Step 1 (legacy
+// parity validation, 2026-09-17). Most pre-existing tests don't care about
+// product selection at all, so this minimal fixture — installed as the
+// default `global.fetch` mock for `fetchEditOptions` — and `completeStep1()`
+// let them satisfy the gate and reach later steps without each test building
+// out a full options fixture. Describes that need real product data (option
+// rows, presets, leathers, …) override `global.fetch` in their own
+// `beforeEach`, which runs after this one.
+// ---------------------------------------------------------------------------
+
+const minimalStep1Options = {
+  fitters: [{ id: 1, username: 'testfitter', fullName: 'Test Fitter', active: true }],
+  saddles: [{ id: 1, brand: 'Test', modelName: 'Model', displayName: 'Test Model' }],
+  leatherTypes: [],
+  options: [],
+  optionItems: [],
+  optionLeathers: [],
+  presets: [],
+  presetItems: [],
+  statuses: [{ id: 0, name: 'Unordered' }, { id: 1, name: 'Ordered' }, { id: 2, name: 'Cancelled' }],
+};
+
+function mockMinimalStep1Options() {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve(minimalStep1Options),
+  }) as unknown as typeof fetch;
+}
+
+async function completeStep1() {
+  await waitFor(() => expect(screen.getByText('Test Fitter')).toBeInTheDocument());
+  await act(async () => { fireEvent.click(screen.getByText('Test Fitter')); });
+  await act(async () => { fireEvent.click(screen.getByText('Test Model')); });
+}
+
+// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
@@ -223,6 +261,7 @@ describe('EditOrder component', () => {
       success: true,
       orderId: 99,
     });
+    mockMinimalStep1Options();
   });
 
   // =========================================================================
@@ -341,6 +380,8 @@ describe('EditOrder component', () => {
     it('advances to step 2 when Next Step is clicked once', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /next step/i }));
       });
@@ -353,6 +394,8 @@ describe('EditOrder component', () => {
     it('advances to step 3 when Next Step is clicked twice', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(screen.getByTestId('dialog-title')).toHaveTextContent(
@@ -362,6 +405,8 @@ describe('EditOrder component', () => {
 
     it('goes back from step 2 to step 1 when Previous Step is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       await navigateToStep(2);
       expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 2:');
@@ -377,6 +422,8 @@ describe('EditOrder component', () => {
 
     it('goes back from step 3 to step 2 when Previous Step is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       await navigateToStep(3);
       expect(screen.getByTestId('dialog-title')).toHaveTextContent('Step 3:');
@@ -418,6 +465,8 @@ describe('EditOrder component', () => {
       const onBack = jest.fn();
       await renderAndWaitForLoad({ onBack });
 
+      await completeStep1();
+
       await navigateToStep(2);
 
       await act(async () => {
@@ -440,6 +489,8 @@ describe('EditOrder component', () => {
     it('shows "Previous Step" on the footer back button when on step 2', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await navigateToStep(2);
 
       expect(
@@ -458,6 +509,8 @@ describe('EditOrder component', () => {
     it('shows "Next Step" on the primary button while on step 2', async () => {
       await renderAndWaitForLoad();
 
+      await completeStep1();
+
       await navigateToStep(2);
 
       expect(
@@ -467,6 +520,8 @@ describe('EditOrder component', () => {
 
     it('shows "Update Order" on the primary button at step 3 in edit mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -481,6 +536,8 @@ describe('EditOrder component', () => {
     it('shows "Create Order" on the primary button at step 3 for a new order (order=undefined)', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(
@@ -494,6 +551,8 @@ describe('EditOrder component', () => {
       // Internally handleSubmit routes to createOrderFromPayload (isNewOrder = !order || isDuplicate = true).
       await renderAndWaitForLoad({ isDuplicate: true });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(
@@ -503,6 +562,8 @@ describe('EditOrder component', () => {
 
     it('jumps to step 2 when the Customer & Shipping step indicator is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       const indicators = screen.getAllByRole('button', {
         name: /customer & shipping/i,
@@ -516,6 +577,8 @@ describe('EditOrder component', () => {
 
     it('jumps to step 3 when the Order Settings step indicator is clicked', async () => {
       await renderAndWaitForLoad();
+
+      await completeStep1();
 
       const indicators = screen.getAllByRole('button', {
         name: /order settings/i,
@@ -535,6 +598,8 @@ describe('EditOrder component', () => {
     it('calls createOrderFromPayload when submitting a new order (order=undefined)', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -549,6 +614,8 @@ describe('EditOrder component', () => {
     it('calls createOrderFromPayload with the correct payload mapping from formData', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -561,8 +628,8 @@ describe('EditOrder component', () => {
 
       const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
 
-      // formData.status → payload.orderStatus
-      expect(payload.orderStatus).toBe('DRAFT');
+      // formData.status → payload.orderStatus (new orders default to legacy's "Unordered")
+      expect(payload.orderStatus).toBe('Unordered');
       // formData.isUrgent → payload.rushed
       expect(payload.rushed).toBe(false);
       // formData.isDemo → payload.demo
@@ -586,6 +653,8 @@ describe('EditOrder component', () => {
     it('does NOT call saveOrderEditData when submitting a new order', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -602,6 +671,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
       renderNewOrder({ onClose });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -617,6 +688,8 @@ describe('EditOrder component', () => {
       );
       const onClose = jest.fn();
       renderNewOrder({ onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -639,6 +712,8 @@ describe('EditOrder component', () => {
     it('payload does not include customerId when no customer is selected', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -654,21 +729,22 @@ describe('EditOrder component', () => {
       expect(payload.customerId).toBeUndefined();
     });
 
-    it('payload does not include fitterId when no fitter is selected', async () => {
+    it('blocks Next Step and never calls createOrderFromPayload when no fitter is selected', async () => {
+      // Fitter is a red-asterisk Step-1 field (legacy parity validation, Task 13) —
+      // reaching Step 3 without one is no longer possible, so payload.fitterId can
+      // never be sent unset. Assert the stronger, still-true contract: no fitter
+      // means the submission never happens at all.
+      const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
       renderNewOrder();
-
-      await navigateToStep(3);
+      await waitFor(() => expect(screen.getByText('Test Model')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Test Model')); });
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /create order/i }));
+        fireEvent.click(screen.getByRole('button', { name: /next step/i }));
       });
 
-      await waitFor(() =>
-        expect(createOrderFromPayload).toHaveBeenCalledTimes(1)
-      );
-
-      const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
-      expect(payload.fitterId).toBeUndefined();
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
+      expect(createOrderFromPayload).not.toHaveBeenCalled();
     });
   });
 
@@ -684,6 +760,8 @@ describe('EditOrder component', () => {
     it('calls createOrderFromPayload when submitting in duplicate mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       // Button label is "Update Order" even in duplicate mode (order is truthy)
@@ -698,6 +776,8 @@ describe('EditOrder component', () => {
 
     it('does NOT call saveOrderEditData in duplicate mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: true });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -715,6 +795,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
       await renderAndWaitForLoad({ isDuplicate: true, onClose });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -724,8 +806,8 @@ describe('EditOrder component', () => {
       await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     });
 
-    it('maps status to DRAFT in duplicate mode when duplicateData provides status', async () => {
-      // Duplicate mode always sets status to DRAFT regardless of source
+    it('maps status to Unordered in duplicate mode when duplicateData provides status', async () => {
+      // Duplicate mode always resets status to "Unordered" regardless of source
       await renderAndWaitForLoad({
         isDuplicate: true,
         duplicateData: {
@@ -740,6 +822,8 @@ describe('EditOrder component', () => {
         },
       });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -751,8 +835,8 @@ describe('EditOrder component', () => {
       );
 
       const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
-      // In duplicate mode the component sets status to 'DRAFT'
-      expect(payload.orderStatus).toBe('DRAFT');
+      // In duplicate mode the component sets status to 'Unordered'
+      expect(payload.orderStatus).toBe('Unordered');
     });
 
     it('maps duplicateData flags to payload fields in duplicate mode', async () => {
@@ -768,6 +852,8 @@ describe('EditOrder component', () => {
           price: 0,
         },
       });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -795,6 +881,8 @@ describe('EditOrder component', () => {
     it('calls saveOrderEditData when submitting an existing order edit', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -808,6 +896,8 @@ describe('EditOrder component', () => {
 
     it('calls saveOrderEditData with the correct orderId', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -826,6 +916,8 @@ describe('EditOrder component', () => {
     it('does NOT call createOrderFromPayload in edit mode', async () => {
       await renderAndWaitForLoad({ isDuplicate: false });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -841,6 +933,8 @@ describe('EditOrder component', () => {
     it('calls onClose after a successful edit', async () => {
       const onClose = jest.fn();
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -858,6 +952,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
 
       await renderAndWaitForLoad({ isDuplicate: false, onClose });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -882,6 +978,8 @@ describe('EditOrder component', () => {
     it('initialises formData.status from the loaded order status', async () => {
       // mockOrderEditData.orderStatus is 'ORDERED'
       await renderAndWaitForLoad({ isDuplicate: false });
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -914,8 +1012,8 @@ describe('EditOrder component', () => {
       it('renders the saddle price input with a default value', async () => {
         await renderAndWaitForLoad();
 
-        // Static default value in the component is 3795.00
-        expect(screen.getByDisplayValue('3795.00')).toBeInTheDocument();
+        // Saddle price defaults to 0.00 until a Leathertype is chosen (Task 13).
+        expect(screen.getByLabelText('Saddle price:')).toHaveValue(0);
       });
 
       it('renders the Fitter label on step 1', async () => {
@@ -923,53 +1021,63 @@ describe('EditOrder component', () => {
 
         expect(screen.getByText(/^Fitter:/)).toBeInTheDocument();
       });
+
+      it('renders the five order flags on Step 1 (Urgent, Stock, Demo, Sponsored, Repair)', async () => {
+        const { container } = renderNewOrder();
+
+        await waitFor(() => expect(screen.getByText('Test Fitter')).toBeInTheDocument());
+
+        expect(container.querySelector('#urgent')).toBeInTheDocument();
+        expect(container.querySelector('#stock')).toBeInTheDocument();
+        expect(container.querySelector('#demo')).toBeInTheDocument();
+        expect(container.querySelector('#sponsored')).toBeInTheDocument();
+        expect(container.querySelector('#repair')).toBeInTheDocument();
+
+        expect(screen.getByText('Urgent:')).toBeInTheDocument();
+        expect(screen.getByText('Stock:')).toBeInTheDocument();
+        expect(screen.getByText('Demo:')).toBeInTheDocument();
+        expect(screen.getByText('Sponsored:')).toBeInTheDocument();
+        expect(screen.getByText('Repair:')).toBeInTheDocument();
+      });
     });
 
     describe('step 2 — Customer & Shipping', () => {
       it('renders the Customer heading', async () => {
         await renderAndWaitForLoad();
 
+        await completeStep1();
+
         await navigateToStep(2);
 
         expect(screen.getByText('Customer')).toBeInTheDocument();
       });
 
-      it('renders the Fitter heading', async () => {
+      it('renders the Shipping address section', async () => {
         await renderAndWaitForLoad();
+
+        await completeStep1();
 
         await navigateToStep(2);
 
-        expect(screen.getByText('Fitter')).toBeInTheDocument();
-      });
-
-      it('renders the Shipping Address section', async () => {
-        await renderAndWaitForLoad();
-
-        await navigateToStep(2);
-
-        expect(screen.getByText('Shipping Address')).toBeInTheDocument();
+        expect(screen.getByText('Shipping address')).toBeInTheDocument();
       });
 
       it('renders the Search Customer label', async () => {
         await renderAndWaitForLoad();
 
+        await completeStep1();
+
         await navigateToStep(2);
 
         expect(screen.getByText('Search Customer')).toBeInTheDocument();
-      });
-
-      it('renders the Search Fitter label', async () => {
-        await renderAndWaitForLoad();
-
-        await navigateToStep(2);
-
-        expect(screen.getByText('Search Fitter')).toBeInTheDocument();
       });
     });
 
     describe('step 3 — Order Settings', () => {
       beforeEach(async () => {
         await renderAndWaitForLoad({ isDuplicate: false });
+        await completeStep1();
+
         await navigateToStep(3);
       });
 
@@ -977,23 +1085,13 @@ describe('EditOrder component', () => {
         expect(screen.getByText('Order Information')).toBeInTheDocument();
       });
 
-      it('renders the Flags section heading', () => {
-        expect(screen.getByText('Flags')).toBeInTheDocument();
+      it('does not render a Flags section (flags live on Step 1 now)', () => {
+        expect(screen.queryByText('Flags')).not.toBeInTheDocument();
       });
 
-      it('renders all flag checkboxes (Urgent, Stock, Demo, Sponsored, Repair)', () => {
-        expect(screen.getByText('Urgent')).toBeInTheDocument();
-        expect(screen.getByText('Stock')).toBeInTheDocument();
-        expect(screen.getByText('Demo')).toBeInTheDocument();
-        expect(screen.getByText('Sponsored')).toBeInTheDocument();
-        expect(screen.getByText('Repair')).toBeInTheDocument();
-      });
-
-      it('renders all ORDER_STATUSES as select items', () => {
-        expect(screen.getByText('Draft')).toBeInTheDocument();
+      it('renders the DB statuses as select items', () => {
         expect(screen.getByText('Unordered')).toBeInTheDocument();
         expect(screen.getByText('Ordered')).toBeInTheDocument();
-        expect(screen.getByText('Approved')).toBeInTheDocument();
         expect(screen.getByText('Cancelled')).toBeInTheDocument();
       });
 
@@ -1020,6 +1118,8 @@ describe('EditOrder component', () => {
       const onClose = jest.fn();
       renderNewOrder({ onClose });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -1039,6 +1139,8 @@ describe('EditOrder component', () => {
 
       await renderAndWaitForLoad({ isDuplicate: false });
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -1056,20 +1158,24 @@ describe('EditOrder component', () => {
   // 8. formData default values (new order, order=undefined)
   // =========================================================================
   describe('default formData when no order is provided', () => {
-    it('initialises status as DRAFT', async () => {
+    it('initialises status as Unordered', async () => {
       renderNewOrder();
+
+      await completeStep1();
 
       await navigateToStep(3);
 
       const selects = screen.getAllByTestId('select');
       const statusSelect = selects.find(
-        (el) => el.getAttribute('data-value') === 'DRAFT'
+        (el) => el.getAttribute('data-value') === 'Unordered'
       );
       expect(statusSelect).toBeTruthy();
     });
 
     it('initialises isUrgent as false — payload rushed is false', async () => {
       renderNewOrder();
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -1088,6 +1194,8 @@ describe('EditOrder component', () => {
     it('initialises isDemo as false — payload demo is false', async () => {
       renderNewOrder();
 
+      await completeStep1();
+
       await navigateToStep(3);
 
       await act(async () => {
@@ -1104,6 +1212,8 @@ describe('EditOrder component', () => {
 
     it('initialises pricing.subtotal as 0 — payload priceSaddle is 0', async () => {
       renderNewOrder();
+
+      await completeStep1();
 
       await navigateToStep(3);
 
@@ -1126,6 +1236,8 @@ describe('EditOrder component', () => {
 
       // No assertion about currency in payload since it is not part of UpdateOrderPayload,
       // but we verify the component renders without crashing and reaches step 3
+      await completeStep1();
+
       await navigateToStep(3);
 
       expect(
@@ -1137,7 +1249,7 @@ describe('EditOrder component', () => {
   describe('multiple rows of one option (legacy clone_number)', () => {
     const OPTION_CANTLE = 4;
     const editOptions = {
-      fitters: [],
+      fitters: [{ id: 1, username: 'multirowfitter', fullName: 'Multi Row Fitter', active: true }],
       saddles: [{ id: 10, brand: 'Premium', modelName: 'Classic', displayName: 'Premium Classic' }],
       leatherTypes: [{ id: 3, name: 'Italian Leather', price1: 0 }],
       presets: [{ id: 1, name: 'Aviar preset' }],
@@ -1163,6 +1275,12 @@ describe('EditOrder component', () => {
 
     it('adds a second CANTLE Option row and sends it with cloneNumber 1', async () => {
       renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Premium Classic')).toBeInTheDocument());
+
+      // Fitter and Brand & Model first — picking the model resets preset/option
+      // selections, so it must happen before the preset and CANTLE Option picks below.
+      await act(async () => { fireEvent.click(screen.getByText('Multi Row Fitter')); });
+      await act(async () => { fireEvent.click(screen.getByText('Premium Classic')); });
       await waitFor(() => expect(screen.getByText('Aviar preset')).toBeInTheDocument());
 
       // Options only render once a preset is chosen; the preset picks item 401 for slot 0
@@ -1170,6 +1288,9 @@ describe('EditOrder component', () => {
         fireEvent.click(screen.getByText('Aviar preset'));
       });
       expect(screen.getByText('CANTLE Option:')).toBeInTheDocument();
+
+      // Leathertype — required once a preset is selected (Task 13 validation).
+      await act(async () => { fireEvent.click(screen.getByText('Italian Leather')); });
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: '+ Add another CANTLE Option' }));
@@ -1188,8 +1309,8 @@ describe('EditOrder component', () => {
 
       const payload = (createOrderFromPayload as jest.Mock).mock.calls[0][0];
       expect(payload.saddleOptions).toEqual([
-        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '' },
-        { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 401, cloneNumber: 0, custom: '', color: '', leatherType: '' },
+        { optionId: OPTION_CANTLE, optionItemId: 402, cloneNumber: 1, custom: '', color: '', leatherType: '' },
       ]);
     });
 
@@ -1265,6 +1386,230 @@ describe('EditOrder component', () => {
 
       expect(screen.getByText('AVIAR Knee Roll Leather:')).toBeInTheDocument();
       expect(screen.getByText('Aviar Buffalo Black')).toBeInTheDocument();
+    });
+  });
+
+  describe('legacy parity — Step 1 (2026-09-17)', () => {
+    // Aviar Rook 2.0 (97) with fitter Aiken Shop (currency 1 = USD), preset
+    // AVIAR SMOOTH Black (24), as captured from production.
+    const OPT_SEAT_SIZE = 1, OPT_SEAT_SHAPE = 41, OPT_FLAP = 8, OPT_SEAT_OPTION = 34, OPT_SEAT_LEATHER = 11;
+    const rookOptions = {
+      fitters: [{ id: 28, username: 'aikenshop123', fullName: 'Aiken Shop', active: true, currency: 1 }],
+      saddles: [{ id: 97, brand: 'Aviar', modelName: 'Rook 2.0 (K644B)', displayName: 'Aviar Rook 2.0 (K644B)', active: 1 }],
+      leatherTypes: [{ id: 48, name: 'ASBLV - Aviar SMOOTH Black Vienna', price1: 6595, price2: 5095, price7: 5695 }],
+      options: [
+        { optionId: OPT_SEAT_SIZE, optionName: 'Seat Size', sequence: 1, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_SEAT_SHAPE, optionName: 'AVIAR Seat Shape', sequence: 2, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_FLAP, optionName: 'Flap Length', sequence: 7, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_SEAT_LEATHER, optionName: 'Seat Leather', sequence: 20, group: 'SEAT', type: 1, price1: 0, extraAllowed: 0 },
+        { optionId: OPT_SEAT_OPTION, optionName: 'SEAT Option', sequence: 25, group: null, type: 0, price1: 0, extraAllowed: 0 },
+        { optionId: 23, optionName: 'Complete Re-Flock', sequence: 100, group: null, type: 2, price1: 250, extraAllowed: 0 },
+      ],
+      optionItems: [
+        { id: 4, name: '16.5', optionId: OPT_SEAT_SIZE, price1: 0 },
+        { id: 6150, name: 'X-SLEEK(spacer fabric)', optionId: OPT_SEAT_SHAPE, price1: 0 },
+        { id: 69, name: '16', optionId: OPT_FLAP, price1: 0 },
+        { id: 4660, name: 'Aviar STD Inlaid (Full Wrap) Match Leather', optionId: OPT_SEAT_OPTION, price1: 120, userColor: 1, userLeather: 0 },
+      ],
+      optionLeathers: [
+        { optionId: OPT_SEAT_LEATHER, leatherId: 48, name: 'ASBLV - Aviar SMOOTH Black Vienna' },
+        { optionId: OPT_SEAT_LEATHER, leatherId: 3, name: 'SBL - SMOOTH BLACK' },
+      ],
+      statuses: [{ id: 0, name: 'Unordered' }, { id: 1, name: 'Ordered' }],
+      presets: [{ id: 24, name: 'AVIAR SMOOTH Black', sequence: 1 }],
+      presetItems: [
+        { presetId: 24, optionId: OPT_FLAP, itemId: 69 },
+        { presetId: 24, optionId: OPT_SEAT_OPTION, itemId: 4660 },
+        { presetId: 24, optionId: OPT_SEAT_SHAPE, itemId: 5430 }, // not offered on Rook 2.0
+        { presetId: 24, optionId: OPT_SEAT_SIZE, itemId: 0 },     // legacy junk row
+      ],
+    };
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn();
+    beforeEach(() => {
+      fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve(rookOptions) });
+      global.fetch = fetchMock;
+    });
+    afterEach(() => { global.fetch = originalFetch; });
+
+    async function chooseModelAndPreset() {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar Rook 2.0 (K644B)')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Aiken Shop')); });
+      await act(async () => { fireEvent.click(screen.getByText('Aviar Rook 2.0 (K644B)')); });
+      await act(async () => { fireEvent.click(screen.getByText('AVIAR SMOOTH Black')); });
+    }
+
+    it('requests active models only (no includeDiscontinued)', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(String(fetchMock.mock.calls[0][0])).not.toContain('includeDiscontinued');
+    });
+
+    it('ends every option select with "Customized by fitter" and shows plain item labels', async () => {
+      await chooseModelAndPreset();
+      expect(screen.getAllByText('Customized by fitter').length).toBeGreaterThanOrEqual(5);
+      expect(screen.getByText('Aviar STD Inlaid (Full Wrap) Match Leather')).toBeInTheDocument();
+      expect(screen.queryByText(/\+\$120/)).not.toBeInTheDocument();
+      expect(screen.getByText('Complete Re-Flock')).toBeInTheDocument();
+      expect(screen.queryByText(/\+\$250/)).not.toBeInTheDocument();
+    });
+
+    it('applies the preset only for offered items and shows "Specify color" for a user_color item', async () => {
+      await chooseModelAndPreset();
+      expect(screen.getByLabelText('Specify color:')).toBeInTheDocument(); // SEAT Option 4660 asks for a colour
+      const selects = screen.getAllByTestId('select');
+      const seatShape = selects.find(s => s.textContent?.includes('X-SLEEK'));
+      expect(seatShape).not.toHaveAttribute('data-value', '5430');
+      const seatSize = selects.find(s => s.textContent?.includes('16.5'));
+      expect(seatSize).not.toHaveAttribute('data-value', '0');
+    });
+
+    it('shows "Please specify" when Customized by fitter is chosen and sends the texts in the payload', async () => {
+      await chooseModelAndPreset();
+      // pick "Customized by fitter" for Seat Size (first select containing 16.5)
+      const seatSizeSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('16.5'))!;
+      await act(async () => { fireEvent.click(within(seatSizeSelect).getByText('Customized by fitter')); });
+      fireEvent.change(screen.getByLabelText('Please specify:'), { target: { value: '17.25' } });
+      fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'Black' } });
+      // Complete Step 1 so the Task 13 validation lets us reach Step 3: pick AVIAR Seat
+      // Shape (its only offered item), keep the Seat Leather pick, and choose the top
+      // Leathertype. "ASBLV - Aviar SMOOTH Black Vienna" appears in both the top
+      // Leathertype select and the Seat Leather option row (a type-1 option using the
+      // same leatherTypes name) — scope to the Seat Leather row (identified by its
+      // sibling "SBL - SMOOTH BLACK" item).
+      const seatShapeSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('X-SLEEK(spacer fabric)'))!;
+      await act(async () => { fireEvent.click(within(seatShapeSelect).getByText('X-SLEEK(spacer fabric)')); });
+      const seatLeatherSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('SBL - SMOOTH BLACK'))!;
+      await act(async () => { fireEvent.click(within(seatLeatherSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
+      // The top Leathertype select is the first select rendering "ASBLV …" in DOM order.
+      const leatherTypeSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('ASBLV - Aviar SMOOTH Black Vienna'))!;
+      await act(async () => { fireEvent.click(within(leatherTypeSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
+      await navigateToStep(3);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      const payload = createOrderFromPayload.mock.calls[0][0];
+      expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: OPT_SEAT_SIZE, optionItemId: 0, custom: '17.25' }));
+      expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: OPT_SEAT_OPTION, optionItemId: 4660, color: 'Black' }));
+    });
+
+    it('fills the saddle price from saddle_leathers in the fitter currency when the leather is chosen', async () => {
+      await chooseModelAndPreset();
+      expect(screen.getByText('Total (USD):')).toBeInTheDocument();
+      expect(screen.getByLabelText('Saddle price:')).toHaveValue(0);
+      // "ASBLV - Aviar SMOOTH Black Vienna" appears in both the top Leathertype select
+      // and the Seat Leather option row (a type-1 option using the same leatherTypes
+      // name); the Leathertype select renders first in the DOM.
+      await act(async () => { fireEvent.click(screen.getAllByText('ASBLV - Aviar SMOOTH Black Vienna')[0]); });
+      expect(screen.getByLabelText('Saddle price:')).toHaveValue(6595);
+      expect(screen.getByText('6595.00')).toBeInTheDocument(); // total
+    });
+
+    it('totals like legacy and sends every price field', async () => {
+      await chooseModelAndPreset();
+      await act(async () => { fireEvent.click(screen.getAllByText('ASBLV - Aviar SMOOTH Black Vienna')[0]); });
+      fireEvent.change(screen.getByLabelText(/^Deposit:/), { target: { value: '500' } });
+      fireEvent.change(screen.getByLabelText(/^Additional costs:/), { target: { value: '290' } });
+      expect(screen.getByText('6385.00')).toBeInTheDocument();
+      // Complete the rest of Step 1's red-asterisk option rows (Task 13's validation
+      // gate) so Next Step isn't blocked: Seat Size, AVIAR Seat Shape, and Seat Leather
+      // have no preset value on this model, so they still need an explicit pick.
+      await act(async () => { fireEvent.click(screen.getByText('16.5')); });
+      await act(async () => { fireEvent.click(screen.getByText('X-SLEEK(spacer fabric)')); });
+      const seatLeatherSelect = screen.getAllByTestId('select').find(s => s.textContent?.includes('SBL - SMOOTH BLACK'))!;
+      await act(async () => { fireEvent.click(within(seatLeatherSelect).getByText('ASBLV - Aviar SMOOTH Black Vienna')); });
+      // SEAT Option's preset item (4660) is a user_color item — its color is required too.
+      fireEvent.change(screen.getByLabelText('Specify color:'), { target: { value: 'Black' } });
+      await navigateToStep(3);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      expect(createOrderFromPayload.mock.calls[0][0]).toMatchObject({
+        priceSaddle: 6595, priceTradein: 0, priceDeposit: 500, priceDiscount: 0,
+        priceFittingeval: 0, priceCallfee: 0, priceGirth: 0, priceAdditional: 290, priceShipping: 0, priceTax: 0,
+      });
+    });
+
+    // Step 3 is unreachable without a fitter via BOTH Next Step and the step
+    // indicator (the indicator has its own gate — see the test below).
+    it('blocks Next Step until the red-asterisk fields are filled', async () => {
+      const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
+      await chooseModelAndPreset();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Leathertype'));
+      expect(screen.getByText(/Step 1/)).toBeInTheDocument();
+    });
+
+    it('blocks the step indicator from jumping to Step 3 until the red-asterisk fields are filled', async () => {
+      const { toast } = jest.requireMock('sonner') as { toast: { error: jest.Mock } };
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aviar Rook 2.0 (K644B)')).toBeInTheDocument());
+      // Nothing selected — clicking the "Order Settings" indicator must not
+      // bypass the Step 1 gate the way it used to.
+      const indicators = screen.getAllByRole('button', { name: /order settings/i });
+      await act(async () => { fireEvent.click(indicators[0]); });
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
+      expect(screen.getByText(/Step 1/)).toBeInTheDocument();
+      expect(createOrderFromPayload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('legacy parity — Steps 2 and 3 (2026-09-17)', () => {
+    const originalFetch = global.fetch;
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({
+        fitters: [{ id: 28, username: 'aikenshop123', fullName: 'Aiken Shop', active: true, currency: 1 }],
+        saddles: [{ id: 97, brand: 'Aviar', modelName: 'Rook 2.0 (K644B)', displayName: 'Aviar Rook 2.0 (K644B)', active: 1 }],
+        leatherTypes: [{ id: 48, name: 'ASBLV', price1: 6595 }],
+        options: [], optionItems: [], optionLeathers: [], presets: [], presetItems: [],
+        statuses: [{ id: 0, name: 'Unordered' }, { id: 12, name: 'Inventory Aiken' }, { id: 15, name: 'Awaiting Client Confirmation' }],
+      }) });
+    });
+    afterEach(() => { global.fetch = originalFetch; });
+
+    async function toStep2() {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Aiken Shop')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Aiken Shop')); });
+      await act(async () => { fireEvent.click(screen.getByText('Aviar Rook 2.0 (K644B)')); });
+      await navigateToStep(2);
+    }
+
+    it('Step 2 asks for the shipping name and the legacy country list, and no longer asks for the fitter or a shipping method', async () => {
+      await toStep2();
+      expect(screen.getByLabelText(/^Name:/)).toBeInTheDocument();
+      expect(screen.getByText('Republic of Ireland')).toBeInTheDocument();
+      expect(screen.queryByText('Search Fitter')).not.toBeInTheDocument();
+      expect(screen.queryByText('Shipping Method')).not.toBeInTheDocument();
+    });
+
+    it('Step 3 lists the DB statuses, defaults to Unordered and no longer repeats the flags', async () => {
+      await toStep2();
+      // Already on Step 2 — navigateToStep(N) assumes a fresh start from Step 1, so
+      // advance with a single Next Step click instead of calling it again.
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
+      expect(screen.getByText('Inventory Aiken')).toBeInTheDocument();
+      expect(screen.getByText('Awaiting Client Confirmation')).toBeInTheDocument();
+      expect(screen.queryByText('Flags')).not.toBeInTheDocument();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      expect(createOrderFromPayload.mock.calls[0][0].orderStatus).toBe('Unordered');
+    });
+
+    it('keeps customer and shipping addresses apart in the payload', async () => {
+      (orderEditViewModule.searchCustomers as jest.Mock).mockResolvedValue([
+        { id: 7, name: 'Jane Smith', email: 'jane@example.com', phoneNo: '555-0100', address: '789 Elm St', city: 'Denver', state: 'CO', zipcode: '80201', country: 'United States' },
+      ]);
+      await toStep2();
+      fireEvent.change(screen.getByPlaceholderText('Type customer name...'), { target: { value: 'Jane' } });
+      await waitFor(() => expect(screen.getByText('Jane Smith')).toBeInTheDocument());
+      await act(async () => { fireEvent.click(screen.getByText('Jane Smith')); });
+      fireEvent.change(screen.getByLabelText(/^Name:/), { target: { value: 'Barn office' } });
+      fireEvent.change(screen.getByLabelText(/^Address:/), { target: { value: '1 Stable Rd' } });
+      await act(async () => { fireEvent.click(screen.getByText('Netherlands')); });
+      // Already on Step 2 — see the comment in the previous test for why this isn't navigateToStep(3).
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /next step/i })); });
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create order/i })); });
+      expect(createOrderFromPayload.mock.calls[0][0]).toMatchObject({
+        customerId: 7, customerName: 'Jane Smith', customerPhone: '555-0100', customerAddress: '789 Elm St', customerCity: 'Denver', customerCountry: 'United States',
+        shipName: 'Barn office', shipAddress: '1 Stable Rd', shipCountry: 'Netherlands',
+      });
     });
   });
 });

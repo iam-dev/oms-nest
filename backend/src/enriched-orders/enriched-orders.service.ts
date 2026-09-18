@@ -1373,15 +1373,17 @@ export class EnrichedOrdersService {
 
       const order = orderResult[0];
 
-      // Map currency integer to currency code
+      // Map currency integer to currency code. Must match legacy fitters.currency
+      // (see frontend/services/fitters.ts FITTER_CURRENCIES, the single source of
+      // truth): 1 USD, 2 EUR, 3 GBP, 4 CAN, 5 AUD, 6 NL, 7 DE.
       const currencyMap: Record<number, string> = {
         0: "USD",
         1: "USD",
         2: "EUR",
         3: "GBP",
-        4: "AUD",
-        5: "CAD",
-        6: "CHF",
+        4: "CAN",
+        5: "AUD",
+        6: "NL",
         7: "DE",
       };
       order.currency = currencyMap[order.currency] || String(order.currency);
@@ -1389,12 +1391,11 @@ export class EnrichedOrdersService {
         currencyMap[order.fitterCurrency] || String(order.fitterCurrency || "");
 
       // Fetch saddle specifications from orders_info + options + options_items/leather_types
-      // Leather-related option IDs use leather_types for display value.
+      // Leather options (options.type = 1) use leather_types for the display value.
       // Extra rows of the same option (orders_info.clone_number > 0) are labelled
       // legacy-style, "CANTLE Option (2)", so every consumer that just prints
       // optionName shows them correctly.  Consumers that match on the exact
       // name strip the suffix with frontend/utils/optionSlots.baseOptionName.
-      const leatherOptionIds = [5, 6, 10, 11, 12, 13, 14, 21, 22];
       let saddleSpecs: any[] = [];
       try {
         saddleSpecs = await queryRunner.query(
@@ -1412,7 +1413,7 @@ export class EnrichedOrdersService {
             o.sequence,
             CASE
               WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
-              WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
+              WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)
               ELSE oitm.name
             END
             || CASE
@@ -1429,11 +1430,11 @@ export class EnrichedOrdersService {
           LEFT JOIN options o ON oi.option_id = o.id
           LEFT JOIN options_items oitm ON oi.option_item_id = oitm.id
           LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
-            AND oi.option_id = ANY($2::int[])
+            AND o.type = 1
           WHERE oi.order_id = $1
           ORDER BY o.sequence NULLS LAST, oi.option_id, oi.clone_number
           `,
-          [orderId, leatherOptionIds],
+          [orderId],
         );
       } catch (err) {
         this.logger.warn(
@@ -1528,10 +1529,12 @@ export class EnrichedOrdersService {
       // can display it; the form decides whether to offer them for selection.
       const fitters = await queryRunner.query(`
         SELECT f.id, c.user_name as "username", c.full_name as "fullName",
+          f.currency,
           COALESCE(c.blocked = 0, true) as "active"
         FROM fitters f
         LEFT JOIN credentials c ON f.user_id = c.user_id AND c.user_type = 1
         WHERE f.deleted = 0
+          AND COALESCE(NULLIF(c.full_name, ''), NULLIF(c.user_name, '')) IS NOT NULL
         ORDER BY c.full_name
       `);
 
@@ -1555,14 +1558,16 @@ export class EnrichedOrdersService {
       //   saddle_options_items (option, 0, leather)-> leather ticked on a leather option
       // With a saddleId the dropdowns offer only what is ticked; an enabled
       // option with no ticks offers nothing rather than the full list.
+      //   NB: leather dropdowns ignore the option_id of the leather ticks (see optionLeathers).
       const leatherTypes = saddleId
         ? await queryRunner.query(
             `
-          SELECT lt.id, lt.name, 0 as "price1"
+          SELECT lt.id, lt.name,
+            sl.price1, sl.price2, sl.price3, sl.price4, sl.price5, sl.price6, sl.price7
           FROM leather_types lt
           INNER JOIN saddle_leathers sl ON sl.leather_id = lt.id
           WHERE sl.saddle_id = $1 AND sl.deleted = 0 AND lt.deleted = 0
-          ORDER BY sl.sequence, lt.name
+          ORDER BY sl.sequence, lt.sequence, lt.name
         `,
             [saddleId],
           )
@@ -1579,7 +1584,7 @@ export class EnrichedOrdersService {
       if (saddleId) {
         options = await queryRunner.query(
           `
-          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.extra_allowed as "extraAllowed"
+          SELECT DISTINCT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.price2, o.price3, o.price4, o.price5, o.price6, o.price7, o.extra_allowed as "extraAllowed"
           FROM options o
           INNER JOIN saddle_options_items soi ON soi.option_id = o.id
           WHERE soi.saddle_id = $1 AND soi.deleted = 0
@@ -1602,20 +1607,32 @@ export class EnrichedOrdersService {
           [saddleId],
         );
 
+        // Legacy's dropdown for a leather option (type 1) is NOT the leathers
+        // ticked under that option. Legacy joins SaddleOptionsItems on saddle +
+        // leather only, so it offers every leather ticked anywhere on the saddle,
+        // as long as the leather is an item of the option. Reproduced 401/401
+        // against production on 2026-09-17 — keep it this way.
         optionLeathers = await queryRunner.query(
           `
-          SELECT DISTINCT soi.option_id as "optionId", lt.id as "leatherId", lt.name,
-                 soi.sequence
-          FROM saddle_options_items soi
-          INNER JOIN leather_types lt ON soi.leather_id = lt.id
-          WHERE soi.saddle_id = $1 AND soi.deleted = 0 AND lt.deleted = 0
-          ORDER BY soi.option_id, soi.sequence, lt.name
+          SELECT DISTINCT o.id as "optionId", lt.id as "leatherId", lt.name, lt.sequence
+          FROM options o
+          INNER JOIN saddle_options_items en
+            ON en.saddle_id = $1 AND en.option_id = o.id AND en.deleted = 0
+          INNER JOIN options_items oi
+            ON oi.option_id = o.id AND oi.leather_id > 0 AND oi.deleted = 0
+          INNER JOIN leather_types lt ON lt.id = oi.leather_id AND lt.deleted = 0
+          WHERE o.type = 1
+            AND EXISTS (
+              SELECT 1 FROM saddle_options_items t
+              WHERE t.saddle_id = $1 AND t.leather_id = lt.id AND t.deleted = 0
+            )
+          ORDER BY o.id, lt.sequence, lt.name
         `,
           [saddleId],
         );
       } else {
         options = await queryRunner.query(`
-          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.extra_allowed as "extraAllowed"
+          SELECT o.id as "optionId", o.name as "optionName", o.sequence, o."group", o.type, o.price1, o.price2, o.price3, o.price4, o.price5, o.price6, o.price7, o.extra_allowed as "extraAllowed"
           FROM options o
           ORDER BY o.sequence
         `);
@@ -1950,6 +1967,35 @@ export class EnrichedOrdersService {
   }
 
   /**
+   * Legacy stamps every order with the fitter's currency and the saddle's
+   * factory for that currency's region (fitters.currency 1 USD … 7 DE, see
+   * frontend FITTER_CURRENCIES). Returns 0/0 when the fitter is unknown.
+   */
+  private async resolveCurrencyAndFactory(
+    queryRunner: QueryRunner,
+    fitterId?: number,
+    saddleId?: number,
+  ): Promise<{ currency: number; factoryId: number }> {
+    if (!fitterId) return { currency: 0, factoryId: 0 };
+    const rows = await queryRunner.query(
+      `SELECT f.currency,
+         CASE f.currency
+           WHEN 1 THEN s.factory_us WHEN 2 THEN s.factory_eu WHEN 3 THEN s.factory_gb
+           WHEN 4 THEN s.factory_ca WHEN 5 THEN s.factory_aud WHEN 6 THEN s.factory_nl
+           WHEN 7 THEN s.factory_de ELSE 0 END AS "factoryId"
+       FROM fitters f
+       LEFT JOIN saddles s ON s.id = $2
+       WHERE f.id = $1`,
+      [fitterId, saddleId ?? 0],
+    );
+    const row = rows?.[0];
+    return {
+      currency: Number(row?.currency) || 0,
+      factoryId: Number(row?.factoryId) || 0,
+    };
+  }
+
+  /**
    * Reject attaching an order to a soft-deleted customer. Customers have no
    * login account, so unlike fitters there is no "blocked" state: deleted is
    * the only kind of inactive. The customer search already hides deleted rows;
@@ -1991,7 +2037,7 @@ export class EnrichedOrdersService {
 
       // Verify order exists and get old status for audit
       const existing = await queryRunner.query(
-        `SELECT order_status, fitter_id, customer_id FROM orders WHERE id = $1`,
+        `SELECT order_status, fitter_id, customer_id, saddle_id, currency FROM orders WHERE id = $1`,
         [orderId],
       );
       if (!existing || existing.length === 0) {
@@ -2000,6 +2046,7 @@ export class EnrichedOrdersService {
       const oldStatusId = existing[0].order_status;
       const existingFitterId = existing[0].fitter_id;
       const existingCustomerId = existing[0].customer_id;
+      const existingSaddleId = existing[0].saddle_id;
 
       // Fitter role-based status restriction
       if (
@@ -2025,6 +2072,25 @@ export class EnrichedOrdersService {
       // deleted keeps that customer; only switching to another one is checked.
       if (dto.customerId && dto.customerId !== existingCustomerId) {
         await this.assertCustomerAssignable(queryRunner, dto.customerId);
+      }
+
+      // Legacy re-stamps currency/factory whenever the fitter or the saddle changes,
+      // and also backfills orders that were saved with currency = 0 (never stamped,
+      // e.g. created without a fitter) even when neither changes on this save.
+      // A missing currency column (older test doubles / partial mocks) is treated
+      // as already stamped so it doesn't spuriously trigger the backfill.
+      const fitterChanged =
+        dto.fitterId !== undefined && dto.fitterId !== existingFitterId;
+      const saddleChanged =
+        dto.saddleId !== undefined && dto.saddleId !== existingSaddleId;
+      const unstamped = Number(existing[0].currency ?? 1) === 0;
+      let stamped: { currency: number; factoryId: number } | null = null;
+      if (fitterChanged || saddleChanged || unstamped) {
+        stamped = await this.resolveCurrencyAndFactory(
+          queryRunner,
+          dto.fitterId ?? existingFitterId,
+          dto.saddleId ?? existingSaddleId,
+        );
       }
 
       const resolveStatusId = async (name: string): Promise<number> => {
@@ -2134,6 +2200,11 @@ export class EnrichedOrdersService {
 
       // Order reference
       addField("fitter_reference", dto.orderReference);
+
+      if (stamped && stamped.currency > 0) {
+        addField("currency", stamped.currency);
+        addField("factory_id", stamped.factoryId);
+      }
 
       // Status
       addField("order_status", statusId);
@@ -2311,10 +2382,17 @@ export class EnrichedOrdersService {
           `SELECT id FROM statuses WHERE name = $1`,
           [dto.orderStatus],
         );
-        if (statusResult && statusResult.length > 0) {
-          statusId = statusResult[0].id;
+        if (!statusResult || statusResult.length === 0) {
+          throw new BadRequestException(`Unknown status: ${dto.orderStatus}`);
         }
+        statusId = statusResult[0].id;
       }
+
+      const { currency, factoryId } = await this.resolveCurrencyAndFactory(
+        queryRunner,
+        dto.fitterId,
+        dto.saddleId,
+      );
 
       // Convert dollar prices to cents
       const toCents = (val: number | undefined): number =>
@@ -2358,7 +2436,7 @@ export class EnrichedOrdersService {
           dto.fitterId || 0,
           dto.saddleId || 0,
           dto.leatherId || 0,
-          0, // factory_id
+          factoryId,
           dto.fitterStock ? 1 : 0,
           dto.customerId || 0,
           dto.orderReference || "",
@@ -2401,8 +2479,8 @@ export class EnrichedOrdersService {
           dto.demo ? 1 : 0,
           dto.sponsored ? 1 : 0,
           dto.rushed ? 1 : 0,
-          2, // oms_version
-          0, // currency (will use fitter's currency)
+          3, // oms_version: legacy's current writer
+          currency,
           "", // order_data
           dto.repairSourceOrderId || null,
           dto.seatSizes && dto.seatSizes.length > 0
@@ -2720,7 +2798,6 @@ export class EnrichedOrdersService {
     await queryRunner.connect();
 
     try {
-      const leatherOptionIds = [5, 6, 10, 11, 12, 13, 14, 21, 22];
       const rows: SaddleSpecRow[] = await queryRunner.query(
         `
         SELECT
@@ -2730,18 +2807,18 @@ export class EnrichedOrdersService {
           oi.clone_number as "cloneNumber",
           CASE
             WHEN oi.custom IS NOT NULL AND oi.custom != '' THEN oi.custom
-            WHEN oi.option_id = ANY($2::int[]) THEN COALESCE(lt.name, oitm.name)
+            WHEN o.type = 1 THEN COALESCE(lt.name, oitm.name)
             ELSE oitm.name
           END as "displayValue"
         FROM orders_info oi
         LEFT JOIN options o ON oi.option_id = o.id
         LEFT JOIN options_items oitm ON oi.option_item_id = oitm.id
         LEFT JOIN leather_types lt ON oi.option_item_id = lt.id
-          AND oi.option_id = ANY($2::int[])
+          AND o.type = 1
         WHERE oi.order_id = ANY($1::int[])
         ORDER BY oi.order_id, o.sequence, oi.option_id, oi.clone_number
         `,
-        [orderIds, leatherOptionIds],
+        [orderIds],
       );
 
       const result: Record<number, SaddleSpecResult[]> = {};

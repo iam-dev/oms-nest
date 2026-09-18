@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, cleanup } from '@testing-library/react';
 import { ComprehensiveEditOrder } from '@/components/ComprehensiveEditOrder';
 import * as enrichedOrdersModule from '@/services/enrichedOrders';
 import * as sonnerModule from 'sonner';
@@ -86,7 +86,9 @@ jest.mock('@/components/ui/select', () => {
 });
 
 jest.mock('@/components/ui/checkbox', () => ({
-  Checkbox: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input type="checkbox" {...props} />,
+  Checkbox: ({ onCheckedChange, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { onCheckedChange?: (checked: boolean) => void }) => (
+    <input type="checkbox" {...props} onChange={(e) => onCheckedChange?.(e.target.checked)} />
+  ),
 }));
 
 jest.mock('@/components/ui/textarea', () => ({
@@ -813,22 +815,27 @@ describe('ComprehensiveEditOrder component', () => {
     it('sends empty shipping fields when the user clears them', async () => {
       // Same `'' || undefined` bug as the reference: a cleared shipping address
       // must reach the server as '' so the partial update actually blanks it.
+      // shipCountry is a legacy country select (not free text) since Task 10; it's
+      // cleared by picking the "- Choose -" item rather than editing a text input.
       (fetchOrderDetail as jest.Mock).mockResolvedValue({
         ...mockOrderDetail,
         shipName: 'Jane Rider',
         shipAddress: '1 Stable Lane',
         shipCity: 'Lexington',
         shipZipcode: '40502',
-        shipCountry: 'USA',
+        shipCountry: 'Canada',
       });
       (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
 
       await renderAndWaitForLoad({ isDuplicate: false });
       await navigateToStep(2);
 
-      for (const value of ['Jane Rider', '1 Stable Lane', 'Lexington', '40502', 'USA']) {
+      for (const value of ['Jane Rider', '1 Stable Lane', 'Lexington', '40502']) {
         fireEvent.change(screen.getByDisplayValue(value), { target: { value: '' } });
       }
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('dialog-content').querySelector('[data-value="-1"]')!);
+      });
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
@@ -1907,6 +1914,180 @@ describe('ComprehensiveEditOrder component', () => {
 
       expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Fitter'));
       expectStillOnStep1();
+    });
+  });
+
+  describe('legacy parity (2026-09-17)', () => {
+    const OPTION_SEAT_SHAPE = 41;
+    const OPTION_FLAP_LENGTH = 8;
+    const parityOptions = {
+      ...mockEditOptions,
+      fitters: [{ id: 5, username: 'expertfitter', fullName: 'Expert Fitter', currency: 7 }],
+      saddles: [
+        { id: 10, brand: 'Premium', modelName: 'Classic', displayName: 'Premium Classic', active: 1 },
+        { id: 91, brand: 'Aviar', modelName: 'Rook 1.0 *INACTIVE*', displayName: 'Aviar Rook 1.0 *INACTIVE*', active: 0 },
+      ],
+      leatherTypes: [
+        { id: 3, name: 'Italian Leather', price1: 6595, price7: 5695 },
+        { id: 48, name: 'ASBLV', price1: 6000, price7: 5000 },
+      ],
+      options: [
+        { optionId: OPTION_SEAT_SHAPE, optionName: 'AVIAR Seat Shape', sequence: 1, group: null, type: 0, extraAllowed: 0 },
+        { optionId: OPTION_FLAP_LENGTH, optionName: 'Flap Length', sequence: 2, group: null, type: 0, extraAllowed: 0 },
+      ],
+      optionItems: [
+        { id: 6150, name: 'X-SLEEK(spacer fabric)', optionId: OPTION_SEAT_SHAPE, userColor: 0, userLeather: 0 },
+        { id: 69, name: '16', optionId: OPTION_FLAP_LENGTH, userColor: 0, userLeather: 0 },
+      ],
+      presets: [{ id: 24, name: 'AVIAR SMOOTH Black', sequence: 1 }],
+      presetItems: [
+        { presetId: 24, optionId: OPTION_FLAP_LENGTH, itemId: 69 },
+        { presetId: 24, optionId: OPTION_SEAT_SHAPE, itemId: 5430 }, // not ticked on this model
+        { presetId: 24, optionId: OPTION_SEAT_SHAPE, itemId: 0 },    // legacy junk row
+      ],
+    };
+
+    beforeEach(() => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(parityOptions) });
+    });
+
+    it('applies a preset only for items the model offers and never selects "Customized by fitter" from item_id 0', async () => {
+      await renderAndWaitForLoad();
+      await act(async () => { fireEvent.click(screen.getByText('AVIAR SMOOTH Black')); });
+      const selects = screen.getAllByTestId('select');
+      const flap = selects.find(s => s.textContent?.includes('16'));
+      expect(flap).toHaveAttribute('data-value', '69');
+      const seatShape = selects.find(s => s.textContent?.includes('X-SLEEK'));
+      expect(seatShape).not.toHaveAttribute('data-value', '0');
+      expect(seatShape).not.toHaveAttribute('data-value', '5430');
+    });
+
+    it('labels the total with the fitter currency via FITTER_CURRENCIES (7 = DE)', async () => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, currency: null, fitterCurrency: null });
+      await renderAndWaitForLoad();
+      expect(screen.getByText('Total (DE):')).toBeInTheDocument();
+    });
+
+    it('re-derives the saddle price from saddle_leathers when the leather type changes', async () => {
+      await renderAndWaitForLoad();
+      await act(async () => { fireEvent.click(screen.getByText('ASBLV')); });
+      expect(screen.getByDisplayValue('5000.00')).toBeInTheDocument(); // fitter currency 7 → price7
+    });
+
+    it('offers only active models plus the order\'s own model', async () => {
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleId: 91 });
+      await renderAndWaitForLoad();
+      expect(screen.getByText('Aviar Rook 1.0 *INACTIVE*')).toBeInTheDocument();
+
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, saddleId: 10 });
+      cleanup();
+      await renderAndWaitForLoad();
+      expect(screen.queryByText('Aviar Rook 1.0 *INACTIVE*')).not.toBeInTheDocument();
+    });
+
+    it('uses the legacy country select for the shipping address', async () => {
+      // Unlike the other tests in this describe, parityOptions' two saddle options
+      // (each with items and no saved spec on mockOrderDetail) are unrelated to what
+      // this test checks and would otherwise block "Next Step" validation before
+      // step 2 is reached. Use the base fixture, which requires no option picks.
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(mockEditOptions) });
+      await renderAndWaitForLoad();
+      await navigateToStep(2);
+      expect(screen.getByText('Republic of Ireland')).toBeInTheDocument();
+    });
+
+    it('clears a previously saved shipping country via "- Choose -"', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(mockEditOptions) });
+      (fetchOrderDetail as jest.Mock).mockResolvedValue({ ...mockOrderDetail, shipCountry: 'Republic of Ireland' });
+      (updateOrder as jest.Mock).mockResolvedValue({ success: true, orderId: 100 });
+
+      await renderAndWaitForLoad();
+      await navigateToStep(2);
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('dialog-content').querySelector('[data-value="-1"]')!);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+      });
+
+      await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
+      const [, payload] = (updateOrder as jest.Mock).mock.calls[0];
+      expect(payload.shipCountry).toBe('');
+    });
+
+    describe('extras (options.type = 2)', () => {
+      const EXTRA_REFLOCK = 23;
+      const EXTRA_GIRTH = 28;
+      const withExtras = {
+        ...parityOptions,
+        options: [
+          ...parityOptions.options,
+          { optionId: EXTRA_REFLOCK, optionName: 'Complete Re-Flock', sequence: 100, group: null, type: 2, price1: 250, extraAllowed: 0 },
+          { optionId: EXTRA_GIRTH, optionName: 'Icon Flex Air Girth', sequence: 101, group: null, type: 2, price1: 259, extraAllowed: 0 },
+        ],
+      };
+      beforeEach(() => {
+        (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: () => Promise.resolve(withExtras) });
+        (fetchOrderDetail as jest.Mock).mockResolvedValue({
+          ...mockOrderDetail,
+          // parityOptions' two regular options (Seat Shape, Flap Length) are
+          // required; save them too so navigateToStep(4) below isn't blocked
+          // by unrelated "missing required field" validation on step 1.
+          saddleSpecs: [
+            { optionId: OPTION_SEAT_SHAPE, optionName: 'AVIAR Seat Shape', optionItemId: 6150, cloneNumber: 0, itemName: 'X-SLEEK(spacer fabric)', leatherName: null, custom: '', color: '', leatherType: '', displayValue: '' },
+            { optionId: OPTION_FLAP_LENGTH, optionName: 'Flap Length', optionItemId: 69, cloneNumber: 0, itemName: '16', leatherName: null, custom: '', color: '', leatherType: '', displayValue: '' },
+            { optionId: EXTRA_REFLOCK, optionName: 'Complete Re-Flock', optionItemId: 0, cloneNumber: 0, itemName: null, leatherName: null, custom: '', color: '', leatherType: '', displayValue: '' },
+          ],
+        });
+        (updateOrder as jest.Mock).mockResolvedValue({ success: true });
+      });
+
+      it('lists the model\'s extras as checkboxes, plain labels, saved ones ticked', async () => {
+        await renderAndWaitForLoad();
+        expect(screen.getByText('Extras')).toBeInTheDocument();
+        expect(screen.getByLabelText('Complete Re-Flock')).toBeChecked();
+        expect(screen.getByLabelText('Icon Flex Air Girth')).not.toBeChecked();
+        expect(screen.queryByText(/\+\$/)).not.toBeInTheDocument();
+      });
+
+      it('does not render extras as option rows', async () => {
+        await renderAndWaitForLoad();
+        expect(screen.queryByText('Complete Re-Flock:')).not.toBeInTheDocument();
+      });
+
+      it('saves ticked extras as option_item_id 0 rows and drops unticked ones', async () => {
+        await renderAndWaitForLoad();
+        fireEvent.click(screen.getByLabelText('Complete Re-Flock')); // untick
+        fireEvent.click(screen.getByLabelText('Icon Flex Air Girth')); // tick
+        await navigateToStep(4);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /update order/i })); });
+        const payload = (updateOrder as jest.Mock).mock.calls[0][1];
+        expect(payload.saddleOptions).toContainEqual(expect.objectContaining({ optionId: EXTRA_GIRTH, optionItemId: 0 }));
+        expect(payload.saddleOptions).not.toContainEqual(expect.objectContaining({ optionId: EXTRA_REFLOCK }));
+      });
+
+      it('shows ticked extras in the preview', async () => {
+        await renderAndWaitForLoad();
+        await navigateToStep(4);
+        expect(screen.getByText('Extras:')).toBeInTheDocument();
+        expect(screen.getByText('Complete Re-Flock')).toBeInTheDocument();
+      });
+
+      it('unticks extras when the Brand & Model selection changes', async () => {
+        await renderAndWaitForLoad();
+        expect(screen.getByLabelText('Complete Re-Flock')).toBeChecked();
+
+        // Only "Premium Classic" (id 10, the order's own saddle) is offered here:
+        // the other fixture saddle (id 91) is inactive and filtered out of the
+        // dropdown. Re-picking the same model still runs the change handler,
+        // which must clear selectedExtras like the Create wizard does.
+        await act(async () => {
+          fireEvent.click(screen.getByText('Premium Classic'));
+        });
+
+        expect(screen.getByLabelText('Complete Re-Flock')).not.toBeChecked();
+      });
     });
   });
 });

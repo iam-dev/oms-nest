@@ -3,6 +3,7 @@ import { fetchEntities } from './api';
 import { API_URL } from './api-config';
 import { logger } from '@/utils/logger';
 import type { EnrichedOrder } from '@/types/EnrichedOrder';
+import type { PricedLeather } from '@/utils/orderPricing';
 
 /** Hydra JSON-LD paginated collection response */
 export interface HydraResponse<T> {
@@ -893,7 +894,7 @@ export async function getAllStatusValues(): Promise<string[]> {
 // Search with pagination support for large datasets
 export async function paginatedSearch(searchParams: SearchFilters & { page?: number; limit?: number }): Promise<HydraResponse<EnrichedOrderRow>> {
   logger.log('Performing paginated search:', searchParams);
-  
+
   const filters = { ...searchParams };
   delete filters.page;
 
@@ -901,4 +902,18 @@ export async function paginatedSearch(searchParams: SearchFilters & { page?: num
     ...filters,
     // Add pagination to the search
   });
+}
+
+// ========== EDIT FORM OPTIONS ==========
+
+export interface EditFormOptions {
+  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean; currency?: number }>;
+  saddles: Array<{ id: number; brand: string; modelName: string; displayName: string; active?: number }>;
+  leatherTypes: Array<{ id: number; name: string } & PricedLeather>;
+  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type?: number; price1?: number; extraAllowed: number }>;
+  optionItems: Array<{ id: number; name: string; optionId: number; price1?: number; userColor?: number; userLeather?: number }>;
+  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
+  statuses: Array<{ id: number; name: string }>;
+  presets: Array<{ id: number; name: string; sequence: number }>;
+  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
 }

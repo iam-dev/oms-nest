@@ -8,6 +8,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import {
   DialogContent,
   DialogHeader,
@@ -20,36 +21,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronRight, Search, User, Package, Settings, Plus } from 'lucide-react';
-import { fetchOrderEditData, searchCustomers, searchFitters, saveOrderEditData } from '@/services/orderEditView';
+import { fetchOrderEditData, searchCustomers, saveOrderEditData } from '@/services/orderEditView';
 import { createOrderFromPayload, UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
 import {
   ComprehensiveOrderData,
   OrderEditFormState,
   Customer,
-  Fitter,
-  OrderLine,
-  OrderStatus
+  OrderLine
 } from '@/types/ComprehensiveOrder';
 import { logger } from '@/utils/logger';
 import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
+import { OptionSlotRow } from '@/components/shared/OptionSlotRow';
+import { specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
+import { presetSelections } from '@/utils/presetApply';
+import type { EditFormOptions } from '@/services/enrichedOrders';
+import { saddlePriceFor, orderTotal, currencyCodeFor, formatMoney } from '@/utils/orderPricing';
+import { ShippingCountrySelect } from '@/components/shared/ShippingCountrySelect';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DuplicateData = Record<string, any>;
-
-interface EditFormOptions {
-  /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
-  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
-  saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
-  leatherTypes: Array<{ id: number; name: string; price1: number }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type: number; price1: number; extraAllowed: number }>;
-  optionItems: Array<{ id: number; name: string; optionId: number; price1: number }>;
-  /** Leathers ticked per leather option (type 1) in Models > Manage Options. */
-  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
-  statuses: Array<{ id: number; name: string }>;
-  presets: Array<{ id: number; name: string; sequence: number }>;
-  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
-}
 
 interface EditOrderProps {
   order?: {
@@ -63,24 +54,6 @@ interface EditOrderProps {
   isDuplicate?: boolean;
   duplicateData?: DuplicateData;
 }
-
-const ORDER_STATUSES: { value: OrderStatus; label: string }[] = [
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'UNORDERED', label: 'Unordered' },
-  { value: 'ORDERED', label: 'Ordered' },
-  { value: 'CHANGED', label: 'Changed' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'IN_PRODUCTION_P1', label: 'In Production P1' },
-  { value: 'IN_PRODUCTION_P2', label: 'In Production P2' },
-  { value: 'IN_PRODUCTION_P3', label: 'In Production P3' },
-  { value: 'SHIPPED_TO_FITTER', label: 'Shipped to Fitter' },
-  { value: 'SHIPPED_TO_CUSTOMER', label: 'Shipped to Customer' },
-  { value: 'INVENTORY', label: 'Inventory' },
-  { value: 'ON_HOLD', label: 'On Hold' },
-  { value: 'ON_TRIAL', label: 'On Trial' },
-  { value: 'COMPLETED_SALE', label: 'Completed Sale' },
-  { value: 'CANCELLED', label: 'Cancelled' }
-];
 
 const steps = [
   { id: 1, title: 'Products & Pricing', icon: Package },
@@ -106,7 +79,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       total: 0,
       currency: 'USD'
     },
-    status: 'DRAFT',
+    status: 'Unordered',
     isUrgent: false,
     isStock: false,
     isDemo: false,
@@ -118,11 +91,9 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
-  
-  // Fitter search state
-  const [fitterSearchTerm, setFitterSearchTerm] = useState('');
-  const [fitterSearchResults, setFitterSearchResults] = useState<Fitter[]>([]);
-  const [fitterSearchLoading, setFitterSearchLoading] = useState(false);
+
+  // Shipping name (legacy: separate from the customer's own name)
+  const [shipName, setShipName] = useState('');
 
   // Edit options from backend (fitters, saddles, presets, etc.)
   const [editOptions, setEditOptions] = useState<EditFormOptions | null>(null);
@@ -131,9 +102,19 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [selectedPresetId, setSelectedPresetId] = useState<string>('none');
   const [selectedLeatherId, setSelectedLeatherId] = useState<string>('');
 
+  // Step-1 pricing panel. Legacy fills Saddle price from saddle_leathers when
+  // the Leathertype is chosen; the rest are manual entries with a red asterisk.
+  const [prices, setPrices] = useState({
+    saddle: '0.00', tradein: '0.00', deposit: '0.00', discount: '0.00',
+    fittingeval: '0.00', callfee: '0.00', girth: '0.00', additional: '0.00',
+  });
+  const setPrice = (key: keyof typeof prices, value: string) => setPrices(prev => ({ ...prev, [key]: value }));
+
   // Saddle option selections, keyed by slot ("optionId:cloneNumber", see utils/optionSlots)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>({});
   const [optionCustom, setOptionCustom] = useState<Record<string, string>>({});
+  const [optionColor, setOptionColor] = useState<Record<string, string>>({});
+  const [optionLeather, setOptionLeather] = useState<Record<string, string>>({});
   // Extra rows open per option, e.g. { 4: [1] } for "CANTLE Option (2)"
   const [optionClones, setOptionClones] = useState<Record<number, number[]>>({});
 
@@ -155,6 +136,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     setOptionClones(prev => ({ ...prev, [optionId]: (prev[optionId] ?? []).filter(c => c !== clone) }));
     setOptionSelections(without);
     setOptionCustom(without);
+    setOptionColor(without);
+    setOptionLeather(without);
   };
   const [selectedExtras, setSelectedExtras] = useState<Record<number, boolean>>({});
 
@@ -163,16 +146,10 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '', city: '', state: '', zipcode: '', country: '' });
 
-  // New fitter form state
-  const [showNewFitterForm, setShowNewFitterForm] = useState(false);
-  const [newFitterSaving, setNewFitterSaving] = useState(false);
-  const [newFitter, setNewFitter] = useState({ firstName: '', lastName: '', email: '' });
-
   // Fetch edit options from backend.
-  // includeDiscontinued=true so repair orders can reference legacy/discontinued
-  // saddle models that the standard "active" filter would hide.
+  // Active models only, like the legacy new-order form; repairs have their own flow.
   const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
-    const params = new URLSearchParams({ includeDiscontinued: 'true' });
+    const params = new URLSearchParams();
     if (forSaddleId) params.set('saddleId', forSaddleId);
     const url = `${API_URL}/api/v1/enriched_orders/edit-options?${params.toString()}`;
     try {
@@ -263,7 +240,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
           order: {
             id: order.id,
             orderId: order.orderId,
-            status: 'DRAFT',
+            status: 'Unordered',
             pricing: {
               subtotal: 0,
               discount: 0,
@@ -316,15 +293,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fitter: (data.order as any).fitter,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        fitterAddress: (data.order as any).fitterAddress,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         shippingAddress: (data.order as any).shippingAddress,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        shippingMethod: (data.order as any).shippingMethod,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         reference: (data.order as any).reference,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        status: ((data.order as any).status || 'DRAFT') as OrderStatus,
+        status: (data.order as any).status || 'Unordered',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         isUrgent: (data.order as any).isUrgent || false,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -357,7 +330,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
           isSponsored: Boolean(duplicateData.isSponsored),
           isRepair: Boolean(duplicateData.isRepair),
           notes: String(duplicateData.specialNotes || prev.notes || ''),
-          status: 'DRAFT' as OrderStatus,
+          status: 'Unordered',
           pricing: {
             subtotal: Number(duplicateData.price) || prev.pricing.subtotal,
             discount: Number(duplicateData.discount) || prev.pricing.discount,
@@ -395,7 +368,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             total: 0,
             currency: 'USD'
           },
-          status: 'DRAFT',
+          status: 'Unordered',
           isUrgent: false,
           isStock: false,
           isDemo: false,
@@ -439,28 +412,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     []
   );
 
-  // Fitter search with debouncing
-  const searchFittersDebounced = useCallback(
-    async (searchTerm: string) => {
-      if (searchTerm.length < 2) {
-        setFitterSearchResults([]);
-        return;
-      }
-      
-      setFitterSearchLoading(true);
-      try {
-        const results = await searchFitters(searchTerm);
-        setFitterSearchResults(results as unknown as Fitter[]);
-      } catch (error) {
-        logger.error('Error searching fitters:', error);
-        setFitterSearchResults([]);
-      } finally {
-        setFitterSearchLoading(false);
-      }
-    },
-    []
-  );
-
   // Debounced customer search effect
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -469,16 +420,45 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     return () => clearTimeout(timer);
   }, [customerSearchTerm, searchCustomersDebounced]);
 
-  // Debounced fitter search effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      searchFittersDebounced(fitterSearchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [fitterSearchTerm, searchFittersDebounced]);
+  // Every Step-1 field marked with a red asterisk that is still empty, in page order
+  // (same rules as ComprehensiveEditOrder.getMissingRequiredFields).
+  const getMissingRequiredFields = (): string[] => {
+    const missing: string[] = [];
+    const blank = (v?: string) => !v || v.trim() === '';
+    if (blank(selectedFitterId)) missing.push('Fitter');
+    if (blank(selectedSaddleId)) missing.push('Brand & Model');
+    if (selectedPresetId !== 'none') {
+      if (blank(selectedLeatherId)) missing.push('Leathertype');
+      for (const opt of regularOptions) {
+        if (getItemsForOption(opt).length === 0) continue;
+        for (const clone of getSlots(opt.optionId)) {
+          const key = slotKey(opt.optionId, clone);
+          const selected = optionSelections[key];
+          if (blank(selected)) { missing.push(slotLabel(opt.optionName, clone)); continue; }
+          const inputs = getSpecInputs(opt.optionId, selected);
+          if ((inputs.custom && blank(optionCustom[key])) || (inputs.color && blank(optionColor[key])) || (inputs.leather && blank(optionLeather[key]))) {
+            missing.push(slotLabel(opt.optionName, clone));
+          }
+        }
+      }
+    }
+    const priceLabels: Array<[keyof typeof prices, string]> = [
+      ['tradein', 'Trade in'], ['deposit', 'Deposit'], ['discount', 'Discount'], ['fittingeval', 'Fitting/Eval'],
+      ['callfee', 'Call fee'], ['girth', 'Girth'], ['additional', 'Additional costs'],
+    ];
+    for (const [key, label] of priceLabels) if (blank(prices[key])) missing.push(label);
+    return missing;
+  };
+  const validateSaddleInformation = (): boolean => {
+    const missing = getMissingRequiredFields();
+    if (missing.length === 0) return true;
+    toast.error(`Please fill in the required fields: ${missing.join(', ')}`);
+    return false;
+  };
 
   const handleSubmit = async () => {
     if (currentStep < 3) {
+      if (currentStep === 1 && !validateSaddleInformation()) return;
       setCurrentStep(currentStep + 1);
     } else {
       setSaving(true);
@@ -488,7 +468,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         if (isNewOrder) {
           // Build payload for createOrderFromPayload (enriched orders endpoint)
           const createPayload: UpdateOrderPayload = {
-            orderStatus: formData.status || 'DRAFT',
+            orderStatus: formData.status || 'Unordered',
             rushed: formData.isUrgent || false,
             demo: formData.isDemo || false,
             repair: formData.isRepair || false,
@@ -496,21 +476,23 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
             fitterStock: formData.isStock || false,
             specialNotes: formData.notes,
             orderReference: formData.reference,
-            // Customer fields
+            // Customer fields — from the selected/created customer only
             customerId: formData.customer?.id ? Number(formData.customer.id) : undefined,
             customerName: formData.customer?.name,
             customerEmail: formData.customer?.email,
-            customerAddress: formData.shippingAddress?.street,
-            customerCity: formData.shippingAddress?.city,
-            customerState: formData.shippingAddress?.state,
-            customerZipcode: formData.shippingAddress?.zipCode,
-            // Drop the legacy "-1" sentinel so we don't round-trip it on save.
-            customerCountry: formData.shippingAddress?.country === '-1' ? undefined : formData.shippingAddress?.country,
-            // Shipping fields
+            customerPhone: formData.customer?.phone,
+            customerAddress: formData.customer?.address,
+            customerCity: formData.customer?.city,
+            customerState: formData.customer?.state,
+            customerZipcode: formData.customer?.zipcode,
+            customerCountry: formData.customer?.country,
+            // Shipping fields — from the Step 2 shipping block only
+            shipName,
             shipAddress: formData.shippingAddress?.street,
             shipCity: formData.shippingAddress?.city,
             shipState: formData.shippingAddress?.state,
             shipZipcode: formData.shippingAddress?.zipCode,
+            // Drop the legacy "-1" sentinel so we don't round-trip it on save.
             shipCountry: formData.shippingAddress?.country === '-1' ? undefined : formData.shippingAddress?.country,
             // Fitter
             fitterId: formData.fitter?.id ? Number(formData.fitter.id) : undefined,
@@ -526,12 +508,15 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 return getSlots(optId).flatMap(clone => {
                   const key = slotKey(optId, clone);
                   const itemId = optionSelections[key];
-                  if (!itemId) return [];
+                  if (itemId === undefined || itemId === '') return [];
+                  const inputs = getSpecInputs(optId, itemId);
                   return [{
                     optionId: optId,
                     optionItemId: Number(itemId),
                     cloneNumber: nextClone++,
-                    custom: optionCustom[key] || '',
+                    custom: inputs.custom ? (optionCustom[key] ?? '') : '',
+                    color: inputs.color ? (optionColor[key] ?? '') : '',
+                    leatherType: inputs.leather ? (optionLeather[key] ?? '') : '',
                   }];
                 });
               }),
@@ -545,10 +530,16 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 })),
             ],
             // Pricing
-            priceSaddle: formData.pricing.subtotal,
-            priceDiscount: formData.pricing.discount,
-            priceTax: formData.pricing.tax,
-            priceShipping: formData.pricing.shipping,
+            priceSaddle: parseFloat(prices.saddle) || 0,
+            priceTradein: parseFloat(prices.tradein) || 0,
+            priceDeposit: parseFloat(prices.deposit) || 0,
+            priceDiscount: parseFloat(prices.discount) || 0,
+            priceFittingeval: parseFloat(prices.fittingeval) || 0,
+            priceCallfee: parseFloat(prices.callfee) || 0,
+            priceGirth: parseFloat(prices.girth) || 0,
+            priceAdditional: parseFloat(prices.additional) || 0,
+            priceShipping: 0,
+            priceTax: 0,
           };
           await createOrderFromPayload(createPayload);
           logger.log(isDuplicate ? 'Duplicate order created successfully' : 'New order created successfully');
@@ -584,21 +575,13 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const selectCustomer = (customer: Customer) => {
     setFormData(prev => ({
       ...prev,
-      customer,
-      customerAddress: customer.address
+      // Rows from searchCustomers carry the phone number as phoneNo (the
+      // backend CustomerDto field), not phone — normalise so the payload's
+      // customerPhone isn't silently dropped for a searched customer.
+      customer: { ...customer, phone: customer.phone ?? customer.phoneNo }
     }));
     setCustomerSearchTerm(customer.name);
     setCustomerSearchResults([]);
-  };
-
-  const selectFitter = (fitter: Fitter) => {
-    setFormData(prev => ({
-      ...prev,
-      fitter,
-      fitterAddress: fitter.address
-    }));
-    setFitterSearchTerm(fitter.name);
-    setFitterSearchResults([]);
   };
 
   const handleCreateCustomer = async () => {
@@ -628,6 +611,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
         name: created.name || newCustomer.name,
         email: created.email || newCustomer.email,
         phone: created.phoneNo || newCustomer.phone,
+        address: created.address || newCustomer.address,
+        city: created.city || newCustomer.city,
+        state: created.state || newCustomer.state,
+        zipcode: created.zipcode || newCustomer.zipcode,
+        country: created.country || newCustomer.country,
       };
       selectCustomer(customer);
       setShowNewCustomerForm(false);
@@ -639,61 +627,25 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
     }
   };
 
-  const handleCreateFitter = async () => {
-    if (!newFitter.firstName.trim() || !newFitter.lastName.trim()) return;
-    setNewFitterSaving(true);
-    try {
-      const res = await fetch(`${API_URL}/api/v1/fitters`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          firstName: newFitter.firstName,
-          lastName: newFitter.lastName,
-          emailaddress: newFitter.email || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error(`Failed to create fitter: ${res.status}`);
-      const created = await res.json();
-      const fitter: Fitter = {
-        id: created.id,
-        name: `${newFitter.firstName} ${newFitter.lastName}`,
-        email: newFitter.email,
-      };
-      selectFitter(fitter);
-      // Also update the fitter dropdown on Step 1
-      setSelectedFitterId(String(created.id));
-      setFormData(prev => ({
-        ...prev,
-        fitter: { id: created.id, name: `${newFitter.firstName} ${newFitter.lastName}` }
-      }));
-      // Refresh edit options to include new fitter in dropdown
-      fetchEditOptions(selectedSaddleId || undefined).then(opts => {
-        if (opts) setEditOptions(opts);
-      });
-      setShowNewFitterForm(false);
-      setNewFitter({ firstName: '', lastName: '', email: '' });
-    } catch (err) {
-      logger.error('Error creating fitter:', err);
-    } finally {
-      setNewFitterSaving(false);
-    }
-  };
-
   const updateFormData = (updates: Partial<OrderEditFormState>) => {
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
   // Get available items for a given option. Leather options (type 1) pick a
   // leather_types row (saved as orders_info.leather_id) rather than an options_items row.
-  const getItemsForOption = (opt: { optionId: number; type: number }): Array<{ id: number; name: string; price1: number }> => {
+  const getItemsForOption = (opt: { optionId: number; type?: number }): Array<{ id: number; name: string }> => {
     if (!editOptions) return [];
     if (opt.type === 1) {
       return (editOptions.optionLeathers ?? [])
         .filter(l => l.optionId === opt.optionId)
-        .map(l => ({ id: l.leatherId, name: l.name, price1: 0 }));
+        .map(l => ({ id: l.leatherId, name: l.name }));
     }
     return editOptions.optionItems.filter(i => i.optionId === opt.optionId);
+  };
+
+  const getSpecInputs = (optionId: number, selectedItemId: string): SpecInputs => {
+    const item = editOptions?.optionItems.find(i => i.optionId === optionId && String(i.id) === selectedItemId);
+    return specInputsForItem(selectedItemId, item);
   };
 
   // Sorted options by sequence
@@ -702,20 +654,29 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const regularOptions = sortedOptions.filter(o => o.type !== 2);
   const extraOptions = sortedOptions.filter(o => o.type === 2);
 
+  const selectedFitter = editOptions?.fitters.find(f => String(f.id) === selectedFitterId);
+  const currencyCode = currencyCodeFor(selectedFitter?.currency);
+  const total = formatMoney(orderTotal({ ...prices, shipping: 0, tax: 0 }));
+
   // Auto-fill option selections from preset.
   // Dep is the whole editOptions object rather than editOptions?.presetItems so the React
   // Compiler can infer an exact match between the source and the memoization boundary.
   const applyPreset = useCallback((presetId: string) => {
     setSelectedPresetId(presetId);
     if (presetId === 'none' || !editOptions?.presetItems) return;
-    const pid = Number(presetId);
-    const items = editOptions.presetItems.filter(pi => pi.presetId === pid);
-    const selections: Record<string, string> = {};
-    for (const item of items) {
-      selections[slotKey(item.optionId)] = String(item.itemId);
-    }
-    setOptionSelections(selections);
+    // Inlined rather than calling getItemsForOption, which isn't memoized and
+    // would otherwise be an unstable useCallback dependency.
+    const offeredItemIds = (optionId: number): Array<number | string> => {
+      const type = editOptions.options.find(o => o.optionId === optionId)?.type ?? 0;
+      if (type === 1) {
+        return (editOptions.optionLeathers ?? []).filter(l => l.optionId === optionId).map(l => l.leatherId);
+      }
+      return editOptions.optionItems.filter(i => i.optionId === optionId).map(i => i.id);
+    };
+    setOptionSelections(presetSelections(editOptions.presetItems, Number(presetId), offeredItemIds));
     setOptionCustom({});
+    setOptionColor({});
+    setOptionLeather({});
     setOptionClones({});
     setSelectedExtras({});
   }, [editOptions]);
@@ -751,7 +712,12 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   className={`flex items-center ${
                     currentStep >= step.id ? 'text-[#8B0000]' : 'text-gray-400'
                   }`}
-                  onClick={() => setCurrentStep(step.id)}
+                  onClick={() => {
+                    // Jumping forward off Step 1 is gated the same as Next Step;
+                    // moving backwards, or between steps 2 and 3, is not.
+                    if (currentStep === 1 && step.id > 1 && !validateSaddleInformation()) return;
+                    setCurrentStep(step.id);
+                  }}
                 >
                   <div className={`
                     w-10 h-10 rounded-full flex items-center justify-center border-2
@@ -828,6 +794,11 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         ...prev,
                         fitter: { id: fitter.id, name: fitter.fullName || fitter.username }
                       }));
+                    }
+                    // Changing the fitter changes the currency: re-derive the saddle price unless the user overrode it.
+                    const leather = editOptions?.leatherTypes.find(lt => String(lt.id) === selectedLeatherId);
+                    if (leather && prices.saddle === formatMoney(saddlePriceFor(leather, selectedFitter?.currency))) {
+                      setPrice('saddle', formatMoney(saddlePriceFor(leather, fitter?.currency)));
                     }
                   }}>
                     <SelectTrigger className="h-9">
@@ -910,6 +881,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                     setSelectedLeatherId('');
                     setOptionSelections({});
                     setOptionCustom({});
+                    setOptionColor({});
+                    setOptionLeather({});
                     setOptionClones({});
                     setSelectedExtras({});
                     // Refetch options filtered by the selected saddle
@@ -949,14 +922,19 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                       <Label className="text-sm font-medium pt-2">
                         Leathertype: <span className="text-red-500">*</span>
                       </Label>
-                      <Select value={selectedLeatherId} onValueChange={setSelectedLeatherId}>
+                      <Select value={selectedLeatherId} onValueChange={(val) => {
+                        setSelectedLeatherId(val);
+                        // Legacy fills the saddle price from saddle_leathers.price<fitter currency>.
+                        const leather = editOptions?.leatherTypes.find(lt => String(lt.id) === val);
+                        setPrice('saddle', formatMoney(saddlePriceFor(leather, selectedFitter?.currency)));
+                      }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="- Choose -" />
                         </SelectTrigger>
                         <SelectContent>
                           {editOptions?.leatherTypes?.map(lt => (
                             <SelectItem key={lt.id} value={String(lt.id)}>
-                              {lt.name}{lt.price1 > 0 ? ` (+$${lt.price1.toFixed(2)})` : ''}
+                              {lt.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -978,63 +956,29 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                         {slots.map((clone, slotIdx) => {
                           const key = slotKey(opt.optionId, clone);
                           const label = slotLabel(opt.optionName, clone);
+                          const selectedItemId = optionSelections[key] || '';
                           const isLastSlot = slotIdx === slots.length - 1;
                           return (
-                            <React.Fragment key={key}>
-                              <Label className="text-sm font-medium pt-2">
-                                {label}: <span className="text-red-500">*</span>
-                              </Label>
-                              <div className="space-y-1">
-                                <div className="flex items-start gap-1">
-                                  <div className="flex-1">
-                                    <Select
-                                      value={optionSelections[key] || ''}
-                                      onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
-                                    >
-                                      <SelectTrigger className="h-9">
-                                        <SelectValue placeholder="- Choose -" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {items.map(item => (
-                                          <SelectItem key={item.id} value={String(item.id)}>
-                                            {item.name}{item.price1 > 0 ? ` (+$${item.price1.toFixed(2)})` : ''}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  {clone > 0 && (
-                                    <button
-                                      type="button"
-                                      aria-label={`Remove ${label}`}
-                                      className="h-9 px-2 text-gray-500 hover:text-red-700"
-                                      onClick={() => removeClone(opt.optionId, clone)}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </div>
-                                {optionCustom[key] !== undefined && (
-                                  <div className="ml-2 flex items-center gap-2">
-                                    <Label className="text-xs font-medium text-gray-600 whitespace-nowrap">Specify color: <span className="text-red-500">*</span></Label>
-                                    <Input
-                                      className="h-8 text-sm flex-1"
-                                      value={optionCustom[key] || ''}
-                                      onChange={(e) => setOptionCustom(prev => ({ ...prev, [key]: e.target.value }))}
-                                    />
-                                  </div>
-                                )}
-                                {isLastSlot && canAddClone && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-[#8B0000] hover:underline"
-                                    onClick={() => addClone(opt.optionId)}
-                                  >
-                                    + Add another {opt.optionName}
-                                  </button>
-                                )}
-                              </div>
-                            </React.Fragment>
+                            <div key={key} className="col-span-2">
+                              <OptionSlotRow
+                                label={label}
+                                selectedItemId={selectedItemId}
+                                placeholder="- Choose -"
+                                items={items}
+                                inputs={getSpecInputs(opt.optionId, selectedItemId)}
+                                custom={optionCustom[key] ?? ''}
+                                color={optionColor[key] ?? ''}
+                                leather={optionLeather[key] ?? ''}
+                                onSelect={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
+                                onCustomChange={(v) => setOptionCustom(prev => ({ ...prev, [key]: v }))}
+                                onColorChange={(v) => setOptionColor(prev => ({ ...prev, [key]: v }))}
+                                onLeatherChange={(v) => setOptionLeather(prev => ({ ...prev, [key]: v }))}
+                                onRemove={clone > 0 ? () => removeClone(opt.optionId, clone) : undefined}
+                                onAddClone={isLastSlot && canAddClone ? () => addClone(opt.optionId) : undefined}
+                                addCloneLabel={`+ Add another ${opt.optionName}`}
+                                inputIdPrefix={`spec-${opt.optionId}-${clone}`}
+                              />
+                            </div>
                           );
                         })}
                       </React.Fragment>
@@ -1063,7 +1007,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                               />
                               <label htmlFor={`extra-${extra.optionId}`} className="text-sm">
                                 {extra.optionName}
-                                {extra.price1 > 0 ? ` (+$${extra.price1.toFixed(2)})` : ''}
                               </label>
                             </div>
                           </div>
@@ -1090,38 +1033,24 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
               <div className="bg-white rounded-lg border p-6">
                 <h3 className="font-semibold mb-4 text-lg">Pricing</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Saddle price:</Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="3795.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Trade in: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Deposit: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Discount: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Fitting/Eval: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Call fee: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Girth: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium min-w-fit">Additional costs: <span className="text-red-500">*</span></Label>
-                    <Input className="h-8 text-right text-sm w-24" type="number" defaultValue="0.00" />
-                  </div>
+                  {([
+                    ['saddle', 'Saddle price:', false],
+                    ['tradein', 'Trade in:', true],
+                    ['deposit', 'Deposit:', true],
+                    ['discount', 'Discount:', true],
+                    ['fittingeval', 'Fitting/Eval:', true],
+                    ['callfee', 'Call fee:', true],
+                    ['girth', 'Girth:', true],
+                    ['additional', 'Additional costs:', true],
+                  ] as const).map(([key, label, required]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Label htmlFor={`price-${key}`} className="text-sm font-medium min-w-fit">
+                        {label}{required && <> <span className="text-red-500">*</span></>}
+                      </Label>
+                      <Input id={`price-${key}`} className="h-8 text-right text-sm w-24" type="number" step="0.01"
+                        value={prices[key]} onChange={(e) => setPrice(key, e.target.value)} />
+                    </div>
+                  ))}
                   <div className="flex items-center gap-2">
                     <Label className="text-sm font-medium min-w-fit">Shipping: <span className="text-red-500">*</span></Label>
                     <span className="text-sm">-</span>
@@ -1135,8 +1064,8 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   </div>
                   <hr className="my-3" />
                   <div className="flex items-center gap-2 font-semibold">
-                    <Label className="text-sm font-medium min-w-fit">Total (EUR):</Label>
-                    <span className="text-sm">3795.00</span>
+                    <Label className="text-sm font-medium min-w-fit">Total ({currencyCode}):</Label>
+                    <span className="text-sm">{total}</span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
                     Your deposit is non-refundable if your order is canceled.
@@ -1217,7 +1146,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
           {/* Step 2: Customer & Shipping */}
           {currentStep === 2 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               {/* Customer Selection */}
               <div className="bg-white rounded-lg border p-6">
                 <h3 className="font-semibold mb-4 text-lg">Customer</h3>
@@ -1288,16 +1217,17 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                           <Input className="h-8 text-sm" value={newCustomer.city} onChange={(e) => setNewCustomer(prev => ({ ...prev, city: e.target.value }))} />
                         </div>
                         <div>
-                          <Label className="text-xs">State</Label>
-                          <Input className="h-8 text-sm" value={newCustomer.state} onChange={(e) => setNewCustomer(prev => ({ ...prev, state: e.target.value }))} />
-                        </div>
-                        <div>
                           <Label className="text-xs">Zipcode</Label>
                           <Input className="h-8 text-sm" value={newCustomer.zipcode} onChange={(e) => setNewCustomer(prev => ({ ...prev, zipcode: e.target.value }))} />
                         </div>
-                        <div>
-                          <Label className="text-xs">Country</Label>
-                          <Input className="h-8 text-sm" value={newCustomer.country} onChange={(e) => setNewCustomer(prev => ({ ...prev, country: e.target.value }))} />
+                        <div className="col-span-2">
+                          <ShippingCountrySelect
+                            idPrefix="new-customer"
+                            country={newCustomer.country}
+                            state={newCustomer.state}
+                            onCountryChange={(country) => setNewCustomer(prev => ({ ...prev, country }))}
+                            onStateChange={(state) => setNewCustomer(prev => ({ ...prev, state }))}
+                          />
                         </div>
                       </div>
                       <Button size="sm" onClick={handleCreateCustomer} disabled={!newCustomer.name.trim() || newCustomerSaving}>
@@ -1320,148 +1250,34 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                 </div>
               </div>
 
-              {/* Fitter Selection */}
-              <div className="bg-white rounded-lg border p-6">
-                <h3 className="font-semibold mb-4 text-lg">Fitter</h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Search Fitter</Label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input
-                        placeholder="Type fitter name..."
-                        value={fitterSearchTerm}
-                        onChange={(e) => setFitterSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    {fitterSearchLoading && (
-                      <p className="text-sm text-gray-500 mt-2">Searching...</p>
-                    )}
-                    {fitterSearchResults.length > 0 && (
-                      <div className="mt-2 max-h-40 overflow-y-auto border rounded-md">
-                        {fitterSearchResults.map((fitter) => (
-                          <button
-                            key={fitter.id}
-                            className="w-full text-left p-3 hover:bg-gray-50 border-b last:border-b-0"
-                            onClick={() => selectFitter(fitter)}
-                          >
-                            <div className="font-medium">{fitter.name}</div>
-                            {fitter.email && (
-                              <div className="text-sm text-gray-600">{fitter.email}</div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => setShowNewFitterForm(!showNewFitterForm)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {showNewFitterForm ? 'Cancel' : 'Add New Fitter'}
-                    </Button>
-                  </div>
-
-                  {showNewFitterForm && (
-                    <div className="border rounded-md p-4 space-y-3 bg-blue-50">
-                      <h4 className="font-medium text-sm">New Fitter</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
-                          <Input className="h-8 text-sm" value={newFitter.firstName} onChange={(e) => setNewFitter(prev => ({ ...prev, firstName: e.target.value }))} />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
-                          <Input className="h-8 text-sm" value={newFitter.lastName} onChange={(e) => setNewFitter(prev => ({ ...prev, lastName: e.target.value }))} />
-                        </div>
-                        <div className="col-span-2">
-                          <Label className="text-xs">Email</Label>
-                          <Input className="h-8 text-sm" type="email" value={newFitter.email} onChange={(e) => setNewFitter(prev => ({ ...prev, email: e.target.value }))} />
-                        </div>
-                      </div>
-                      <Button size="sm" onClick={handleCreateFitter} disabled={(!newFitter.firstName.trim() || !newFitter.lastName.trim()) || newFitterSaving}>
-                        {newFitterSaving ? 'Saving...' : 'Create Fitter'}
-                      </Button>
-                    </div>
-                  )}
-
-                  {formData.fitter && (
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <h4 className="font-medium">{formData.fitter.name}</h4>
-                      {formData.fitter.email && (
-                        <p className="text-sm text-gray-600">{formData.fitter.email}</p>
-                      )}
-                      {formData.fitter.phone && (
-                        <p className="text-sm text-gray-600">{formData.fitter.phone}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Shipping Address */}
               <div className="bg-white rounded-lg border p-6 lg:col-span-2">
-                <h3 className="font-semibold mb-4 text-lg">Shipping Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Street Address</Label>
-                    <Input
-                      value={formData.shippingAddress?.street || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, street: e.target.value }
-                      })}
-                    />
+                <h3 className="font-semibold mb-2 text-lg">Shipping address</h3>
+                <p className="text-sm text-gray-500 mb-4">(if different than under &quot;customer information or Inventory&quot;)</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-name" className="text-sm font-medium">Name:</Label>
+                    <Input id="ship-name" value={shipName} onChange={(e) => setShipName(e.target.value)} />
                   </div>
-                  <div>
-                    <Label>City</Label>
-                    <Input
-                      value={formData.shippingAddress?.city || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, city: e.target.value }
-                      })}
-                    />
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-address" className="text-sm font-medium">Address:</Label>
+                    <Input id="ship-address" value={formData.shippingAddress?.street || ''}
+                      onChange={(e) => updateFormData({ shippingAddress: { ...formData.shippingAddress, street: e.target.value } })} />
                   </div>
-                  <div>
-                    <Label>State/Province</Label>
-                    <Input
-                      value={formData.shippingAddress?.state || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, state: e.target.value }
-                      })}
-                    />
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-city" className="text-sm font-medium">City:</Label>
+                    <Input id="ship-city" value={formData.shippingAddress?.city || ''}
+                      onChange={(e) => updateFormData({ shippingAddress: { ...formData.shippingAddress, city: e.target.value } })} />
                   </div>
-                  <div>
-                    <Label>ZIP/Postal Code</Label>
-                    <Input
-                      value={formData.shippingAddress?.zipCode || ''}
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, zipCode: e.target.value }
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Country</Label>
-                    <Input
-                      value={
-                        formData.shippingAddress?.country &&
-                        formData.shippingAddress.country !== '-1'
-                          ? formData.shippingAddress.country
-                          : ''
-                      }
-                      onChange={(e) => updateFormData({
-                        shippingAddress: { ...formData.shippingAddress, country: e.target.value }
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Shipping Method</Label>
-                    <Input
-                      value={formData.shippingMethod || ''}
-                      onChange={(e) => updateFormData({ shippingMethod: e.target.value })}
-                    />
+                  <ShippingCountrySelect
+                    country={formData.shippingAddress?.country || ''}
+                    state={formData.shippingAddress?.state || ''}
+                    onCountryChange={(country) => updateFormData({ shippingAddress: { ...formData.shippingAddress, country } })}
+                    onStateChange={(state) => updateFormData({ shippingAddress: { ...formData.shippingAddress, state } })}
+                  />
+                  <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+                    <Label htmlFor="ship-zip" className="text-sm font-medium">Zipcode:</Label>
+                    <Input id="ship-zip" value={formData.shippingAddress?.zipCode || ''}
+                      onChange={(e) => updateFormData({ shippingAddress: { ...formData.shippingAddress, zipCode: e.target.value } })} />
                   </div>
                 </div>
               </div>
@@ -1485,15 +1301,15 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                     <Label>Status</Label>
                     <Select
                       value={formData.status}
-                      onValueChange={(value) => updateFormData({ status: value as OrderStatus })}
+                      onValueChange={(value) => updateFormData({ status: value })}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ORDER_STATUSES.map((status) => (
-                          <SelectItem key={status.value} value={status.value}>
-                            {status.label}
+                        {editOptions?.statuses?.map(s => (
+                          <SelectItem key={s.id} value={s.name}>
+                            {s.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1507,27 +1323,6 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                       onChange={(e) => updateFormData({ requestedDeliveryDate: e.target.value })}
                     />
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg border p-6">
-                <h3 className="font-semibold mb-4 text-lg">Flags</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {[
-                    { key: 'isUrgent', label: 'Urgent' },
-                    { key: 'isStock', label: 'Stock' },
-                    { key: 'isDemo', label: 'Demo' },
-                    { key: 'isSponsored', label: 'Sponsored' },
-                    { key: 'isRepair', label: 'Repair' },
-                  ].map(({ key, label }) => (
-                    <div key={key} className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={formData[key as keyof OrderEditFormState] as boolean}
-                        onCheckedChange={(checked) => updateFormData({ [key]: checked })}
-                      />
-                      <Label>{label}</Label>
-                    </div>
-                  ))}
                 </div>
               </div>
 

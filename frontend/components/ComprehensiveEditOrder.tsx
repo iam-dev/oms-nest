@@ -25,37 +25,15 @@ import { logger } from '@/utils/logger';
 import { fetchOrderDetail, updateOrder, createOrderFromPayload, type OrderDetailData, type UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
 import { slotKey, slotOptionId, slotLabel } from '@/utils/optionSlots';
-
-interface EditFormOptions {
-  /** `active` is false when the fitter's login is blocked ("inactive" on the Fitters page). */
-  fitters: Array<{ id: number; username: string; fullName: string; active?: boolean }>;
-  saddles: Array<{ id: number; brand: string; modelName: string; displayName: string }>;
-  leatherTypes: Array<{ id: number; name: string }>;
-  options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type?: number; extraAllowed: number }>;
-  optionItems: Array<{ id: number; name: string; optionId: number; userColor?: number; userLeather?: number }>;
-  /** Leathers ticked per leather option (type 1) in Models > Manage Options. */
-  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
-  statuses: Array<{ id: number; name: string }>;
-  presets: Array<{ id: number; name: string; sequence: number }>;
-  presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
-}
+import { CUSTOMIZED_BY_FITTER_ID, CUSTOMIZED_BY_FITTER_LABEL, specInputsForItem, type SpecInputs } from '@/utils/optionSpecs';
+import { OptionSlotRow } from '@/components/shared/OptionSlotRow';
+import { presetSelections } from '@/utils/presetApply';
+import { saddlePriceFor, currencyCodeFor, formatMoney } from '@/utils/orderPricing';
+import { ShippingCountrySelect } from '@/components/shared/ShippingCountrySelect';
+import type { EditFormOptions } from '@/services/enrichedOrders';
 
 // Leather option IDs - these use leather_types instead of options_items
 const LEATHER_OPTION_TYPE = 1;
-
-// Legacy sentinel: orders_info.option_item_id = 0 means "Customized by fitter",
-// with the fitter's free text stored in orders_info.custom.
-const CUSTOMIZED_BY_FITTER_ID = '0';
-const CUSTOMIZED_BY_FITTER_LABEL = 'Customized by fitter';
-
-// Which text boxes an option needs, derived from the selected item the same way
-// the legacy form does it: the sentinel item asks for free text, and items
-// flagged options_items.user_color / user_leather ask for a colour / leather.
-interface SpecInputs {
-  custom: boolean;
-  color: boolean;
-  leather: boolean;
-}
 
 interface ComprehensiveEditOrderProps {
   order?: {
@@ -76,12 +54,6 @@ const steps = [
   { id: 3, title: 'Order overview', icon: Settings },
   { id: 4, title: 'Preview & Submit', icon: ClipboardList },
 ];
-
-// Currency map (integer to code)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const currencyMap: Record<number, string> = {
-  0: 'USD', 1: 'USD', 2: 'EUR', 3: 'GBP', 4: 'AUD', 5: 'CAD', 6: 'CHF', 7: 'DE',
-};
 
 export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderId, isLoading = false, error, onClose, onBack }: ComprehensiveEditOrderProps) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -113,6 +85,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Extra rows open per option, e.g. { 4: [1, 2] } = "CANTLE Option (2)" and "(3)".
   // Numbers are UI identity only; they are renumbered 0..n-1 on save.
   const [optionClones, setOptionClones] = useState<Record<number, number[]>>({});
+  // Ticked extras (options.type = 2), keyed by optionId; saved as an
+  // orders_info row with option_item_id = 0, like legacy.
+  const [selectedExtras, setSelectedExtras] = useState<Record<number, boolean>>({});
 
   // Form state - pricing
   const [priceSaddle, setPriceSaddle] = useState('0.00');
@@ -145,7 +120,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const [shipName, setShipName] = useState('');
   const [shipAddress, setShipAddress] = useState('');
   const [shipCity, setShipCity] = useState('');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [shipState, setShipState] = useState('');
   const [shipZipcode, setShipZipcode] = useState('');
   const [shipCountry, setShipCountry] = useState('');
@@ -164,8 +138,8 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   const orderId = order?.orderId || Number(order?.id) || 0;
 
   // Fetch edit options filtered by saddleId.
-  // includeDiscontinued=true so repair orders can reference legacy/discontinued
-  // saddle models that the standard "active" filter would hide.
+  // includeDiscontinued=true so the order's own discontinued model is still resolvable;
+  // the model list itself is filtered client-side to active + the order's current model.
   const fetchEditOptions = useCallback(async (forSaddleId?: string): Promise<EditFormOptions | null> => {
     const params = new URLSearchParams({ includeDiscontinued: 'true' });
     if (forSaddleId) params.set('saddleId', forSaddleId);
@@ -215,6 +189,10 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       const colors: Record<string, string> = {};
       const leathers: Record<string, string> = {};
       const clones: Record<number, number[]> = {};
+      // A saved row with optionItemId 0 is either an extra (options.type = 2,
+      // never has custom text) or a normal option set to "Customized by
+      // fitter" (carries custom text). Only the former belongs here.
+      const extras: Record<number, boolean> = {};
       for (const spec of detail.saddleSpecs) {
         const clone = spec.cloneNumber ?? 0;
         const key = slotKey(spec.optionId, clone);
@@ -226,12 +204,16 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
           if (!clones[spec.optionId]) clones[spec.optionId] = [];
           clones[spec.optionId].push(clone);
         }
+        if (spec.optionItemId === 0 && !spec.custom) {
+          extras[spec.optionId] = true;
+        }
       }
       setOptionSelections(selections);
       setOptionCustom(customs);
       setOptionColor(colors);
       setOptionLeather(leathers);
       setOptionClones(clones);
+      setSelectedExtras(extras);
 
       // Pricing
       setPriceSaddle(String(detail.priceSaddle ?? '0.00'));
@@ -396,6 +378,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
           allOptionIds.add(slotOptionId(key));
         }
         for (const optId of allOptionIds) {
+          if (isExtraOption(optId)) continue;
           let nextClone = 0;
           for (const slot of getSlots(optId)) {
             const key = slotKey(optId, slot);
@@ -416,6 +399,11 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
               color: inputs.color ? (optionColor[key] ?? '') : '',
               leatherType: inputs.leather ? (optionLeather[key] ?? '') : '',
             });
+          }
+        }
+        for (const opt of extraOptions) {
+          if (selectedExtras[opt.optionId]) {
+            saddleOptions.push({ optionId: opt.optionId, optionItemId: 0, cloneNumber: 0, custom: '', color: '', leatherType: '' });
           }
         }
       }
@@ -455,6 +443,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
         shipName,
         shipAddress,
         shipCity,
+        shipState,
         shipZipcode,
         shipCountry,
         // Order overview
@@ -625,34 +614,24 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     optionSelections[slotKey(optionId, clone)] ?? getOptionItemId(optionId, clone);
 
   const getSpecInputs = (optionId: number, selectedItemId: string, clone = 0): SpecInputs => {
-    if (selectedItemId === CUSTOMIZED_BY_FITTER_ID) {
-      return { custom: true, color: false, leather: false };
-    }
     const item = editOptions?.optionItems.find(
       i => i.optionId === optionId && String(i.id) === selectedItemId,
     );
-    if (item) {
-      // Legacy orders.js also shows the colour box when the item name mentions
-      // "color"/"Color" (case-sensitive), regardless of the user_color flag.
-      const nameAsksColor = item.name.includes('color') || item.name.includes('Color');
-      return { custom: false, color: !!item.userColor || nameAsksColor, leather: !!item.userLeather };
+    if (selectedItemId === CUSTOMIZED_BY_FITTER_ID || item) {
+      return specInputsForItem(selectedItemId, item);
     }
     // Item not in this saddle's list (e.g. an option no longer linked to the
     // saddle): keep whatever the saved row already carries rather than blanking it.
     const saved = findSavedSpec(optionId, clone);
     const isSavedItem = saved && String(saved.optionItemId) === selectedItemId;
-    return {
-      custom: false,
-      color: !!(isSavedItem && saved.color),
-      leather: !!(isSavedItem && saved.leatherType),
-    };
+    return { custom: false, color: !!(isSavedItem && saved.color), leather: !!(isSavedItem && saved.leatherType) };
   };
 
   // Option names whose required specification text is still empty
   const getMissingSpecifications = (): string[] => {
     const missing: string[] = [];
     const blank = (v?: string) => !v || v.trim() === '';
-    for (const opt of sortedOptions) {
+    for (const opt of regularOptions) {
       for (const clone of getSlots(opt.optionId)) {
         const selectedItemId = getSelectedItemId(opt.optionId, clone);
         if (!selectedItemId) continue;
@@ -687,7 +666,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
     if (blank(saddleId)) missing.push('Brand & Model');
     if (blank(leatherId)) missing.push('Leathertype');
     // Option rows, including extra rows the user opened but never filled
-    for (const opt of sortedOptions) {
+    for (const opt of regularOptions) {
       if (!getOptionItemId(opt.optionId) && getItemsForOption(opt.optionId).length === 0) continue;
       for (const clone of getSlots(opt.optionId)) {
         if (blank(getSelectedItemId(opt.optionId, clone))) {
@@ -741,8 +720,17 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
   // Sorted options by sequence
   const sortedOptions = editOptions?.options?.sort((a, b) => a.sequence - b.sequence) || [];
 
+  // Extras (options.type = 2, e.g. "Complete Re-Flock") are shown as a plain
+  // checkbox list, not an option row: legacy has no items for them.
+  const EXTRA_OPTION_TYPE = 2;
+  const extraOptions = sortedOptions.filter(o => o.type === EXTRA_OPTION_TYPE);
+  const regularOptions = sortedOptions.filter(o => o.type !== EXTRA_OPTION_TYPE);
+  const isExtraOption = (optionId: number) => extraOptions.some(o => o.optionId === optionId);
+
   // Currency display
-  const currencyCode = orderDetail?.currency || 'USD';
+  // The order's stored currency wins; a new/duplicate order takes the fitter's.
+  const selectedFitter = editOptions?.fitters.find(f => String(f.id) === fitterId);
+  const currencyCode = orderDetail?.currency || currencyCodeFor(selectedFitter?.currency);
 
   // Calculate total
   const total = (
@@ -931,6 +919,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       setOptionColor({});
                       setOptionLeather({});
                       setOptionClones({});
+                      setSelectedExtras({});
                       const newOptions = await fetchEditOptions(val);
                       if (newOptions) setEditOptions(newOptions);
                     }}>
@@ -938,7 +927,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                         <SelectValue placeholder="Select model..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {editOptions?.saddles?.map(s => (
+                        {editOptions?.saddles?.filter(s => s.active !== 0 || String(s.id) === saddleId).map(s => (
                           <SelectItem key={s.id} value={String(s.id)}>
                             {s.displayName}
                           </SelectItem>
@@ -958,15 +947,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       defaultValue="none"
                       onValueChange={(val) => {
                         if (val === 'none' || !editOptions?.presetItems) return;
-                        const presetId = parseInt(val, 10);
-                        const items = editOptions.presetItems.filter(pi => pi.presetId === presetId);
-                        if (items.length > 0) {
-                          const newSelections: Record<number, string> = { ...optionSelections };
-                          for (const item of items) {
-                            newSelections[item.optionId] = String(item.itemId);
-                          }
-                          setOptionSelections(newSelections);
-                        }
+                        const picks = presetSelections(
+                          editOptions.presetItems,
+                          parseInt(val, 10),
+                          (optionId) => getItemsForOption(optionId).map(i => i.id),
+                        );
+                        setOptionSelections(prev => ({ ...prev, ...picks }));
                       }}
                     >
                       <SelectTrigger className="h-9">
@@ -989,7 +975,13 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       Leathertype: <span className="text-red-500">*</span>
                     </Label>
                     <div className="space-y-1">
-                      <Select value={leatherId} onValueChange={setLeatherId}>
+                      <Select value={leatherId} onValueChange={(val) => {
+                        setLeatherId(val);
+                        // Legacy fills the saddle price from saddle_leathers.price<fitter currency>
+                        // whenever the leather is chosen.
+                        const leather = editOptions?.leatherTypes.find(lt => String(lt.id) === val);
+                        setPriceSaddle(formatMoney(saddlePriceFor(leather, selectedFitter?.currency)));
+                      }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="Select leather type..." />
                         </SelectTrigger>
@@ -1013,7 +1005,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
 
                   {/* Dynamic saddle options from orders_info; an option with
                       extra_allowed > 0 may have several rows ("CANTLE Option (2)") */}
-                  {sortedOptions.map(opt => {
+                  {regularOptions.map(opt => {
                     const items = getItemsForOption(opt.optionId);
                     // Skip options that are not in the order's specs and have no items
                     if (!getOptionItemId(opt.optionId) && items.length === 0) return null;
@@ -1021,11 +1013,6 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     const slots = getSlots(opt.optionId);
                     const extraAllowed = opt.extraAllowed ?? 0;
                     const canAddClone = extraAllowed > 0 && slots.length - 1 < extraAllowed;
-                    const specInputs: Array<{ key: keyof SpecInputs; label: string; values: Record<string, string>; set: React.Dispatch<React.SetStateAction<Record<string, string>>> }> = [
-                      { key: 'custom', label: 'Please specify:', values: optionCustom, set: setOptionCustom },
-                      { key: 'color', label: 'Specify color:', values: optionColor, set: setOptionColor },
-                      { key: 'leather', label: 'Specify leathertype:', values: optionLeather, set: setOptionLeather },
-                    ];
 
                     return (
                       <div key={opt.optionId} className="space-y-2">
@@ -1037,79 +1024,52 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                           const selectedItemId = getSelectedItemId(opt.optionId, clone);
                           const inputs = getSpecInputs(opt.optionId, selectedItemId, clone);
                           const isLastSlot = slotIdx === slots.length - 1;
-
                           return (
-                            <div key={key} className="grid grid-cols-[160px_1fr] gap-2 items-start">
-                              <Label className="text-sm font-medium pt-2">
-                                {label}: <span className="text-red-500">*</span>
-                              </Label>
-                              <div className="space-y-1">
-                                <div className="flex items-start gap-1">
-                                  <div className="flex-1">
-                                    <Select
-                                      value={selectedItemId}
-                                      onValueChange={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
-                                    >
-                                      <SelectTrigger className="h-9">
-                                        <SelectValue placeholder={currentDisplay || 'Select...'} />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {slotItems.map(item => (
-                                          <SelectItem key={item.id} value={String(item.id)}>
-                                            {item.name}
-                                          </SelectItem>
-                                        ))}
-                                        <SelectItem value={CUSTOMIZED_BY_FITTER_ID}>
-                                          {CUSTOMIZED_BY_FITTER_LABEL}
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  {clone > 0 && (
-                                    <button
-                                      type="button"
-                                      aria-label={`Remove ${label}`}
-                                      className="h-9 px-2 text-gray-500 hover:text-red-700"
-                                      onClick={() => removeClone(opt.optionId, clone)}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </div>
-                                {/* Required text boxes for the selected item */}
-                                {specInputs.filter(si => inputs[si.key]).map(si => {
-                                  const inputId = `spec-${si.key}-${opt.optionId}-${clone}`;
-                                  return (
-                                    <div key={si.key} className="ml-4 p-2 bg-gray-50 rounded">
-                                      <div className="flex items-center gap-2">
-                                        <Label htmlFor={inputId} className="text-xs font-medium text-gray-600 whitespace-nowrap">{si.label}</Label>
-                                        <span className="text-red-500">*</span>
-                                        <Input
-                                          id={inputId}
-                                          className="h-8 text-sm flex-1"
-                                          value={si.values[key] ?? ''}
-                                          onChange={(e) => si.set(prev => ({ ...prev, [key]: e.target.value }))}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                                {isLastSlot && canAddClone && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-[#8B0000] hover:underline"
-                                    onClick={() => addClone(opt.optionId)}
-                                  >
-                                    + Add another {opt.optionName}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                            <OptionSlotRow
+                              key={key}
+                              label={label}
+                              selectedItemId={selectedItemId}
+                              placeholder={currentDisplay || 'Select...'}
+                              items={slotItems}
+                              inputs={inputs}
+                              custom={optionCustom[key] ?? ''}
+                              color={optionColor[key] ?? ''}
+                              leather={optionLeather[key] ?? ''}
+                              onSelect={(val) => setOptionSelections(prev => ({ ...prev, [key]: val }))}
+                              onCustomChange={(v) => setOptionCustom(prev => ({ ...prev, [key]: v }))}
+                              onColorChange={(v) => setOptionColor(prev => ({ ...prev, [key]: v }))}
+                              onLeatherChange={(v) => setOptionLeather(prev => ({ ...prev, [key]: v }))}
+                              onRemove={clone > 0 ? () => removeClone(opt.optionId, clone) : undefined}
+                              onAddClone={isLastSlot && canAddClone ? () => addClone(opt.optionId) : undefined}
+                              addCloneLabel={`+ Add another ${opt.optionName}`}
+                              inputIdPrefix={`spec-${opt.optionId}-${clone}`}
+                            />
                           );
                         })}
                       </div>
                     );
                   })}
+
+                  {extraOptions.length > 0 && (
+                    <div className="border-t border-gray-200 mt-4 pt-3">
+                      <h4 className="text-sm font-semibold mb-2">Extras</h4>
+                      <div className="space-y-1">
+                        {extraOptions.map(extra => {
+                          const id = `extra-${extra.optionId}`;
+                          return (
+                            <div key={extra.optionId} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={id}
+                                checked={!!selectedExtras[extra.optionId]}
+                                onCheckedChange={(checked) => setSelectedExtras(prev => ({ ...prev, [extra.optionId]: !!checked }))}
+                              />
+                              <label htmlFor={id} className="text-sm">{extra.optionName}</label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Special Notes */}
                   <div className="border-t border-gray-200 mt-6 pt-4">
@@ -1400,10 +1360,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       <Label className="text-sm font-medium">City:</Label>
                       <Input value={shipCity} onChange={(e) => setShipCity(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
-                      <Label className="text-sm font-medium">Country:</Label>
-                      <Input value={shipCountry} onChange={(e) => setShipCountry(e.target.value)} />
-                    </div>
+                    <ShippingCountrySelect
+                      country={shipCountry}
+                      state={shipState}
+                      onCountryChange={setShipCountry}
+                      onStateChange={setShipState}
+                    />
                     <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
                       <Label className="text-sm font-medium">Zipcode:</Label>
                       <Input value={shipZipcode} onChange={(e) => setShipZipcode(e.target.value)} />
@@ -1494,7 +1456,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                       <dt className="text-gray-500">Fitter:</dt>
                       <dd className="font-medium">{editOptions?.fitters?.find(f => String(f.id) === fitterId)?.fullName || orderDetail?.fitterName || '—'}</dd>
                     </div>
-                    {sortedOptions.flatMap(opt => getSlots(opt.optionId).map(clone => {
+                    {regularOptions.flatMap(opt => getSlots(opt.optionId).map(clone => {
                       const display = getSpecSummary(opt.optionId, clone);
                       if (!display) return null;
                       return (
@@ -1504,6 +1466,12 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                         </div>
                       );
                     }))}
+                    {extraOptions.some(e => selectedExtras[e.optionId]) && (
+                      <div className="grid grid-cols-[130px_1fr]">
+                        <dt className="text-gray-500">Extras:</dt>
+                        <dd className="font-medium">{extraOptions.filter(e => selectedExtras[e.optionId]).map(e => <div key={e.optionId}>{e.optionName}</div>)}</dd>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {isStock && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Stock</span>}
                       {isDemo && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Demo</span>}
