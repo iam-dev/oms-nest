@@ -6,22 +6,77 @@ import { Customer } from '@/services/customers';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CUSTOMER_COUNTRIES } from '@/constants/countries';
 import { AlertTriangle } from 'lucide-react';
 import { logger } from '@/utils/logger';
+
+export interface FitterOption {
+  id: number;
+  name: string;
+}
 
 interface CustomerEditModalProps {
   customer: Customer | null;
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedCustomer: Partial<Customer>) => Promise<void>;
+  /** Admin/supervisor: the fitters offered in the Fitter LOV. */
+  fitters?: FitterOption[];
+  /**
+   * Fitter-role user: the LOV is shown locked to this name and no fitterId is
+   * sent — the backend assigns the logged-in fitter's own id.
+   */
+  lockedFitterName?: string;
 }
 
-export function CustomerEditModal({ customer, isOpen, onClose, onSave }: CustomerEditModalProps) {
+/** Sentinel value for the locked LOV; never sent to the API. */
+const LOCKED_FITTER_VALUE = 'me';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Required fields, in the order the legacy Add Customer form lists them.
+ * State, CellNo and Horse Name are optional there too.
+ */
+const REQUIRED_FIELDS: ReadonlyArray<{ key: keyof Customer; label: string }> = [
+  { key: 'name', label: 'Full Customer Name' },
+  { key: 'address', label: 'Address' },
+  { key: 'city', label: 'City' },
+  { key: 'country', label: 'Country' },
+  { key: 'zipcode', label: 'Zipcode' },
+  { key: 'email', label: 'Email' },
+  { key: 'phoneNo', label: 'PhoneNo' },
+];
+
+function emptyCustomer(): Partial<Customer> {
+  return {
+    name: '',
+    address: '',
+    city: '',
+    country: '',
+    state: '',
+    zipcode: '',
+    email: '',
+    phoneNo: '',
+    cellNo: '',
+    horseName: '',
+  };
+}
+
+export function CustomerEditModal({
+  customer,
+  isOpen,
+  onClose,
+  onSave,
+  fitters,
+  lockedFitterName,
+}: CustomerEditModalProps) {
   const [editedCustomer, setEditedCustomer] = useState<Partial<Customer>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const isCreateMode = !customer;
+  const fitterLocked = lockedFitterName !== undefined;
 
   useEffect(() => {
     if (customer) {
@@ -29,31 +84,35 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedCustomer({
         ...customer,
-        name: customer.name || '',
-        address: customer.address || '',
-        city: customer.city || '',
-        country: customer.country || '',
-        state: customer.state || '',
-        zipcode: customer.zipcode || '',
-        email: customer.email || '',
-        phoneNo: customer.phoneNo || '',
-        cellNo: customer.cellNo || '',
+        ...Object.fromEntries(
+          Object.entries(emptyCustomer()).map(([key]) => [key, customer[key as keyof Customer] ?? '']),
+        ),
       });
     } else if (isOpen) {
-      setEditedCustomer({
-        name: '',
-        address: '',
-        city: '',
-        country: '',
-        state: '',
-        zipcode: '',
-        email: '',
-        phoneNo: '',
-        cellNo: '',
-      });
+      setEditedCustomer(emptyCustomer());
     }
     setError('');
   }, [customer, isOpen]);
+
+  /** Returns the first problem with the form, or null when it is valid. */
+  const validate = (): string | null => {
+    const missing = REQUIRED_FIELDS
+      .filter(({ key }) => !String(editedCustomer[key] ?? '').trim())
+      .map(({ label }) => label);
+    if (!fitterLocked && !editedCustomer.fitterId) {
+      missing.unshift('Fitter');
+    }
+    if (missing.length === 1 && missing[0] === 'Full Customer Name') {
+      return 'Customer name is required';
+    }
+    if (missing.length > 0) {
+      return `The following fields are required: ${missing.join(', ')}`;
+    }
+    if (!EMAIL_PATTERN.test(editedCustomer.email!.trim())) {
+      return 'Email must be a valid email address';
+    }
+    return null;
+  };
 
   const handleSave = async () => {
     if (!editedCustomer) return;
@@ -62,13 +121,18 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
     setError('');
 
     try {
-      // Validate required fields
-      if (!editedCustomer.name?.trim()) {
-        throw new Error('Customer name is required');
+      const problem = validate();
+      if (problem) {
+        throw new Error(problem);
       }
 
-      // Call the onSave callback
-      await onSave(editedCustomer);
+      const payload: Partial<Customer> = { ...editedCustomer };
+      if (fitterLocked) {
+        // The backend forces the logged-in fitter's own id; never send one.
+        delete payload.fitterId;
+      }
+
+      await onSave(payload);
       onClose();
     } catch (error) {
       logger.error('Error saving customer:', error);
@@ -85,6 +149,19 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
     }));
   };
 
+  const handleFitterChange = (value: string) => {
+    setEditedCustomer((prev) => ({
+      ...prev,
+      fitterId: value ? Number(value) : undefined,
+    }));
+  };
+
+  const fitterValue = fitterLocked
+    ? LOCKED_FITTER_VALUE
+    : editedCustomer.fitterId !== undefined
+      ? String(editedCustomer.fitterId)
+      : '';
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -96,6 +173,32 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 mt-4">
+          <div>
+            <label className="block font-semibold text-sm text-gray-600 mb-1">
+              Fitter: <span className="text-red-500">*</span>
+            </label>
+            <Select
+              value={fitterValue}
+              onValueChange={handleFitterChange}
+              disabled={fitterLocked}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select fitter" />
+              </SelectTrigger>
+              <SelectContent>
+                {fitterLocked ? (
+                  <SelectItem value={LOCKED_FITTER_VALUE}>{lockedFitterName}</SelectItem>
+                ) : (
+                  (fitters ?? []).map((fitter) => (
+                    <SelectItem key={fitter.id} value={String(fitter.id)}>
+                      {fitter.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div>
             <label className="block font-semibold text-sm text-gray-600 mb-1">
               Full Customer Name: <span className="text-red-500">*</span>
@@ -143,14 +246,9 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="United States">United States</SelectItem>
-                  <SelectItem value="Canada">Canada</SelectItem>
-                  <SelectItem value="United Kingdom">United Kingdom</SelectItem>
-                  <SelectItem value="Australia">Australia</SelectItem>
-                  <SelectItem value="Germany">Germany</SelectItem>
-                  <SelectItem value="France">France</SelectItem>
-                  <SelectItem value="Netherlands">Netherlands</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
+                  {CUSTOMER_COUNTRIES.map((country) => (
+                    <SelectItem key={country} value={country}>{country}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -158,9 +256,7 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-sm text-gray-600 mb-1">
-                State: <span className="text-red-500">*</span>
-              </label>
+              <label className="block font-semibold text-sm text-gray-600 mb-1">State:</label>
               <Input
                 value={editedCustomer.state || ''}
                 onChange={(e) => handleChange('state', e.target.value)}
@@ -214,6 +310,15 @@ export function CustomerEditModal({ customer, isOpen, onClose, onSave }: Custome
                 placeholder="Cell Number"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-sm text-gray-600 mb-1">Horse Name:</label>
+            <Input
+              value={editedCustomer.horseName || ''}
+              onChange={(e) => handleChange('horseName', e.target.value)}
+              placeholder="Horse Name"
+            />
           </div>
         </div>
 

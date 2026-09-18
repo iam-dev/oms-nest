@@ -18,7 +18,8 @@ export abstract class ICustomerRepository {
   abstract findByCountry(country: string): Promise<Customer[]>;
   abstract findByCity(city: string): Promise<Customer[]>;
   abstract findActive(): Promise<Customer[]>;
-  abstract save(customer: Customer): Promise<void>;
+  /** Persists the customer and returns it as stored (with the database-assigned id on insert). */
+  abstract save(customer: Customer): Promise<Customer>;
   abstract delete(id: CustomerId): Promise<void>;
   abstract findAll(filters?: {
     fitterId?: number;

@@ -253,7 +253,7 @@ describe('Error Handling', () => {
     (fetch as jest.Mock).mockResolvedValue(mockResponse);
 
     // Should throw error for server issues
-    await expect(createCustomer({ name: 'Test' })).rejects.toThrow('Failed to create customer: 500');
+    await expect(createCustomer({ name: 'Test' })).rejects.toThrow('Failed to create customer: server error occurred');
   });
 
   it('should throw error for actual failures', async () => {
@@ -266,5 +266,41 @@ describe('Error Handling', () => {
     (fetch as jest.Mock).mockResolvedValue(mockResponse);
 
     await expect(createCustomer({ name: 'Test' })).rejects.toThrow('Failed to create customer: 400 Bad Request');
+  });
+
+  it('should surface the backend field errors from a 422 so the user learns what to fix', async () => {
+    // The NestJS ValidationPipe answers 422 with { errors: { field: message } };
+    // over HTTP/2 statusText is empty, so the body is the only useful signal.
+    const mockResponse = {
+      ok: false,
+      status: 422,
+      statusText: '',
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        statusCode: 422,
+        errors: { email: 'email must be an email', fitterId: 'fitterId is required' },
+      })),
+    };
+    (fetch as jest.Mock).mockResolvedValue(mockResponse);
+
+    await expect(createCustomer({ name: 'Test', email: 'a@b@c' })).rejects.toThrow(
+      'email must be an email; fitterId is required',
+    );
+  });
+
+  it('should surface the backend message from a non-validation error body', async () => {
+    const mockResponse = {
+      ok: false,
+      status: 409,
+      statusText: '',
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        statusCode: 409,
+        message: 'Customer with this email already exists for this fitter',
+      })),
+    };
+    (fetch as jest.Mock).mockResolvedValue(mockResponse);
+
+    await expect(updateCustomer('1', { email: 'dup@example.com' })).rejects.toThrow(
+      'Customer with this email already exists for this fitter',
+    );
   });
 });

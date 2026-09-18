@@ -474,6 +474,25 @@ describe("FitterService", () => {
 
       expect(result).toEqual([]);
     });
+
+    it("should attach the user name so the list can populate a Fitter LOV", async () => {
+      // fitters has no name column; it lives in the "user" view, and the
+      // Customer create modal needs a label per option.
+      repository.findActive.mockResolvedValue([mockFitter]);
+      dataSource.query.mockResolvedValue([
+        {
+          legacy_id: mockFitter.userId,
+          name: "Jane Doe",
+          username: "janed",
+          enabled: true,
+        },
+      ]);
+
+      const [dto] = await service.findActiveFitters();
+
+      expect(dto.name).toBe("Jane Doe");
+      expect(dto.username).toBe("janed");
+    });
   });
 
   describe("findByCountry", () => {

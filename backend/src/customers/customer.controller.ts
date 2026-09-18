@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseIntPipe,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import {
@@ -85,8 +86,8 @@ export class CustomerController {
     type: CustomerDto,
   })
   @ApiResponse({
-    status: 400,
-    description: "Invalid input data",
+    status: 422,
+    description: "Invalid input data, or no fitterId supplied by an admin",
   })
   @ApiResponse({
     status: 409,
@@ -96,13 +97,19 @@ export class CustomerController {
     @Body() createCustomerDto: CreateCustomerDto,
     @Req() req?: AuthenticatedRequest,
   ): Promise<CustomerDto> {
-    // A fitter's new customer belongs to them unless they say otherwise, so it
-    // shows up in their customer list / Edit Order search before its first order.
-    if (createCustomerDto.fitterId === undefined) {
-      const ownFitterId = await this.resolveFitterIdForUser(req);
-      if (ownFitterId !== undefined) {
-        createCustomerDto = { ...createCustomerDto, fitterId: ownFitterId };
-      }
+    // A fitter's new customer always belongs to them (legacy locks the Fitter
+    // LOV to the logged-in fitter), so ignore whatever the client sent.
+    const ownFitterId = await this.resolveFitterIdForUser(req);
+    if (ownFitterId !== undefined) {
+      createCustomerDto = { ...createCustomerDto, fitterId: ownFitterId };
+    }
+    // customers.fitter_id is NOT NULL and a 0 makes the row invisible to every
+    // fitter, so admins/supervisors must pick one — same as the legacy Add form.
+    if (!createCustomerDto.fitterId) {
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: { fitterId: "fitterId is required" },
+      });
     }
     return this.customerService.create(createCustomerDto);
   }

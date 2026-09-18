@@ -77,3 +77,41 @@ describe("CustomerRepository.findAllPaginated", () => {
     expect(scoped).toBe(false);
   });
 });
+
+/**
+ * POST /customers must answer with the database-assigned id: Edit Order's
+ * inline "new customer" selects the returned record, and a null id there
+ * silently saves the order without a customer.
+ */
+describe("CustomerRepository.save", () => {
+  it("should return the persisted customer carrying the generated id", async () => {
+    const savedEntity = Object.assign(new CustomerEntity(), {
+      id: 27929,
+      name: "New Customer",
+    });
+    const domainWithId = { id: { value: 27929 } };
+    const typeormRepo = {
+      findOne: jest.fn(),
+      save: jest.fn().mockResolvedValue(savedEntity),
+    };
+    const mapper = {
+      toEntity: jest.fn(() => new CustomerEntity()),
+      toDomain: jest.fn(() => domainWithId),
+    };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CustomerRepository,
+        { provide: getRepositoryToken(CustomerEntity), useValue: typeormRepo },
+        { provide: CustomerMapper, useValue: mapper },
+      ],
+    }).compile();
+    const repository = module.get(CustomerRepository);
+
+    const newCustomer = { id: { numericValue: null } } as never;
+    const result = await repository.save(newCustomer);
+
+    expect(typeormRepo.findOne).not.toHaveBeenCalled();
+    expect(mapper.toDomain).toHaveBeenCalledWith(savedEntity);
+    expect(result).toBe(domainWithId);
+  });
+});

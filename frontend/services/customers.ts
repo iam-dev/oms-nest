@@ -13,6 +13,9 @@ export interface Customer {
   state?: string;
   cellNo?: string;
   phoneNo?: string;
+  horseName?: string;
+  /** Legacy fitters.id the customer belongs to (customers.fitter_id, NOT NULL) */
+  fitterId?: number;
   fitter?: {
     id: string;
     name: string;
@@ -89,6 +92,29 @@ export async function fetchCustomers({
   });
 }
 
+/**
+ * Turn a failed customers API response into a message a user can act on.
+ * The backend ValidationPipe answers 422 with `{ errors: { field: message } }`
+ * and other exceptions with `{ message }`; statusText is empty over HTTP/2,
+ * so without reading the body all the user would see is a bare status code.
+ */
+function describeApiError(action: string, status: number, statusText: string, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { errors?: Record<string, string>; message?: string | string[] };
+    if (parsed.errors && typeof parsed.errors === 'object') {
+      const details = Object.values(parsed.errors).join('; ');
+      if (details) return `${action}: ${details}`;
+    }
+    if (parsed.message) {
+      const message = Array.isArray(parsed.message) ? parsed.message.join('; ') : parsed.message;
+      return `${action}: ${message}`;
+    }
+  } catch {
+    // Not JSON — fall through to the status line
+  }
+  return `${action}: ${status} ${statusText}`.trimEnd();
+}
+
 export async function createCustomer(customerData: Partial<Customer>): Promise<Customer> {
 
   logger.log('Creating customer with data:', customerData);
@@ -103,7 +129,7 @@ export async function createCustomer(customerData: Partial<Customer>): Promise<C
   if (!response.ok) {
     const errorText = await response.text();
     logger.error('Customer creation failed:', response.status, errorText);
-    throw new Error(`Failed to create customer: ${response.status} ${response.statusText}`);
+    throw new Error(describeApiError('Failed to create customer', response.status, response.statusText, errorText));
   }
 
   const result = await response.json();
@@ -124,7 +150,7 @@ export async function updateCustomer(id: string, customerData: Partial<Customer>
   if (!response.ok) {
     const errorText = await response.text();
     logger.error('Customer update failed:', response.status, errorText);
-    throw new Error(`Failed to update customer: ${response.status} ${response.statusText}`);
+    throw new Error(describeApiError('Failed to update customer', response.status, response.statusText, errorText));
   }
 
   const result = await response.json();
@@ -145,7 +171,7 @@ export async function deleteCustomer(id: string): Promise<void> {
   if (!response.ok) {
     const errorText = await response.text();
     logger.error('Customer deletion failed:', response.status, errorText);
-    throw new Error(`Failed to delete customer: ${response.status} ${response.statusText}`);
+    throw new Error(describeApiError('Failed to delete customer', response.status, response.statusText, errorText));
   }
 
   logger.log('Customer deletion successful');

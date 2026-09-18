@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { NotFoundException, ConflictException } from "@nestjs/common";
+import {
+  NotFoundException,
+  ConflictException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { CustomerController } from "../../../src/customers/customer.controller";
 import { CustomerService } from "../../../src/customers/customer.service";
@@ -92,11 +96,11 @@ describe("CustomerController", () => {
         address: "456 Oak Avenue",
         city: "Los Angeles",
         country: "USA",
+        fitterId: 2001,
       };
       const minimalCustomer = {
         ...mockCustomerDto,
         ...minimalCreateDto,
-        fitterId: undefined,
       };
       customerService.create.mockResolvedValue(minimalCustomer);
 
@@ -140,17 +144,18 @@ describe("CustomerController", () => {
       });
     });
 
-    it("should keep an explicit fitterId (including 0) for fitter users", async () => {
-      // Arrange: fitterId 0 is the legacy "unassigned" sentinel, not "missing"
+    it("should force the logged-in fitter's own id even when the client sends another fitterId", async () => {
+      // Arrange: a fitter must not be able to file a customer under someone else
       const createDto: CreateCustomerDto = {
         email: "new@example.com",
         name: "New Customer",
         address: "1 Street",
         city: "Austin",
         country: "USA",
-        fitterId: 0,
+        fitterId: 999,
       };
       customerService.create.mockResolvedValue(mockCustomerDto);
+      mockDataSource.query.mockResolvedValue([{ id: 312 }]);
       const fitterReq = {
         user: { legacyId: 448, role: { id: 1, name: "fitter" } },
       };
@@ -159,11 +164,38 @@ describe("CustomerController", () => {
       await controller.create(createDto, fitterReq);
 
       // Assert
-      expect(mockDataSource.query).not.toHaveBeenCalled();
-      expect(customerService.create).toHaveBeenCalledWith(createDto);
+      expect(customerService.create).toHaveBeenCalledWith({
+        ...createDto,
+        fitterId: 312,
+      });
     });
 
-    it("should not default fitterId for admin users", async () => {
+    it("should reject an admin create without fitterId with a 422 in the validation error shape", async () => {
+      // Arrange: customers.fitter_id is NOT NULL; legacy makes Fitter required on the Add form
+      const createDto: CreateCustomerDto = {
+        email: "new@example.com",
+        name: "New Customer",
+        address: "1 Street",
+        city: "Austin",
+        country: "USA",
+      };
+      const adminReq = {
+        user: { legacyId: 1, role: { id: 2, name: "admin" } },
+      };
+
+      // Act & Assert
+      await expect(controller.create(createDto, adminReq)).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+      await expect(
+        controller.create(createDto, adminReq),
+      ).rejects.toMatchObject({
+        response: { errors: { fitterId: expect.any(String) } },
+      });
+      expect(customerService.create).not.toHaveBeenCalled();
+    });
+
+    it("should keep the admin-supplied fitterId", async () => {
       // Arrange
       const createDto: CreateCustomerDto = {
         email: "new@example.com",
@@ -171,6 +203,7 @@ describe("CustomerController", () => {
         address: "1 Street",
         city: "Austin",
         country: "USA",
+        fitterId: 77,
       };
       customerService.create.mockResolvedValue(mockCustomerDto);
       const adminReq = {

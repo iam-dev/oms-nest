@@ -1,4 +1,4 @@
-import { toFitterApiPayload, updateFitter, type Fitter } from '@/services/fitters';
+import { toFitterApiPayload, updateFitter, fetchActiveFitters, type Fitter } from '@/services/fitters';
 
 jest.mock('@/services/api', () => ({
   fetchEntities: jest.fn(),
@@ -118,5 +118,33 @@ describe('updateFitter', () => {
     expect(body.enabled).toBe(false);
     expect(body).not.toHaveProperty('email');
     expect(body).not.toHaveProperty('fullAddress');
+  });
+});
+
+describe('fetchActiveFitters', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('returns the active fitters sorted by name for use in a LOV', async () => {
+    mockFetchWithRefresh.mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { id: 2, name: 'Zoe Fitter', city: 'Austin' },
+        { id: 1, name: 'Adam Fitter', city: 'Boston' },
+        { id: 3, city: 'Calgary' }, // no linked user row → no name
+      ],
+    } as Response);
+
+    const result = await fetchActiveFitters();
+
+    const [url] = mockFetchWithRefresh.mock.calls[0];
+    expect(url).toBe('http://api.test/api/v1/fitters/active');
+    expect(result.map((f) => f.id)).toEqual([1, 2, 3]);
+    expect(result[0].name).toBe('Adam Fitter');
+  });
+
+  test('throws with the status when the request fails', async () => {
+    mockFetchWithRefresh.mockResolvedValue({ ok: false, status: 403, text: async () => '' } as Response);
+
+    await expect(fetchActiveFitters()).rejects.toThrow('403');
   });
 });
