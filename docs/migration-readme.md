@@ -40,6 +40,9 @@ cd backend/src/database/seeds/relational/production-data/postgres/scripts
 
 # 5. Extract seat sizes into orders.seat_sizes JSONB column
 ./extract-seat-sizes.sh --apply
+
+# 6. Repair double-encoded UTF-8 inherited from the legacy database (dry run without --apply)
+(cd backend && npm run data:fix-utf8 -- --apply)
 ```
 
 Connection details after setup:
@@ -138,6 +141,8 @@ These are expected from years of production use and are preserved:
 | OrdersInfo → Missing Orders | ~49,794 | ~3,504 orders were hard-deleted but line items remain |
 
 The NestJS application handles missing references gracefully. The validation script reports these as expected warnings.
+
+**Double-encoded UTF-8** — about 2% of non-ASCII text in the dump is stored double-encoded (`Ã¶` for `ö`) because the legacy app wrote through a latin1 connection. Run `npm run data:fix-utf8 -- --apply` in `backend/` after every import; see [Production Data Migration](production-data-migration.md#double-encoded-utf-8-repair-after-every-import).
 
 ## Troubleshooting
 

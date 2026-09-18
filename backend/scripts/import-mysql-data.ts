@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Client } from 'pg';
 import * as dotenv from 'dotenv';
+import { parseInsertLine, toPgValue } from './lib/mysql-dump';
 
 // Load environment variables
 dotenv.config();
@@ -119,7 +120,7 @@ const columnMappings: Record<string, Record<string, string>> = {
     PhoneNo: 'phone_no',
     CellNo: 'cell_no',
     Currency: 'currency',
-    Emailaddress: 'email_address',
+    Emailaddress: 'emailaddress',
   },
   FactoryEmployees: {
     ID: 'id',
@@ -139,7 +140,7 @@ const columnMappings: Record<string, Record<string, string>> = {
     PhoneNo: 'phone_no',
     CellNo: 'cell_no',
     Currency: 'currency',
-    Emailaddress: 'email_address',
+    Emailaddress: 'emailaddress',
   },
   Customers: {
     ID: 'id',
@@ -215,6 +216,17 @@ const columnMappings: Record<string, Record<string, string>> = {
     PriceShipping: 'price_shipping',
     PriceTax: 'price_tax',
     PriceAdditional: 'price_additional',
+    SpecialNotes: 'special_notes',
+    SerialNumber: 'serial_number',
+    CustomOrder: 'custom_order',
+    Changed: 'changed',
+    Repair: 'repair',
+    Demo: 'demo',
+    Sponsored: 'sponsored',
+    Rushed: 'rushed',
+    OMSversion: 'oms_version',
+    Currency: 'currency',
+    OrderData: 'order_data',
     PriceAdditionalDescription: 'price_additional_description',
     StirrupLeathers: 'stirrup_leathers',
     Stirrups: 'stirrups',
@@ -362,91 +374,104 @@ const dataDir = path.join(
   '../src/database/seeds/relational/production-data/mysql-legacy/data',
 );
 
-function convertMySQLToPostgreSQL(sql: string, tableName: string): string {
+const BATCH_SIZE = 500;
+
+interface ConvertedTable {
+  pgTableName: string;
+  columns: string[];
+  /** One PostgreSQL VALUES tuple per source row, e.g. "(1, E'x', true)". */
+  tuples: string[];
+  repairedRows: number;
+  skippedLines: number;
+}
+
+/**
+ * Convert a `mysqldump --complete-insert --skip-extended-insert` file to
+ * PostgreSQL tuples. Column names are mapped through columnMappings, MySQL
+ * string escapes are kept via E'' syntax, tinyint 0/1 becomes true/false for
+ * the given boolean columns, and double-encoded UTF-8 is repaired.
+ */
+function convertMySQLToPostgreSQL(
+  sql: string,
+  tableName: string,
+  booleanColumns: Set<string>,
+): ConvertedTable {
   const mapping = columnMappings[tableName];
   const pgTableName = tableNameMapping[tableName];
-
   if (!mapping || !pgTableName) {
     throw new Error(`No mapping found for table: ${tableName}`);
   }
 
-  // Extract INSERT statements
-  const insertRegex = /INSERT INTO `[^`]+`\s*\(([^)]+)\)\s*VALUES\s*([\s\S]+?);/gi;
-  let result = '';
-  let match;
+  let columns: string[] | null = null;
+  const tuples: string[] = [];
+  let repairedRows = 0;
+  let skippedLines = 0;
 
-  while ((match = insertRegex.exec(sql)) !== null) {
-    const columnsStr = match[1];
-    const valuesStr = match[2];
-
-    // Parse column names and convert to PostgreSQL
-    const mysqlColumns = columnsStr.split(',').map((c) => c.trim().replace(/`/g, ''));
-    const pgColumns = mysqlColumns.map((col) => {
-      const pgCol = mapping[col];
-      if (!pgCol) {
-        console.warn(`Warning: No mapping for column ${col} in table ${tableName}`);
-        return col.toLowerCase();
-      }
-      return pgCol;
-    });
-
-    // Parse values (handle multi-row inserts)
-    const valueRows = parseValueRows(valuesStr);
-
-    for (const row of valueRows) {
-      const pgSql = `INSERT INTO "${pgTableName}" (${pgColumns.map((c) => `"${c}"`).join(', ')}) VALUES (${row}) ON CONFLICT DO NOTHING;\n`;
-      result += pgSql;
+  for (const line of sql.split('\n')) {
+    if (!line.startsWith('INSERT INTO')) continue;
+    const parsed = parseInsertLine(line);
+    if (!parsed) {
+      skippedLines++;
+      continue;
     }
+    if (!columns) {
+      columns = parsed.columns.map((col) => {
+        const pgCol = mapping[col];
+        if (!pgCol) {
+          console.warn(`Warning: No mapping for column ${col} in table ${tableName}`);
+          return col.toLowerCase();
+        }
+        return pgCol;
+      });
+    }
+    let repaired = false;
+    const values = parsed.values.map((token, i) => {
+      const pg = toPgValue(token, booleanColumns.has(columns![i]));
+      repaired ||= pg.repaired;
+      return pg.sql;
+    });
+    if (repaired) repairedRows++;
+    tuples.push(`(${values.join(', ')})`);
   }
 
-  return result;
+  return { pgTableName, columns: columns ?? [], tuples, repairedRows, skippedLines };
 }
 
-function parseValueRows(valuesStr: string): string[] {
-  const rows: string[] = [];
-  let current = '';
-  let depth = 0;
-  let inString = false;
-  let stringChar = '';
+async function loadBooleanColumns(client: Client, pgTableName: string): Promise<Set<string>> {
+  const result = await client.query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1 AND data_type = 'boolean'`,
+    [pgTableName],
+  );
+  return new Set(result.rows.map((r) => r.column_name as string));
+}
 
-  for (let i = 0; i < valuesStr.length; i++) {
-    const char = valuesStr[i];
-    const prevChar = i > 0 ? valuesStr[i - 1] : '';
-
-    // Handle string boundaries
-    if ((char === "'" || char === '"') && prevChar !== '\\') {
-      if (!inString) {
-        inString = true;
-        stringChar = char;
-      } else if (char === stringChar) {
-        inString = false;
-      }
-    }
-
-    if (!inString) {
-      if (char === '(') {
-        if (depth === 0) {
-          current = '';
-        } else {
-          current += char;
+/**
+ * Insert tuples in batches; a failing batch is retried row by row so one bad
+ * row costs only itself. Returns the number of rows that failed.
+ */
+async function insertTuples(client: Client, table: ConvertedTable): Promise<number> {
+  const head = `INSERT INTO "${table.pgTableName}" (${table.columns.map((c) => `"${c}"`).join(', ')}) VALUES `;
+  const tail = ' ON CONFLICT DO NOTHING';
+  let failed = 0;
+  for (let i = 0; i < table.tuples.length; i += BATCH_SIZE) {
+    const batch = table.tuples.slice(i, i + BATCH_SIZE);
+    try {
+      await client.query(head + batch.join(',\n') + tail);
+    } catch {
+      for (const tuple of batch) {
+        try {
+          await client.query(head + tuple + tail);
+        } catch (err) {
+          failed++;
+          if (failed <= 5) {
+            console.error(`  Row failed in ${table.pgTableName}: ${(err as Error).message}\n    ${tuple.slice(0, 200)}`);
+          }
         }
-        depth++;
-      } else if (char === ')') {
-        depth--;
-        if (depth === 0) {
-          rows.push(current);
-        } else {
-          current += char;
-        }
-      } else if (depth > 0) {
-        current += char;
       }
-    } else {
-      current += char;
     }
   }
-
-  return rows;
+  return failed;
 }
 
 async function importData() {
@@ -462,8 +487,12 @@ async function importData() {
     await client.connect();
     console.log('Connected to PostgreSQL');
 
-    // Disable triggers for faster import
-    await client.query('SET session_replication_role = replica;');
+    // Disable triggers for faster import (not permitted on managed Postgres; import order respects FKs anyway)
+    try {
+      await client.query('SET session_replication_role = replica;');
+    } catch {
+      console.warn('Could not set session_replication_role (no superuser); continuing');
+    }
 
     for (const item of importOrder) {
       const filePath = path.join(dataDir, item.file);
@@ -475,26 +504,34 @@ async function importData() {
 
       console.log(`\nImporting ${item.table} from ${item.file}...`);
 
+      const pgTableName = tableNameMapping[item.table];
+      const booleanColumns = await loadBooleanColumns(client, pgTableName);
       const mysqlSql = fs.readFileSync(filePath, 'utf-8');
-      const pgSql = convertMySQLToPostgreSQL(mysqlSql, item.table);
+      const table = convertMySQLToPostgreSQL(mysqlSql, item.table, booleanColumns);
 
-      if (pgSql.trim()) {
-        try {
-          await client.query(pgSql);
-          const result = await client.query(
-            `SELECT COUNT(*) FROM "${tableNameMapping[item.table]}"`,
-          );
-          console.log(`  Imported ${result.rows[0].count} records into ${item.table}`);
-        } catch (err) {
-          console.error(`  Error importing ${item.table}:`, err);
-        }
-      } else {
+      if (table.tuples.length === 0) {
         console.log(`  No data found in ${item.file}`);
+        continue;
       }
+      if (table.skippedLines > 0) {
+        console.warn(`  Could not parse ${table.skippedLines} INSERT lines in ${item.file}`);
+      }
+      if (table.repairedRows > 0) {
+        console.log(`  Repaired double-encoded UTF-8 in ${table.repairedRows} rows`);
+      }
+      const failed = await insertTuples(client, table);
+      const result = await client.query(`SELECT COUNT(*) FROM "${pgTableName}"`);
+      console.log(
+        `  Imported ${result.rows[0].count} records into ${pgTableName} (${table.tuples.length} in file${failed ? `, ${failed} rows FAILED` : ''})`,
+      );
     }
 
     // Re-enable triggers
-    await client.query('SET session_replication_role = DEFAULT;');
+    try {
+      await client.query('SET session_replication_role = DEFAULT;');
+    } catch {
+      /* see above */
+    }
 
     // Update sequences to continue from max ID
     console.log('\nUpdating sequences...');

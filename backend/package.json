@@ -46,6 +46,8 @@
     "test:e2e:relational:docker": "docker compose -f docker-compose.relational.test.yaml --env-file env-example-relational -p tests up -d --build && docker compose -f docker-compose.relational.test.yaml -p tests exec api /opt/wait-for-it.sh -t 0 localhost:3000 -- npm run test:e2e -- --watchAll --runInBand && docker compose -f docker-compose.relational.test.yaml -p tests down && docker compose -p tests rm -svf",
     "migration:production": "ts-node -r tsconfig-paths/register ../scripts/migrate-production-data.ts",
     "migration:production:dry-run": "npm run migration:production -- --dry-run",
+    "data:fix-utf8": "ts-node scripts/fix-double-encoded-utf8.ts",
+    "data:fix-utf8:staging": "env-cmd -f .env.staging ts-node scripts/fix-double-encoded-utf8.ts",
     "test:migration": "jest --config ./test/migration/jest.config.js",
     "test:migration:watch": "jest --config ./test/migration/jest.config.js --watch",
     "test:e2e-api": "jest --config ./test/e2e-api/jest.e2e-api.config.js",

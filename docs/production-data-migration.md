@@ -402,6 +402,24 @@ INSERT INTO factory_employees (id, deleted, name, factory_id) VALUES
 (2, 0, 'gary', 4);
 ```
 
+### Double-encoded UTF-8 (repair after every import)
+
+The legacy PHP application wrote UTF-8 through a latin1 (cp1252) MySQL connection into `utf8` columns, so MariaDB stores about 2% of non-ASCII text double-encoded (`ö` as `Ã¶`, `’` as `â€™`). Records edited repeatedly carry up to four layers (`RÃƒÆ’Ã‚Â¶srath`). `mysqldump` exports the stored form faithfully, so **the corruption is already in the dump**; it is not introduced by any transform or import step. In the June 2026 dump this affects `Customers`, `Orders`, `ClientConfirmation`, `Log`, `OrdersInfo`, `Fitters`, `Credentials` and `DBlog` (about 4,000 cells across 3,500 rows). A small number of rows (about 100) are correctly encoded and must not be touched, so a blind `Ã¶ → ö` replace is unsafe.
+
+Two tools in `backend/scripts/` share the decoder `lib/double-encoded-utf8.ts`, which re-encodes a value as cp1252 bytes and only accepts it when the result is strict valid UTF-8 (repeated until stable):
+
+- `import-mysql-data.ts` repairs string literals while converting the MySQL files. Since 2026-09-18 it reads one INSERT per line and needs files produced with `mysqldump --complete-insert --skip-extended-insert`; it keeps MySQL backslash escapes via `E''` literals, maps tinyint 0/1 onto the boolean columns it finds in PostgreSQL, inserts in batches of 500 and retries a failed batch row by row so a bad row only costs itself. Verified on 2026-09-18 against the June dump in Docker: all 19 tables import with counts equal to MySQL.
+- `fix-double-encoded-utf8.ts` repairs an already-imported PostgreSQL database. It reads `DATABASE_*` like the app, is a dry run by default, and with `--apply` writes a rollback JSON of every previous value, updates each cell inside one transaction guarded on the previous value, and refreshes the materialized views.
+
+```bash
+cd backend
+npm run data:fix-utf8                     # dry run against DATABASE_* env
+npm run data:fix-utf8 -- --apply          # repair, writes ./utf8-rollback-<timestamp>.json
+npm run data:fix-utf8:staging -- --apply  # same, using .env.staging
+```
+
+The shell pipeline (`transform-mysql-to-postgres.sh` → `import-data.sh`) does not decode, so run the repair as the last step of every import, including the production cutover. Staging was repaired on 2026-09-18 (4,025 cells; rollback file in `~/db-backups/oms-nest-staging/`).
+
 ### Remaining Issues (Historical Data)
 
 These are expected referential integrity issues from years of production use. They are preserved for data fidelity.
@@ -517,6 +535,7 @@ backend/src/database/
 4. Import: `./import-data.sh`
 5. Validate: `./validate-data.sh`
 6. Extract seat sizes: `./extract-seat-sizes.sh --apply`
+7. Repair double-encoded UTF-8 (see [Known Legacy Data Issues](#double-encoded-utf-8-repair-after-every-import)): `cd backend && npm run data:fix-utf8 -- --apply`
 
 Or use the single-command workflow:
 ```bash
