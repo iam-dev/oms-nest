@@ -170,9 +170,21 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   // Fetch edit options on mount
   useEffect(() => {
     fetchEditOptions().then(opts => {
-      if (opts) setEditOptions(opts);
+      if (!opts) return;
+      setEditOptions(opts);
+      // A fitter's order is always their own: the backend names them in
+      // currentFitterId, so pre-fill the (locked) Fitter LOV like legacy does.
+      const own = opts.currentFitterId;
+      const fitter = own ? opts.fitters.find(f => f.id === own) : undefined;
+      if (!own) return;
+      setSelectedFitterId(prev => prev || String(own));
+      if (fitter) {
+        setFormData(prev => prev.fitter ? prev : { ...prev, fitter: { id: fitter.id, name: fitter.fullName || fitter.username } });
+      }
     });
   }, [fetchEditOptions]);
+
+  const lockedFitterId = editOptions?.currentFitterId;
 
   const loadOrderData = useCallback(async () => {
     if (!order?.id) return;
@@ -786,7 +798,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                   <Label className="text-sm font-medium pt-2">
                     Fitter: <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={selectedFitterId} onValueChange={(val) => {
+                  <Select value={selectedFitterId} disabled={!!lockedFitterId} onValueChange={(val) => {
                     setSelectedFitterId(val);
                     const fitter = editOptions?.fitters?.find(f => String(f.id) === val);
                     if (fitter) {

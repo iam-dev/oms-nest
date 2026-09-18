@@ -15,6 +15,14 @@ import { CustomerMapper } from "../mappers/customer.mapper";
  * Uses integer IDs to match PostgreSQL schema
  * Uses `deleted` column (smallint) for soft delete instead of deletedAt
  */
+/**
+ * A fitter's scope: customers assigned to the fitter OR who have an order with
+ * them. Scoping on orders alone hides customers who don't have an order yet,
+ * so a fitter could never find a new customer to put on their first order.
+ */
+const FITTER_SCOPE_CLAUSE =
+  "(customer.fitter_id = :scopedFitterId OR customer.id IN (SELECT DISTINCT customer_id FROM orders WHERE fitter_id = :scopedFitterId AND deleted_at IS NULL))";
+
 @Injectable()
 export class CustomerRepository implements ICustomerRepository {
   constructor(
@@ -228,14 +236,8 @@ export class CustomerRepository implements ICustomerRepository {
       queryBuilder.andWhere("customer.fitter_id = :fitterId", { fitterId });
     }
 
-    // Fitter scope: customers assigned to the fitter OR who have an order with
-    // them. Scoping on orders alone hides customers who don't have an order yet,
-    // so a fitter could never find a new customer to put on their first order.
     if (scopedFitterId !== undefined) {
-      queryBuilder.andWhere(
-        "(customer.fitter_id = :scopedFitterId OR customer.id IN (SELECT DISTINCT customer_id FROM orders WHERE fitter_id = :scopedFitterId AND deleted_at IS NULL))",
-        { scopedFitterId },
-      );
+      queryBuilder.andWhere(FITTER_SCOPE_CLAUSE, { scopedFitterId });
     }
 
     if (name) {
@@ -274,6 +276,20 @@ export class CustomerRepository implements ICustomerRepository {
       customers: this.mapper.toDomainArray(entities),
       total,
     };
+  }
+
+  async isVisibleToFitter(id: CustomerId, fitterId: number): Promise<boolean> {
+    const numericId = id.numericValue;
+    if (numericId === null) {
+      return false;
+    }
+    const count = await this.repository
+      .createQueryBuilder("customer")
+      .where("customer.deleted = 0")
+      .andWhere("customer.id = :id", { id: numericId })
+      .andWhere(FITTER_SCOPE_CLAUSE, { scopedFitterId: fitterId })
+      .getCount();
+    return count > 0;
   }
 
   async countByFitterId(fitterId: number): Promise<number> {

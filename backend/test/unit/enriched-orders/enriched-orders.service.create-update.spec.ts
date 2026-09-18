@@ -1,13 +1,14 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { DataSource } from "typeorm";
 import { ConfigService } from "@nestjs/config";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 import { ProductionCacheService } from "../../../src/cache/production-cache.service";
 
 describe("EnrichedOrdersService - Create & Update methods", () => {
   let service: EnrichedOrdersService;
   let queryRunner: any;
+  let mockDataSource: any;
 
   beforeEach(async () => {
     queryRunner = {
@@ -19,7 +20,7 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       rollbackTransaction: jest.fn(),
     };
 
-    const mockDataSource = {
+    mockDataSource = {
       createQueryRunner: jest.fn().mockReturnValue(queryRunner),
       query: jest.fn(),
     };
@@ -665,6 +666,58 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
       expect(inserts).toHaveLength(2);
       expect(inserts[0][1]).toEqual([555, 4, 10, 0, "", "", ""]);
       expect(inserts[1][1]).toEqual([555, 4, 0, 1, "", "", "A+B same as seat"]);
+    });
+  });
+
+  describe("fitter scope", () => {
+    it("should updateOrder refuses an order that belongs to another fitter and rolls back", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 274, currency: 1 },
+        ]); // existing order, owned by fitter 274
+
+      await expect(
+        service.updateOrder(100, { specialNotes: "x" }, 83, 1, 49),
+      ).rejects.toThrow(NotFoundException);
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.query).not.toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE orders"),
+        expect.anything(),
+      );
+    });
+
+    it("should updateOrder proceeds when the order is the scoped fitter's own", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config
+        .mockResolvedValueOnce([
+          { order_status: 1, fitter_id: 49, currency: 1 },
+        ])
+        .mockResolvedValueOnce(undefined) // UPDATE
+        .mockResolvedValueOnce(undefined); // log INSERT
+
+      await expect(
+        service.updateOrder(100, { specialNotes: "x" }, 83, 1, 49),
+      ).resolves.toEqual({ success: true, orderId: 100 });
+    });
+
+    it("should getOrderFitterIds maps each order id to its fitter", async () => {
+      mockDataSource.query.mockResolvedValue([
+        { id: 1, fitter_id: 49 },
+        { id: 2, fitter_id: 274 },
+      ]);
+
+      const map = await service.getOrderFitterIds([1, 2, 3]);
+
+      expect(map.get(1)).toBe(49);
+      expect(map.get(2)).toBe(274);
+      expect(map.has(3)).toBe(false);
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /SELECT id, fitter_id FROM orders WHERE id = ANY\(\$1\)/,
+        ),
+        [[1, 2, 3]],
+      );
     });
   });
 });

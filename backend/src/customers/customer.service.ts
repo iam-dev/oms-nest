@@ -144,6 +144,16 @@ export class CustomerService {
   }
 
   /**
+   * Whether a customer is inside a fitter's scope (assigned or has an order with them).
+   */
+  async isVisibleToFitter(id: string, fitterId: number): Promise<boolean> {
+    return this.customerRepository.isVisibleToFitter(
+      CustomerId.fromString(id),
+      fitterId,
+    );
+  }
+
+  /**
    * Remove customer (soft delete)
    */
   async remove(id: string): Promise<void> {

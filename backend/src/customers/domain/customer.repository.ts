@@ -31,6 +31,11 @@ export abstract class ICustomerRepository {
   abstract countActive(): Promise<number>;
   abstract findActiveCustomersWithoutFitter(): Promise<Customer[]>;
   abstract existsByEmail(email: Email, fitterId?: number): Promise<boolean>;
+  /** Whether the customer falls inside a fitter's scope (assigned to them or has an order with them). */
+  abstract isVisibleToFitter(
+    id: CustomerId,
+    fitterId: number,
+  ): Promise<boolean>;
 
   abstract findAllPaginated(options: {
     page: number;

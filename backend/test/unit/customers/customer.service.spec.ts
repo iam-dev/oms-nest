@@ -97,6 +97,7 @@ describe("CustomerService", () => {
       findByFitterId: jest.fn(),
       findActiveCustomersWithoutFitter: jest.fn(),
       countByFitterId: jest.fn(),
+      isVisibleToFitter: jest.fn(),
       delete: jest.fn(),
       findByCountry: jest.fn(),
       findByCity: jest.fn(),
@@ -645,6 +646,20 @@ describe("CustomerService", () => {
         "Database connection error",
       );
       expect(customerRepository.findById).toHaveBeenCalledWith(mockCustomerId);
+    });
+  });
+
+  describe("isVisibleToFitter", () => {
+    it("should asks the repository whether the customer is inside the fitter's scope", async () => {
+      customerRepository.isVisibleToFitter.mockResolvedValue(true);
+
+      await expect(service.isVisibleToFitter("1001", 312)).resolves.toBe(true);
+
+      expect(CustomerId.fromString).toHaveBeenCalledWith("1001");
+      expect(customerRepository.isVisibleToFitter).toHaveBeenCalledWith(
+        mockCustomerId,
+        312,
+      );
     });
   });
 });

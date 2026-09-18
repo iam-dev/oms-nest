@@ -13,6 +13,8 @@ import {
   HttpStatus,
   ParseIntPipe,
   UnprocessableEntityException,
+  ForbiddenException,
+  NotFoundException,
 } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import {
@@ -72,6 +74,34 @@ export class CustomerController {
       [req.user.legacyId],
     );
     return fitterRow[0]?.id || undefined;
+  }
+
+  /**
+   * Fitters may only touch customers inside their scope (assigned to them or
+   * with an order of theirs). Anything else is reported as missing, exactly as
+   * the scoped list would, so ids can't be probed. Admins/supervisors skip this.
+   */
+  private async assertFitterCanSee(
+    id: number,
+    req?: AuthenticatedRequest,
+  ): Promise<void> {
+    const ownFitterId = await this.resolveFitterIdForUser(req);
+    if (ownFitterId === undefined) {
+      return;
+    }
+    const visible = await this.customerService.isVisibleToFitter(
+      id.toString(),
+      ownFitterId,
+    );
+    if (!visible) {
+      throw new NotFoundException("Customer not found");
+    }
+  }
+
+  private forbidFitters(req?: AuthenticatedRequest): void {
+    if (req?.user?.role?.id === RoleEnum.fitter) {
+      throw new ForbiddenException("Not available to fitters");
+    }
   }
 
   @Post()
@@ -194,7 +224,10 @@ export class CustomerController {
     description: "Customers without fitter retrieved successfully",
     type: [CustomerDto],
   })
-  async findWithoutFitter(): Promise<CustomerDto[]> {
+  async findWithoutFitter(
+    @Req() req?: AuthenticatedRequest,
+  ): Promise<CustomerDto[]> {
+    this.forbidFitters(req);
     return this.customerService.findWithoutFitter();
   }
 
@@ -215,7 +248,12 @@ export class CustomerController {
   })
   async findByFitter(
     @Param("fitterId", ParseIntPipe) fitterId: number,
+    @Req() req?: AuthenticatedRequest,
   ): Promise<CustomerDto[]> {
+    const ownFitterId = await this.resolveFitterIdForUser(req);
+    if (ownFitterId !== undefined && ownFitterId !== fitterId) {
+      throw new ForbiddenException("Fitters can only list their own customers");
+    }
     return this.customerService.findByFitter(fitterId);
   }
 
@@ -238,7 +276,11 @@ export class CustomerController {
     status: 404,
     description: "Customer not found",
   })
-  async findOne(@Param("id", ParseIntPipe) id: number): Promise<CustomerDto> {
+  async findOne(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req?: AuthenticatedRequest,
+  ): Promise<CustomerDto> {
+    await this.assertFitterCanSee(id, req);
     return this.customerService.findOne(id.toString());
   }
 
@@ -269,7 +311,15 @@ export class CustomerController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateCustomerDto: UpdateCustomerDto,
+    @Req() req?: AuthenticatedRequest,
   ): Promise<CustomerDto> {
+    await this.assertFitterCanSee(id, req);
+    if (req?.user?.role?.id === RoleEnum.fitter) {
+      // A fitter can't hand a customer to another fitter.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { fitterId: _ignored, ...rest } = updateCustomerDto;
+      updateCustomerDto = rest;
+    }
     return this.customerService.update(id.toString(), updateCustomerDto);
   }
 
@@ -293,7 +343,11 @@ export class CustomerController {
     status: 404,
     description: "Customer not found",
   })
-  async remove(@Param("id", ParseIntPipe) id: number): Promise<void> {
+  async remove(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req?: AuthenticatedRequest,
+  ): Promise<void> {
+    await this.assertFitterCanSee(id, req);
     return this.customerService.remove(id.toString());
   }
 
@@ -329,7 +383,9 @@ export class CustomerController {
   async assignFitter(
     @Param("customerId", ParseIntPipe) customerId: number,
     @Param("fitterId", ParseIntPipe) fitterId: number,
+    @Req() req?: AuthenticatedRequest,
   ): Promise<CustomerDto> {
+    this.forbidFitters(req);
     return this.customerService.assignFitter(customerId.toString(), fitterId);
   }
 }

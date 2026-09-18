@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   NotFoundException,
+  ForbiddenException,
   ConflictException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -44,6 +45,7 @@ describe("CustomerController", () => {
       findByFitter: jest.fn(),
       findWithoutFitter: jest.fn(),
       getCustomerCountByFitter: jest.fn(),
+      isVisibleToFitter: jest.fn(),
     };
 
     mockDataSource = {
@@ -844,6 +846,114 @@ describe("CustomerController", () => {
         undefined,
         undefined,
       );
+    });
+  });
+
+  describe("fitter scoping on by-id endpoints", () => {
+    const fitterReq = {
+      user: { legacyId: 448, role: { id: 1, name: "fitter" } },
+    };
+    const adminReq = {
+      user: { legacyId: 138, role: { id: 5, name: "supervisor" } },
+    };
+
+    beforeEach(() => {
+      // fitters.id for legacy user 448
+      mockDataSource.query.mockResolvedValue([{ id: 312 }]);
+    });
+
+    it("should findOne hides another fitter's customer behind a 404", async () => {
+      customerService.isVisibleToFitter.mockResolvedValue(false);
+
+      await expect(controller.findOne(1001, fitterReq)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(customerService.isVisibleToFitter).toHaveBeenCalledWith(
+        "1001",
+        312,
+      );
+      expect(customerService.findOne).not.toHaveBeenCalled();
+    });
+
+    it("should findOne returns a customer inside the fitter's scope", async () => {
+      customerService.isVisibleToFitter.mockResolvedValue(true);
+      customerService.findOne.mockResolvedValue(mockCustomerDto);
+
+      await expect(controller.findOne(1001, fitterReq)).resolves.toEqual(
+        mockCustomerDto,
+      );
+    });
+
+    it("should findOne does not consult the fitter scope for admins", async () => {
+      customerService.findOne.mockResolvedValue(mockCustomerDto);
+
+      await controller.findOne(1001, adminReq);
+
+      expect(customerService.isVisibleToFitter).not.toHaveBeenCalled();
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+    });
+
+    it("should update as a fitter checks the scope and drops any fitterId reassignment", async () => {
+      customerService.isVisibleToFitter.mockResolvedValue(true);
+      customerService.update.mockResolvedValue(mockCustomerDto);
+      const dto: UpdateCustomerDto = { name: "Renamed", fitterId: 999 };
+
+      await controller.update(1001, dto, fitterReq);
+
+      expect(customerService.isVisibleToFitter).toHaveBeenCalledWith(
+        "1001",
+        312,
+      );
+      expect(customerService.update).toHaveBeenCalledWith("1001", {
+        name: "Renamed",
+      });
+    });
+
+    it("should update as a fitter refuses a customer outside the scope", async () => {
+      customerService.isVisibleToFitter.mockResolvedValue(false);
+
+      await expect(
+        controller.update(1001, { name: "x" }, fitterReq),
+      ).rejects.toThrow(NotFoundException);
+      expect(customerService.update).not.toHaveBeenCalled();
+    });
+
+    it("should remove as a fitter refuses a customer outside the scope", async () => {
+      customerService.isVisibleToFitter.mockResolvedValue(false);
+
+      await expect(controller.remove(1001, fitterReq)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(customerService.remove).not.toHaveBeenCalled();
+    });
+
+    it("should findByFitter refuses another fitter's id for a fitter", async () => {
+      await expect(controller.findByFitter(999, fitterReq)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(customerService.findByFitter).not.toHaveBeenCalled();
+    });
+
+    it("should findByFitter lets a fitter list their own customers", async () => {
+      customerService.findByFitter.mockResolvedValue([mockCustomerDto]);
+
+      await expect(controller.findByFitter(312, fitterReq)).resolves.toEqual([
+        mockCustomerDto,
+      ]);
+    });
+
+    it("should findWithoutFitter is forbidden for fitters", async () => {
+      await expect(controller.findWithoutFitter(fitterReq)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(customerService.findWithoutFitter).not.toHaveBeenCalled();
+    });
+
+    it("should assignFitter is forbidden for fitters", async () => {
+      await expect(
+        controller.assignFitter(1001, 312, fitterReq),
+      ).rejects.toThrow(ForbiddenException);
+      expect(customerService.assignFitter).not.toHaveBeenCalled();
     });
   });
 });

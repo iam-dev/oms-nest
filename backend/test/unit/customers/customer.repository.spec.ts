@@ -1,3 +1,4 @@
+import { CustomerId } from "../../../src/customers/domain/value-objects/customer-id.value-object";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { CustomerRepository } from "../../../src/customers/infrastructure/persistence/relational/repositories/customer.repository";
@@ -75,6 +76,39 @@ describe("CustomerRepository.findAllPaginated", () => {
       ([sql]) => typeof sql === "string" && sql.includes("fitter_id"),
     );
     expect(scoped).toBe(false);
+  });
+
+  describe("isVisibleToFitter", () => {
+    it("should is true when the customer is inside the fitter scope (own or has an order with them)", async () => {
+      mockQueryBuilder.getCount.mockResolvedValue(1);
+
+      await expect(
+        repository.isVisibleToFitter(CustomerId.fromString("1001"), 312),
+      ).resolves.toBe(true);
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        "customer.id = :id",
+        { id: 1001 },
+      );
+      const scopeCall = mockQueryBuilder.andWhere.mock.calls.find(
+        ([sql]) => typeof sql === "string" && sql.includes(":scopedFitterId"),
+      );
+      expect(scopeCall).toBeDefined();
+      const [sql, params] = scopeCall as [string, Record<string, unknown>];
+      expect(sql).toContain("customer.fitter_id = :scopedFitterId");
+      expect(sql).toContain(
+        "customer.id IN (SELECT DISTINCT customer_id FROM orders WHERE fitter_id = :scopedFitterId AND deleted_at IS NULL)",
+      );
+      expect(params).toEqual({ scopedFitterId: 312 });
+    });
+
+    it("should is false when no row matches", async () => {
+      mockQueryBuilder.getCount.mockResolvedValue(0);
+
+      await expect(
+        repository.isVisibleToFitter(CustomerId.fromString("1001"), 312),
+      ).resolves.toBe(false);
+    });
   });
 });
 
