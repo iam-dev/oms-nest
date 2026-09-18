@@ -161,6 +161,22 @@ export async function fetchFitters({
   });
 }
 
+/**
+ * All non-deleted fitters with their user name attached, for a Fitter LOV.
+ * Sorted by name; fitters without a linked user (no name) sort last.
+ */
+export async function fetchActiveFitters(): Promise<Fitter[]> {
+  const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/active`, {
+    headers: { 'Accept': 'application/json' },
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load fitters: ${response.status}`);
+  }
+  const fitters: Fitter[] = await response.json();
+  return fitters.sort((a, b) => (a.name ?? '\uffff').localeCompare(b.name ?? '\uffff'));
+}
+
 export async function fetchFitterCountries(): Promise<string[]> {
   const response = await fetchWithRefresh(`${API_URL}/api/v1/fitters/countries`, {
     headers: { 'Accept': 'application/json' },

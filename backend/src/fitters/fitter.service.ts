@@ -303,7 +303,7 @@ export class FitterService {
 
   async findActiveFitters(): Promise<FitterDto[]> {
     const fitters = await this.fitterRepository.findActive();
-    return fitters.map((fitter) => this.toDto(fitter));
+    return this.attachUserData(fitters.map((fitter) => this.toDto(fitter)));
   }
 
   async findByCountry(country: string): Promise<FitterDto[]> {

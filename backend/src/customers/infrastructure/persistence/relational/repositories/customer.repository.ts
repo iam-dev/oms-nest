@@ -107,7 +107,7 @@ export class CustomerRepository implements ICustomerRepository {
     return this.mapper.toDomainArray(entities);
   }
 
-  async save(customer: Customer): Promise<void> {
+  async save(customer: Customer): Promise<Customer> {
     const numericId = customer.id.numericValue;
 
     if (numericId !== null) {
@@ -121,14 +121,15 @@ export class CustomerRepository implements ICustomerRepository {
           existingEntity,
           customer,
         );
-        await this.repository.save(updatedEntity);
-        return;
+        const saved = await this.repository.save(updatedEntity);
+        return this.mapper.toDomain(saved);
       }
     }
 
     // Create new entity (let database auto-generate ID)
     const newEntity = this.mapper.toEntity(customer);
-    await this.repository.save(newEntity);
+    const saved = await this.repository.save(newEntity);
+    return this.mapper.toDomain(saved);
   }
 
   async delete(id: CustomerId): Promise<void> {

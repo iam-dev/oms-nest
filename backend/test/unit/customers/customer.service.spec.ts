@@ -148,7 +148,10 @@ describe("CustomerService", () => {
         fitterId: 2001,
       };
 
-      customerRepository.save.mockResolvedValue(undefined);
+      // The repository hands back the row with its database-assigned id;
+      // that is what the response must be built from, not the pre-save object.
+      const savedCustomer = { ...mockCustomer, id: { value: 27929 } };
+      customerRepository.save.mockResolvedValue(savedCustomer as never);
 
       // Act
       const result = await service.create(createDto);
@@ -158,7 +161,7 @@ describe("CustomerService", () => {
       expect(CustomerId.generate).toHaveBeenCalled();
       expect(Customer.create).toHaveBeenCalled();
       expect(customerRepository.save).toHaveBeenCalledWith(mockCustomer);
-      expect(customerMapper.toDto).toHaveBeenCalledWith(mockCustomer);
+      expect(customerMapper.toDto).toHaveBeenCalledWith(savedCustomer);
     });
 
     it("should create customer without fitter", async () => {
@@ -172,7 +175,7 @@ describe("CustomerService", () => {
         // No fitterId provided
       };
 
-      customerRepository.save.mockResolvedValue(undefined);
+      customerRepository.save.mockResolvedValue(mockCustomer);
 
       // Act
       const result = await service.create(createDto);
@@ -312,7 +315,7 @@ describe("CustomerService", () => {
       };
 
       customerRepository.findById.mockResolvedValue(mockCustomer);
-      customerRepository.save.mockResolvedValue(undefined);
+      customerRepository.save.mockResolvedValue(mockCustomer);
 
       // Act
       const result = await service.update(customerId, updateDto);
@@ -332,7 +335,7 @@ describe("CustomerService", () => {
       };
 
       customerRepository.findById.mockResolvedValue(mockCustomer);
-      customerRepository.save.mockResolvedValue(undefined);
+      customerRepository.save.mockResolvedValue(mockCustomer);
 
       // Act
       const result = await service.update(customerId, updateDto);
@@ -352,7 +355,7 @@ describe("CustomerService", () => {
       } as any as UpdateCustomerDto;
 
       customerRepository.findById.mockResolvedValue(mockCustomer);
-      customerRepository.save.mockResolvedValue(undefined);
+      customerRepository.save.mockResolvedValue(mockCustomer);
 
       // Act
       const result = await service.update(customerId, updateDto);
@@ -413,7 +416,7 @@ describe("CustomerService", () => {
       const customerId = "1001";
       const fitterId = 3001;
       customerRepository.findById.mockResolvedValue(mockCustomer);
-      customerRepository.save.mockResolvedValue(undefined);
+      customerRepository.save.mockResolvedValue(mockCustomer);
 
       // Act
       const result = await service.assignFitter(customerId, fitterId);

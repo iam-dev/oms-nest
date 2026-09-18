@@ -20,6 +20,7 @@ module.exports = {
     '^@/context/(.*)$': '<rootDir>/context/$1',
     '^@/api/(.*)$': '<rootDir>/api/$1',
     '^@/schemas/(.*)$': '<rootDir>/schemas/$1',
+    '^@/constants/(.*)$': '<rootDir>/constants/$1',
   },
   transformIgnorePatterns: [
     // `jose` ships ESM only and is used by middleware.ts, so it must be transformed.

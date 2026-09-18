@@ -43,9 +43,9 @@ export class CustomerService {
       createCustomerDto.fitterId,
     );
 
-    await this.customerRepository.save(customer);
+    const saved = await this.customerRepository.save(customer);
 
-    return this.dtoMapper.toDto(customer);
+    return this.dtoMapper.toDto(saved);
   }
 
   /**

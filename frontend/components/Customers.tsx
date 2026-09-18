@@ -10,7 +10,10 @@ import { getCustomerTableColumns } from '@/utils/customerTableColumns';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { fetchCustomers, updateCustomer, deleteCustomer, createCustomer, type Customer } from '@/services/customers';
 import { CustomerDetailModal } from '@/components/shared/CustomerDetailModal';
-import { CustomerEditModal } from '@/components/shared/CustomerEditModal';
+import { CustomerEditModal, type FitterOption } from '@/components/shared/CustomerEditModal';
+import { fetchActiveFitters } from '@/services/fitters';
+import { useUserRole } from '@/hooks/useUserRole';
+import { useAuth } from '@/context/AuthContext';
 import { logger } from '@/utils/logger';
 
 // Customer editing is now supported through the BreezeJS SaveBundle API
@@ -27,6 +30,30 @@ export default function Customers() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Fitter LOV for the create/edit modal. Legacy requires a fitter on every
+  // customer: admins pick one, a fitter is locked to themselves (and cannot
+  // call the admin-only /fitters endpoint anyway).
+  const { isFitter } = useUserRole();
+  const { user } = useAuth();
+  const [fitterOptions, setFitterOptions] = useState<FitterOption[] | undefined>(undefined);
+  const lockedFitterName = isFitter
+    ? [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || 'Me'
+    : undefined;
+
+  useEffect(() => {
+    if (isFitter) return;
+    let cancelled = false;
+    fetchActiveFitters()
+      .then((fitters) => {
+        if (cancelled) return;
+        setFitterOptions(fitters.map((f) => ({ id: f.id, name: f.name || f.username || `Fitter #${f.id}` })));
+      })
+      .catch((err) => logger.error('Error loading fitters for customer modal:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [isFitter]);
   
   // Use our hooks for filters and pagination
   const { filters, updateFilter } = useTableFilters<Record<string, string>>({});
@@ -273,6 +300,8 @@ export default function Customers() {
         isOpen={showEditModal}
         onClose={handleCloseModals}
         onSave={handleSaveCustomer}
+        fitters={fitterOptions}
+        lockedFitterName={lockedFitterName}
       />
 
       {/* Customer Create Modal */}
@@ -281,6 +310,8 @@ export default function Customers() {
         isOpen={showCreateModal}
         onClose={handleCloseModals}
         onSave={handleCreateCustomerSave}
+        fitters={fitterOptions}
+        lockedFitterName={lockedFitterName}
       />
     </div>
   );

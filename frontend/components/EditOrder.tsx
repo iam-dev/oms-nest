@@ -24,6 +24,7 @@ import { ArrowLeft, ChevronRight, Search, User, Package, Settings, Plus } from '
 import { fetchOrderEditData, searchCustomers, saveOrderEditData } from '@/services/orderEditView';
 import { createOrderFromPayload, UpdateOrderPayload } from '@/services/enrichedOrders';
 import { API_URL } from '@/services/api-config';
+import { createCustomer as createCustomerRecord } from '@/services/customers';
 import {
   ComprehensiveOrderData,
   OrderEditFormState,
@@ -144,6 +145,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   // New customer form state
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
+  const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '', city: '', state: '', zipcode: '', country: '' });
 
   // Fetch edit options from backend.
@@ -587,27 +589,24 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
   const handleCreateCustomer = async () => {
     if (!newCustomer.name.trim()) return;
     setNewCustomerSaving(true);
+    setNewCustomerError(null);
     try {
-      const res = await fetch(`${API_URL}/api/v1/customers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: newCustomer.name,
-          email: newCustomer.email || undefined,
-          phoneNo: newCustomer.phone || undefined,
-          cellNo: newCustomer.phone || undefined,
-          address: newCustomer.address || undefined,
-          city: newCustomer.city || undefined,
-          state: newCustomer.state || undefined,
-          zipcode: newCustomer.zipcode || undefined,
-          country: newCustomer.country || undefined,
-        }),
+      // The customer is filed under the order's fitter (customers.fitter_id is
+      // NOT NULL). A fitter-role user has it forced server-side anyway.
+      const created = await createCustomerRecord({
+        name: newCustomer.name,
+        email: newCustomer.email || undefined,
+        phoneNo: newCustomer.phone || undefined,
+        cellNo: newCustomer.phone || undefined,
+        address: newCustomer.address || undefined,
+        city: newCustomer.city || undefined,
+        state: newCustomer.state || undefined,
+        zipcode: newCustomer.zipcode || undefined,
+        country: newCustomer.country || undefined,
+        fitterId: formData.fitter?.id ? Number(formData.fitter.id) : undefined,
       });
-      if (!res.ok) throw new Error(`Failed to create customer: ${res.status}`);
-      const created = await res.json();
       const customer: Customer = {
-        id: created.id,
+        id: Number(created.id),
         name: created.name || newCustomer.name,
         email: created.email || newCustomer.email,
         phone: created.phoneNo || newCustomer.phone,
@@ -622,6 +621,7 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
       setNewCustomer({ name: '', email: '', phone: '', address: '', city: '', state: '', zipcode: '', country: '' });
     } catch (err) {
       logger.error('Error creating customer:', err);
+      setNewCustomerError(err instanceof Error ? err.message : 'Failed to create customer');
     } finally {
       setNewCustomerSaving(false);
     }
@@ -1230,6 +1230,9 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
                           />
                         </div>
                       </div>
+                      {newCustomerError && (
+                        <p className="text-sm text-red-600">{newCustomerError}</p>
+                      )}
                       <Button size="sm" onClick={handleCreateCustomer} disabled={!newCustomer.name.trim() || newCustomerSaving}>
                         {newCustomerSaving ? 'Saving...' : 'Create Customer'}
                       </Button>

@@ -1612,4 +1612,80 @@ describe('EditOrder component', () => {
       });
     });
   });
+
+  // =========================================================================
+  // Inline "Add New Customer" on step 2
+  // =========================================================================
+
+  describe('inline new customer (step 2)', () => {
+    const originalFetch = global.fetch;
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    /** edit-options keeps the Step 1 fixture; only POST /customers gets `customersResponse`. */
+    function mockFetchWithCustomers(customersResponse: Partial<Response>) {
+      global.fetch = jest.fn((url: string) =>
+        Promise.resolve(
+          String(url).endsWith('/api/v1/customers')
+            ? customersResponse
+            : { ok: true, json: () => Promise.resolve(minimalStep1Options) },
+        ),
+      ) as unknown as typeof fetch;
+    }
+
+    async function openNewCustomerForm() {
+      await renderAndWaitForLoad();
+      await completeStep1(); // picks "Test Fitter" (id 1) and "Test Model"
+      await navigateToStep(2);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /add new customer/i }));
+      });
+    }
+
+    function typeName(name: string) {
+      const nameInput = screen.getByText('Name').parentElement!.querySelector('input')!;
+      fireEvent.change(nameInput, { target: { value: name } });
+    }
+
+    it("sends the order's fitter as fitterId so the backend accepts the customer", async () => {
+      // customers.fitter_id is NOT NULL and POST /customers now rejects an
+      // admin create without one; the fitter chosen on Step 1 (id 1) is used.
+      mockFetchWithCustomers({
+        ok: true,
+        json: () => Promise.resolve({ id: 27930, name: 'Walk-in Customer' }),
+      });
+      await openNewCustomerForm();
+      typeName('Walk-in Customer');
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /create customer/i }));
+      });
+
+      const call = (global.fetch as jest.Mock).mock.calls.find(([url]) => String(url).endsWith('/api/v1/customers'));
+      expect(call).toBeDefined();
+      const body = JSON.parse(call![1].body);
+      expect(body.fitterId).toBe(1);
+      expect(body.name).toBe('Walk-in Customer');
+      // the returned id is what ends up on the order
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Walk-in Customer' })).toBeInTheDocument());
+    });
+
+    it('shows the backend validation message instead of failing silently', async () => {
+      mockFetchWithCustomers({
+        ok: false,
+        status: 422,
+        statusText: '',
+        text: () => Promise.resolve(JSON.stringify({ errors: { email: 'email must be an email' } })),
+      });
+      await openNewCustomerForm();
+      typeName('Bad Email');
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /create customer/i }));
+      });
+
+      await waitFor(() => expect(screen.getByText(/email must be an email/)).toBeInTheDocument());
+    });
+  });
 });

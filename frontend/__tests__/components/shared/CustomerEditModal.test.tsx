@@ -42,21 +42,54 @@ jest.mock('@/components/ui/button', () => ({
   ),
 }));
 
-jest.mock('@/components/ui/select', () => ({
-  Select: ({
-    children,
-  }: {
-    children: React.ReactNode;
-    onValueChange?: (value: string) => void;
-    value?: string;
-  }) => <div data-testid="select">{children}</div>,
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
-    <div data-value={value}>{children}</div>
-  ),
-}));
+// Mock Select as a native <select> so tests can actually pick a value.
+// The test id is derived from the SelectValue placeholder so selects can be
+// found via getByTestId(`select-${placeholder}`).
+jest.mock('@/components/ui/select', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const findPlaceholder = (node: React.ReactNode): string | undefined => {
+    let found: string | undefined;
+    React.Children.forEach(node, (child: React.ReactNode) => {
+      if (found || !React.isValidElement(child)) return;
+      const el = child as React.ReactElement<{ placeholder?: string; children?: React.ReactNode }>;
+      if (typeof el.props.placeholder === 'string') {
+        found = el.props.placeholder;
+        return;
+      }
+      found = findPlaceholder(el.props.children);
+    });
+    return found;
+  };
+  return {
+    Select: ({
+      children,
+      value,
+      onValueChange,
+      disabled,
+    }: {
+      children: React.ReactNode;
+      onValueChange?: (value: string) => void;
+      value?: string;
+      disabled?: boolean;
+    }) => (
+      <select
+        data-testid={`select-${findPlaceholder(children) ?? 'unknown'}`}
+        value={value ?? ''}
+        disabled={disabled}
+        onChange={(e) => onValueChange?.(e.target.value)}
+      >
+        <option value="">--</option>
+        {children}
+      </select>
+    ),
+    SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    SelectValue: () => null,
+    SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
+      <option value={value}>{children}</option>
+    ),
+  };
+});
 
 jest.mock('lucide-react', () => ({
   AlertTriangle: () => <span data-testid="alert-icon" />,
@@ -81,14 +114,37 @@ const baseCustomer: Customer = {
   email: 'jane@example.com',
   phoneNo: '555-1234',
   cellNo: '555-5678',
+  fitterId: 312,
 };
+
+const fitterOptions = [
+  { id: 312, name: 'Alice Fitter' },
+  { id: 77, name: 'Bob Fitter' },
+];
 
 const defaultProps = {
   customer: null as Customer | null,
   isOpen: true,
   onClose: jest.fn(),
   onSave: jest.fn(() => Promise.resolve()),
+  fitters: fitterOptions as { id: number; name: string }[] | undefined,
+  lockedFitterName: undefined as string | undefined,
 };
+
+/** Fills every field the legacy Add Customer form requires, so a test can
+ *  then knock out exactly one and assert on the resulting message. */
+function fillValidCustomer(fitterId: string | null = '312') {
+  if (fitterId !== null) {
+    fireEvent.change(screen.getByTestId('select-Select fitter'), { target: { value: fitterId } });
+  }
+  fireEvent.change(getNameInput(), { target: { value: 'Jane Doe' } });
+  fireEvent.change(screen.getByTestId('input-Street Address'), { target: { value: '1 Main St' } });
+  fireEvent.change(screen.getByTestId('input-City'), { target: { value: 'Groningen' } });
+  fireEvent.change(screen.getByTestId('select-Select country'), { target: { value: 'Netherlands' } });
+  fireEvent.change(screen.getByTestId('input-Postal/Zip Code'), { target: { value: '9711AA' } });
+  fireEvent.change(screen.getByTestId('input-Email Address'), { target: { value: 'jane@example.com' } });
+  fireEvent.change(screen.getByTestId('input-Phone Number'), { target: { value: '0612345678' } });
+}
 
 function buildProps(overrides: Partial<typeof defaultProps> = {}) {
   return { ...defaultProps, ...overrides };
@@ -111,6 +167,12 @@ function getSaveButton(): HTMLButtonElement {
   return screen
     .getAllByRole('button')
     .find((btn) => btn.textContent !== 'Back to customers') as HTMLButtonElement;
+}
+
+/** Valid form with the name cleared, for name-specific validation tests. */
+function fillAllButName() {
+  fillValidCustomer();
+  fireEvent.change(getNameInput(), { target: { value: '' } });
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +305,7 @@ describe('CustomerEditModal', () => {
       const onSave = jest.fn(() => Promise.resolve());
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      // Name input is already empty in create mode — click save immediately
+      fillAllButName();
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -255,6 +317,7 @@ describe('CustomerEditModal', () => {
     it('shows the alert icon alongside the validation error', async () => {
       render(<CustomerEditModal {...buildProps()} />);
 
+      fillAllButName();
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -265,6 +328,7 @@ describe('CustomerEditModal', () => {
     it('shows the "Error" heading alongside the error message', async () => {
       render(<CustomerEditModal {...buildProps()} />);
 
+      fillAllButName();
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -278,6 +342,7 @@ describe('CustomerEditModal', () => {
       const onSave = jest.fn(() => Promise.resolve());
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
+      fillAllButName();
       await user.type(getNameInput(), '   ');
       fireEvent.click(getSaveButton());
 
@@ -291,6 +356,7 @@ describe('CustomerEditModal', () => {
       const { rerender } = render(<CustomerEditModal {...buildProps()} />);
 
       // Trigger a validation error
+      fillAllButName();
       fireEvent.click(getSaveButton());
       await waitFor(() => {
         expect(screen.getByText('Customer name is required')).toBeInTheDocument();
@@ -308,11 +374,11 @@ describe('CustomerEditModal', () => {
 
   describe('Happy path — successful save', () => {
     it('calls onSave with the form data when a valid name is provided in create mode', async () => {
-      const user = userEvent.setup();
       const onSave = jest.fn(() => Promise.resolve());
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'New Customer');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'New Customer' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -346,12 +412,12 @@ describe('CustomerEditModal', () => {
     });
 
     it('calls onClose after onSave resolves successfully', async () => {
-      const user = userEvent.setup();
       const onClose = jest.fn();
       const onSave = jest.fn(() => Promise.resolve());
       render(<CustomerEditModal {...buildProps({ onClose, onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -360,12 +426,12 @@ describe('CustomerEditModal', () => {
     });
 
     it('does not call onClose when onSave fails', async () => {
-      const user = userEvent.setup();
       const onClose = jest.fn();
       const onSave = jest.fn(() => Promise.reject(new Error('Network error')));
       render(<CustomerEditModal {...buildProps({ onClose, onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -380,11 +446,11 @@ describe('CustomerEditModal', () => {
 
   describe('Error handling — onSave rejection', () => {
     it('displays the error message thrown by onSave', async () => {
-      const user = userEvent.setup();
       const onSave = jest.fn(() => Promise.reject(new Error('Server unavailable')));
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -393,11 +459,11 @@ describe('CustomerEditModal', () => {
     });
 
     it('displays a generic fallback message when onSave rejects with a non-Error value', async () => {
-      const user = userEvent.setup();
       const onSave = jest.fn(() => Promise.reject('string rejection'));
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -408,11 +474,11 @@ describe('CustomerEditModal', () => {
     });
 
     it('renders the alert icon when an onSave error is displayed', async () => {
-      const user = userEvent.setup();
       const onSave = jest.fn(() => Promise.reject(new Error('Conflict')));
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -425,7 +491,6 @@ describe('CustomerEditModal', () => {
 
   describe('Saving state', () => {
     it('shows "Saving..." text on the save button while onSave is in progress', async () => {
-      const user = userEvent.setup();
       let resolveSave!: () => void;
       const onSave = jest.fn(
         () =>
@@ -435,7 +500,8 @@ describe('CustomerEditModal', () => {
       );
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -447,7 +513,6 @@ describe('CustomerEditModal', () => {
     });
 
     it('disables the save button while saving', async () => {
-      const user = userEvent.setup();
       let resolveSave!: () => void;
       const onSave = jest.fn(
         () =>
@@ -457,7 +522,8 @@ describe('CustomerEditModal', () => {
       );
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -468,7 +534,6 @@ describe('CustomerEditModal', () => {
     });
 
     it('disables the "Back to customers" button while saving', async () => {
-      const user = userEvent.setup();
       let resolveSave!: () => void;
       const onSave = jest.fn(
         () =>
@@ -478,7 +543,8 @@ describe('CustomerEditModal', () => {
       );
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       await waitFor(() => {
@@ -489,11 +555,11 @@ describe('CustomerEditModal', () => {
     });
 
     it('restores the "Create customer" label after onSave rejects (dialog stays open)', async () => {
-      const user = userEvent.setup();
       const onSave = jest.fn(() => Promise.reject(new Error('Failure')));
       render(<CustomerEditModal {...buildProps({ onSave })} />);
 
-      await user.type(getNameInput(), 'Valid Name');
+      fillValidCustomer();
+      fireEvent.change(getNameInput(), { target: { value: 'Valid Name' } });
       fireEvent.click(getSaveButton());
 
       // Wait for the error to surface — saving=false at this point
@@ -525,6 +591,107 @@ describe('CustomerEditModal', () => {
       fireEvent.click(screen.getByText('Back to customers'));
 
       expect(onSave).not.toHaveBeenCalled();
+    });
+  });
+  // -------------------------------------------------------------------------
+  // Parity with the legacy Add Customer form (ordermysaddle.com/customers/new)
+  // -------------------------------------------------------------------------
+
+  describe('Fitter LOV', () => {
+    it('renders a fitter select listing the given fitters for admins', () => {
+      render(<CustomerEditModal {...buildProps()} />);
+      const select = screen.getByTestId('select-Select fitter') as HTMLSelectElement;
+      expect(select.disabled).toBe(false);
+      expect(screen.getByText('Alice Fitter')).toBeInTheDocument();
+      expect(screen.getByText('Bob Fitter')).toBeInTheDocument();
+    });
+
+    it('sends the chosen fitter as a numeric fitterId', async () => {
+      const onSave = jest.fn(() => Promise.resolve());
+      render(<CustomerEditModal {...buildProps({ onSave })} />);
+      fillValidCustomer('77');
+      fireEvent.click(getSaveButton());
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      expect((onSave.mock.calls[0] as unknown[])[0]).toEqual(expect.objectContaining({ fitterId: 77 }));
+    });
+
+    it('locks the LOV to the logged-in fitter and omits fitterId from the payload', async () => {
+      // A fitter-role user cannot list fitters (403) and must not pick another one;
+      // the backend assigns their own id, so the modal just shows who it will be.
+      const onSave = jest.fn(() => Promise.resolve());
+      render(
+        <CustomerEditModal {...buildProps({ onSave, fitters: undefined, lockedFitterName: 'Carol Fitter' })} />,
+      );
+      const select = screen.getByTestId('select-Select fitter') as HTMLSelectElement;
+      expect(select.disabled).toBe(true);
+      expect(screen.getByText('Carol Fitter')).toBeInTheDocument();
+
+      fillValidCustomer(null);
+      fireEvent.click(getSaveButton());
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      expect((onSave.mock.calls[0] as unknown[])[0]).not.toHaveProperty('fitterId');
+    });
+
+    it("pre-selects the customer's current fitter in edit mode", () => {
+      render(<CustomerEditModal {...buildProps({ customer: { ...baseCustomer, fitterId: 77 } })} />);
+      const select = screen.getByTestId('select-Select fitter') as HTMLSelectElement;
+      expect(select.value).toBe('77');
+    });
+  });
+
+  describe('Legacy field set', () => {
+    it('renders a Horse Name input and sends it as horseName', async () => {
+      const onSave = jest.fn(() => Promise.resolve());
+      render(<CustomerEditModal {...buildProps({ onSave })} />);
+      fillValidCustomer();
+      fireEvent.change(screen.getByTestId('input-Horse Name'), { target: { value: 'Thunder' } });
+      fireEvent.click(getSaveButton());
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      expect((onSave.mock.calls[0] as unknown[])[0]).toEqual(expect.objectContaining({ horseName: 'Thunder' }));
+    });
+
+    it('does not mark State as required', () => {
+      render(<CustomerEditModal {...buildProps()} />);
+      const stateLabel = screen.getByText(/^State:/);
+      expect(stateLabel.textContent).not.toContain('*');
+    });
+  });
+
+  describe('Required-field validation (mirrors the legacy form)', () => {
+    it.each([
+      ['Fitter', () => fillValidCustomer(null)],
+      ['Address', () => { fillValidCustomer(); fireEvent.change(screen.getByTestId('input-Street Address'), { target: { value: '' } }); }],
+      ['City', () => { fillValidCustomer(); fireEvent.change(screen.getByTestId('input-City'), { target: { value: '' } }); }],
+      ['Country', () => { fillValidCustomer(); fireEvent.change(screen.getByTestId('select-Select country'), { target: { value: '' } }); }],
+      ['Zipcode', () => { fillValidCustomer(); fireEvent.change(screen.getByTestId('input-Postal/Zip Code'), { target: { value: '' } }); }],
+      ['Email', () => { fillValidCustomer(); fireEvent.change(screen.getByTestId('input-Email Address'), { target: { value: '' } }); }],
+      ['PhoneNo', () => { fillValidCustomer(); fireEvent.change(screen.getByTestId('input-Phone Number'), { target: { value: '' } }); }],
+    ])('blocks save and names %s when it is missing', async (field, arrange) => {
+      const onSave = jest.fn(() => Promise.resolve());
+      render(<CustomerEditModal {...buildProps({ onSave })} />);
+      arrange();
+      fireEvent.click(getSaveButton());
+      await waitFor(() => expect(screen.getByText(new RegExp(`required.*${field}`))).toBeInTheDocument());
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed email before calling the API', async () => {
+      // This is the exact input from the bug report: two @ signs.
+      const onSave = jest.fn(() => Promise.resolve());
+      render(<CustomerEditModal {...buildProps({ onSave })} />);
+      fillValidCustomer();
+      fireEvent.change(screen.getByTestId('input-Email Address'), { target: { value: 'test@test1234@gmail.com' } });
+      fireEvent.click(getSaveButton());
+      await waitFor(() => expect(screen.getByText(/valid email/i)).toBeInTheDocument());
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('does not require CellNo, Horse Name or State', async () => {
+      const onSave = jest.fn(() => Promise.resolve());
+      render(<CustomerEditModal {...buildProps({ onSave })} />);
+      fillValidCustomer();
+      fireEvent.click(getSaveButton());
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
     });
   });
 });
