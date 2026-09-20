@@ -15,9 +15,11 @@ import { ConfigService } from "@nestjs/config";
 import { AllConfigType } from "../config/config.type";
 import { ProductionCacheService } from "../cache/production-cache.service";
 import { safeOrderBy } from "../common/utils/safe-order-by";
+import {
+  FITTER_LOCKED_STATUS_IDS,
+  type OrderLockState,
+} from "./fitter-order-lock";
 
-// Status IDs where fitters (role 1) are NOT allowed to edit orders
-const FITTER_RESTRICTED_STATUS_IDS = [2, 3, 5, 7, 9, 10, 11];
 const FITTER_ROLE_ID = 1;
 
 export interface EnrichedOrdersQueryDto {
@@ -259,6 +261,38 @@ export class EnrichedOrdersService {
         [orderIds],
       );
     return new Map(rows.map((r) => [Number(r.id), r.fitter_id]));
+  }
+
+  /**
+   * Map each order id to what the fitter lock needs: its fitter and its
+   * status. Ids that don't exist are absent; a status with no `statuses`
+   * row is named by id so the error message still says something.
+   */
+  async getOrderLockStates(
+    orderIds: number[],
+  ): Promise<Map<number, OrderLockState>> {
+    const rows: Array<{
+      id: number;
+      fitter_id: number | null;
+      order_status: number;
+      status_name: string | null;
+    }> = await this.dataSource.query(
+      `SELECT o.id, o.fitter_id, o.order_status, st.name AS status_name
+       FROM orders o
+       LEFT JOIN statuses st ON st.id = o.order_status
+       WHERE o.id = ANY($1) AND o.deleted_at IS NULL`,
+      [orderIds],
+    );
+    return new Map(
+      rows.map((r) => [
+        Number(r.id),
+        {
+          fitterId: r.fitter_id,
+          statusId: Number(r.order_status),
+          statusName: r.status_name ?? `ID ${r.order_status}`,
+        },
+      ]),
+    );
   }
 
   async getEnrichedOrders(
@@ -2070,7 +2104,7 @@ export class EnrichedOrdersService {
       // Fitter role-based status restriction
       if (
         userRoleId === FITTER_ROLE_ID &&
-        FITTER_RESTRICTED_STATUS_IDS.includes(oldStatusId)
+        FITTER_LOCKED_STATUS_IDS.includes(oldStatusId)
       ) {
         const statusNameResult = await queryRunner.query(
           `SELECT name FROM statuses WHERE id = $1`,

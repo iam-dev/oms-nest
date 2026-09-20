@@ -201,6 +201,19 @@ export function canEditOrder(
 }
 
 /**
+ * Whether an order row may be ticked for bulk actions (status changes).
+ * Only fitters are restricted, and only by the post-approval lock; an
+ * unresolved role is left alone so the table is not blanked while auth loads.
+ */
+export function isOrderSelectable(
+  userRole: UserRole | null,
+  orderStatus: string | undefined,
+): boolean {
+  if (userRole !== UserRole.FITTER) return true;
+  return canEditOrder(userRole, orderStatus);
+}
+
+/**
  * Get user-friendly role display name
  */
 export function getRoleDisplayName(role: UserRole): string {

@@ -1,6 +1,7 @@
 import {
   hasScreenPermission,
   canEditOrder,
+  isOrderSelectable,
   getRoleDisplayName,
   SCREEN_PERMISSIONS,
   NAVIGATION_ITEMS,
@@ -367,11 +368,9 @@ describe('Role Permissions System', () => {
     });
 
     describe('Fitter role', () => {
-      it('can edit orders in non-restricted statuses', () => {
+      it('can edit orders only before approval', () => {
         expect(canEditOrder(UserRole.FITTER, 'Unordered')).toBe(true);
         expect(canEditOrder(UserRole.FITTER, 'Ordered')).toBe(true);
-        expect(canEditOrder(UserRole.FITTER, 'On hold')).toBe(true);
-        expect(canEditOrder(UserRole.FITTER, 'On trial')).toBe(true);
         expect(canEditOrder(UserRole.FITTER, 'Changed')).toBe(true);
         expect(canEditOrder(UserRole.FITTER, 'Awaiting Client Confirmation')).toBe(true);
       });
@@ -382,6 +381,26 @@ describe('Role Permissions System', () => {
         });
       });
 
+      it('cannot edit orders parked after approval either', () => {
+        // Mirrors FITTER_LOCKED_STATUS_IDS in backend/src/enriched-orders/fitter-order-lock.ts
+        for (const status of [
+          'Approved',
+          'In Production P1',
+          'In Production P2',
+          'In Production P3',
+          'On hold',
+          'On trial',
+          'Shipped to Fitter',
+          'Shipped to Customer',
+          'Completed sale',
+          'Inventory Aiken',
+          'Inventory UK',
+          'Inventory HOLLAND',
+        ]) {
+          expect(canEditOrder(UserRole.FITTER, status)).toBe(false);
+        }
+      });
+
       // FE-035: fitter must fail closed when status is unknown — backend is authoritative.
       it('cannot edit when status is undefined (fail-closed)', () => {
         expect(canEditOrder(UserRole.FITTER, undefined)).toBe(false);
@@ -389,6 +408,20 @@ describe('Role Permissions System', () => {
 
       it('has base ORDER_EDIT screen permission', () => {
         expect(hasScreenPermission(UserRole.FITTER, 'ORDER_EDIT')).toBe(true);
+      });
+    });
+
+    describe('isOrderSelectable - bulk selection', () => {
+      it('lets a fitter select only orders they may still edit', () => {
+        expect(isOrderSelectable(UserRole.FITTER, 'Ordered')).toBe(true);
+        expect(isOrderSelectable(UserRole.FITTER, 'On hold')).toBe(false);
+        expect(isOrderSelectable(UserRole.FITTER, undefined)).toBe(false);
+      });
+
+      it('never restricts anyone else, including an unresolved role', () => {
+        expect(isOrderSelectable(UserRole.ADMIN, 'Completed sale')).toBe(true);
+        expect(isOrderSelectable(UserRole.SUPERVISOR, undefined)).toBe(true);
+        expect(isOrderSelectable(null, 'Approved')).toBe(true);
       });
     });
 
@@ -417,7 +450,12 @@ describe('Role Permissions System', () => {
         expect(FITTER_RESTRICTED_STATUSES).toContain('Shipped to Fitter');
         expect(FITTER_RESTRICTED_STATUSES).toContain('Shipped to Customer');
         expect(FITTER_RESTRICTED_STATUSES).toContain('Completed sale');
-        expect(FITTER_RESTRICTED_STATUSES).toHaveLength(7);
+        expect(FITTER_RESTRICTED_STATUSES).toContain('On hold');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('On trial');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Inventory Aiken');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Inventory UK');
+        expect(FITTER_RESTRICTED_STATUSES).toContain('Inventory HOLLAND');
+        expect(FITTER_RESTRICTED_STATUSES).toHaveLength(12);
       });
     });
   });

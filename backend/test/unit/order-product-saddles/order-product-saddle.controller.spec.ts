@@ -1,7 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { NotFoundException, BadRequestException } from "@nestjs/common";
+import {
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { OrderProductSaddleController } from "../../../src/order-product-saddles/order-product-saddle.controller";
 import { OrderProductSaddleService } from "../../../src/order-product-saddles/order-product-saddle.service";
+import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 import { CreateOrderProductSaddleDto } from "../../../src/order-product-saddles/dto/create-order-product-saddle.dto";
 import { UpdateOrderProductSaddleDto } from "../../../src/order-product-saddles/dto/update-order-product-saddle.dto";
 import { QueryOrderProductSaddleDto } from "../../../src/order-product-saddles/dto/query-order-product-saddle.dto";
@@ -10,6 +15,10 @@ import { OrderProductSaddleDto } from "../../../src/order-product-saddles/dto/or
 describe("OrderProductSaddleController", () => {
   let controller: OrderProductSaddleController;
   let service: jest.Mocked<OrderProductSaddleService>;
+  let orderAccess: {
+    getFitterIdByUserId: jest.Mock;
+    getOrderLockStates: jest.Mock;
+  };
 
   const mockOrderProductSaddleDto: OrderProductSaddleDto = {
     id: 1,
@@ -39,10 +48,16 @@ describe("OrderProductSaddleController", () => {
       bulkCreate: jest.fn(),
     };
 
+    orderAccess = {
+      getFitterIdByUserId: jest.fn().mockResolvedValue(49),
+      getOrderLockStates: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrderProductSaddleController],
       providers: [
         { provide: OrderProductSaddleService, useValue: mockService },
+        { provide: EnrichedOrdersService, useValue: orderAccess },
       ],
     }).compile();
 
@@ -291,6 +306,99 @@ describe("OrderProductSaddleController", () => {
       // Assert
       expect(result).toEqual(createdRelationships);
       expect(service.bulkCreate).toHaveBeenCalledWith(createDtos);
+    });
+  });
+
+  describe("fitter lock", () => {
+    const fitterReq = {
+      user: { legacyId: 83, role: { id: 1, name: "fitter" } },
+    };
+    const adminReq = { user: { legacyId: 1, role: { id: 2, name: "admin" } } };
+    const locked = new Map([
+      [1001, { fitterId: 49, statusId: 13, statusName: "Inventory UK" }],
+    ]);
+
+    it("should create refuses a saddle on the fitter's own locked order", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(
+        controller.create({ orderId: 1001, productId: 500 } as any, fitterReq),
+      ).rejects.toThrow(
+        new ForbiddenException(
+          "Fitters cannot edit orders with status: Inventory UK",
+        ),
+      );
+      expect(service.create).not.toHaveBeenCalled();
+    });
+
+    it("should create hides another fitter's order behind a 404", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(
+        new Map([
+          [1001, { fitterId: 274, statusId: 1, statusName: "Ordered" }],
+        ]),
+      );
+
+      await expect(
+        controller.create({ orderId: 1001, productId: 500 } as any, fitterReq),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.create).not.toHaveBeenCalled();
+    });
+
+    it("should create skips the lookup for admins", async () => {
+      service.create.mockResolvedValue(mockOrderProductSaddleDto);
+
+      await controller.create({ orderId: 1001, productId: 500 } as any, adminReq);
+
+      expect(orderAccess.getOrderLockStates).not.toHaveBeenCalled();
+    });
+
+    it("should bulkCreate checks every distinct order once", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(
+        new Map([
+          [1001, { fitterId: 49, statusId: 1, statusName: "Ordered" }],
+          [1002, { fitterId: 49, statusId: 4, statusName: "On hold" }],
+        ]),
+      );
+
+      await expect(
+        controller.bulkCreate(
+          [{ orderId: 1001 }, { orderId: 1002 }, { orderId: 1001 }] as any,
+          fitterReq,
+        ),
+      ).rejects.toThrow("Fitters cannot edit orders with status: On hold");
+      expect(orderAccess.getOrderLockStates).toHaveBeenCalledWith([1001, 1002]);
+      expect(service.bulkCreate).not.toHaveBeenCalled();
+    });
+
+    it("should update resolves the row's order before applying the lock", async () => {
+      service.findOne.mockResolvedValue(mockOrderProductSaddleDto);
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(
+        controller.update(1, { quantity: 3 }, fitterReq),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.findOne).toHaveBeenCalledWith(1);
+      expect(orderAccess.getOrderLockStates).toHaveBeenCalledWith([1001]);
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it("should remove resolves the row's order before applying the lock", async () => {
+      service.findOne.mockResolvedValue(mockOrderProductSaddleDto);
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(controller.remove(1, fitterReq)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(service.remove).not.toHaveBeenCalled();
+    });
+
+    it("should update does not look the row up for admins", async () => {
+      service.update.mockResolvedValue(mockOrderProductSaddleDto);
+
+      await controller.update(1, { quantity: 3 }, adminReq);
+
+      expect(service.findOne).not.toHaveBeenCalled();
+      expect(service.update).toHaveBeenCalledWith(1, { quantity: 3 });
     });
   });
 });

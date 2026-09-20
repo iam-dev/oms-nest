@@ -28,6 +28,20 @@ jest.mock('@/services/api-config', () => ({
   API_URL: 'http://localhost:3001',
 }));
 
+// OrderDetails reads the role for the fitter lock; an admin sees everything.
+jest.mock('@/hooks/useUserRole', () => ({
+  useUserRole: () => ({
+    role: 'ROLE_ADMIN',
+    isAdmin: true,
+    isSupervisor: false,
+    isFitter: false,
+    isSupplier: false,
+    isUser: false,
+    hasRole: jest.fn(),
+    hasAnyRole: jest.fn(),
+  }),
+}));
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   useSearchParams: () => ({ get: jest.fn(() => null) }),

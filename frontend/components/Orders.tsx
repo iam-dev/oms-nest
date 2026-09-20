@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import type { Order as OrderDomainType } from '@/types/Order';
 import { useOrderFilters } from '@/hooks/useOrderFilters';
 import { useUserRole } from '@/hooks/useUserRole';
+import { isOrderSelectable } from '@/utils/rolePermissions';
 import { logger } from '@/utils/logger';
 import type { Column } from '@/components/shared/DataTable';
 import type { OrderTableRow } from '@/utils/orderProcessing';
@@ -76,7 +77,7 @@ export default function Orders() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [useComprehensiveEdit, setUseComprehensiveEdit] = useState(true);
 
-  const { isFitter } = useUserRole();
+  const { role, isFitter } = useUserRole();
 
   // All filter, search, pagination, and data fetching logic
   const {
@@ -124,27 +125,32 @@ export default function Orders() {
     });
   }, []);
 
+  // Rows a bulk action may touch: fitters cannot select orders past approval
+  // (the fitter lock), everyone else can select every visible row.
+  const selectableIds = useMemo(
+    () => processedOrders
+      .filter((o: Record<string, unknown>) => isOrderSelectable(role, (o.orderStatus || o.status) as string | undefined))
+      .map((o: Record<string, unknown>) => Number(o.id))
+      .filter((id: number) => !isNaN(id)),
+    [processedOrders, role],
+  );
+
   const handleToggleSelectAll = useCallback(() => {
-    const visibleIds = processedOrders.map((o: Record<string, unknown>) => Number(o.id)).filter((id: number) => !isNaN(id));
     setSelectedOrderIds(prev => {
-      const allSelected = visibleIds.length > 0 && visibleIds.every((id: number) => prev.has(id));
+      const allSelected = selectableIds.length > 0 && selectableIds.every((id: number) => prev.has(id));
       if (allSelected) {
         return new Set();
       }
-      return new Set(visibleIds);
+      return new Set(selectableIds);
     });
-  }, [processedOrders]);
+  }, [selectableIds]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedOrderIds(new Set());
   }, []);
 
   // Build checkbox column
-  const visibleIds = useMemo(
-    () => processedOrders.map((o: Record<string, unknown>) => Number(o.id)).filter((id: number) => !isNaN(id)),
-    [processedOrders],
-  );
-  const allSelected = visibleIds.length > 0 && visibleIds.every((id: number) => selectedOrderIds.has(id));
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id: number) => selectedOrderIds.has(id));
 
   const checkboxColumn: Column<Record<string, unknown>> = useMemo(() => ({
     key: '_select' as string,
@@ -159,17 +165,20 @@ export default function Orders() {
     render: (_: unknown, row?: Record<string, unknown>) => {
       const orderId = Number(row?.id);
       if (isNaN(orderId)) return null;
+      const selectable = isOrderSelectable(role, (row?.orderStatus || row?.status) as string | undefined);
       return (
         <input
           type="checkbox"
           checked={selectedOrderIds.has(orderId)}
+          disabled={!selectable}
+          title={selectable ? undefined : 'Approved orders cannot be changed by fitters'}
           onChange={() => handleToggleSelect(orderId)}
           onClick={(e) => e.stopPropagation()}
-          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
         />
       );
     },
-  }), [allSelected, selectedOrderIds, handleToggleSelectAll, handleToggleSelect]);
+  }), [allSelected, selectedOrderIds, handleToggleSelectAll, handleToggleSelect, role]);
 
   // Use shared fetchCompleteOrderData utility
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -12,6 +12,7 @@ import {
   HttpStatus,
   ParseIntPipe,
   Req,
+  ForbiddenException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -22,6 +23,7 @@ import {
   ApiQuery,
   ApiBody,
 } from "@nestjs/swagger";
+import { isScopedFitter } from "../enriched-orders/fitter-order-lock";
 import { OrderService } from "./order.service";
 import { OrderSearchService } from "./order-search.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
@@ -556,6 +558,13 @@ export class OrderController {
     @Body() updateOrderDto: UpdateOrderDto,
     @Req() req: any,
   ): Promise<OrderDto> {
+    // Fitters edit through enriched_orders, which enforces ownership and the
+    // post-approval lock. This legacy route cannot, so it is closed to them.
+    if (isScopedFitter(req?.user)) {
+      throw new ForbiddenException(
+        "Fitters must edit orders through the order form",
+      );
+    }
     if (updateOrderDto.status !== undefined) {
       try {
         const current = await this.orderService.findOne(id);

@@ -45,6 +45,7 @@ describe("EnrichedOrdersController", () => {
       updateOrder: jest.fn(),
       getFitterIdByUserId: jest.fn(),
       getOrderFitterIds: jest.fn(),
+      getOrderLockStates: jest.fn(),
       createOrder: jest.fn(),
       getEditFormOptions: jest.fn(),
       updateOrderStatus: jest.fn(),
@@ -742,6 +743,9 @@ describe("EnrichedOrdersController", () => {
     });
 
     it("should updateOrder forces the fitter's own id and scopes the service call", async () => {
+      service.getOrderLockStates.mockResolvedValue(
+        new Map([[1, { fitterId: 49, statusId: 1, statusName: "Ordered" }]]),
+      );
       service.updateOrder.mockResolvedValue({ success: true, orderId: 1 });
 
       await controller.updateOrder(
@@ -803,13 +807,72 @@ describe("EnrichedOrdersController", () => {
       expect(result.currentFitterId).toBeUndefined();
     });
 
+    const lockState = (fitterId: number, statusId: number, statusName: string) =>
+      ({ fitterId, statusId, statusName }) as const;
+
     it("should updateOrderStatus refuses another fitter's order", async () => {
-      service.getOrderFitterIds.mockResolvedValue(new Map([[53810, 274]]));
+      service.getOrderLockStates.mockResolvedValue(
+        new Map([[53810, lockState(274, 1, "Ordered")]]),
+      );
 
       await expect(
         controller.updateOrderStatus(53810, { status: "Ordered" }, fitterReq),
       ).rejects.toThrow(NotFoundException);
       expect(service.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("should updateOrderStatus refuses the fitter's own order once it is locked", async () => {
+      service.getOrderLockStates.mockResolvedValue(
+        new Map([[51133, lockState(49, 4, "On hold")]]),
+      );
+
+      await expect(
+        controller.updateOrderStatus(51133, { status: "Ordered" }, fitterReq),
+      ).rejects.toThrow(
+        new ForbiddenException(
+          "Fitters cannot edit orders with status: On hold",
+        ),
+      );
+      expect(service.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("should updateOrderStatus proceeds on the fitter's own pre-approval order", async () => {
+      service.getOrderLockStates.mockResolvedValue(
+        new Map([[51133, lockState(49, 1, "Ordered")]]),
+      );
+      service.updateOrderStatus.mockResolvedValue({
+        success: true,
+        orderId: 51133,
+        status: "Approved",
+        statusId: 2,
+      });
+
+      await controller.updateOrderStatus(
+        51133,
+        { status: "Approved" },
+        fitterReq,
+      );
+
+      expect(service.updateOrderStatus).toHaveBeenCalledWith(
+        51133,
+        "Approved",
+        83,
+      );
+    });
+
+    it("should updateOrder refuses the fitter's own locked order before touching the service", async () => {
+      service.getOrderLockStates.mockResolvedValue(
+        new Map([[51133, lockState(49, 12, "Inventory Aiken")]]),
+      );
+
+      await expect(
+        controller.updateOrder(51133, { specialNotes: "x" }, fitterReq),
+      ).rejects.toThrow(
+        new ForbiddenException(
+          "Fitters cannot edit orders with status: Inventory Aiken",
+        ),
+      );
+      expect(service.updateOrder).not.toHaveBeenCalled();
     });
 
     it("should createDraftFromOrder refuses another fitter's order", async () => {
@@ -831,10 +894,10 @@ describe("EnrichedOrdersController", () => {
     });
 
     it("should bulkUpdateOrderStatus refuses when any order belongs to another fitter", async () => {
-      service.getOrderFitterIds.mockResolvedValue(
+      service.getOrderLockStates.mockResolvedValue(
         new Map([
-          [1, 49],
-          [2, 274],
+          [1, lockState(49, 1, "Ordered")],
+          [2, lockState(274, 1, "Ordered")],
         ]),
       );
 
@@ -847,11 +910,28 @@ describe("EnrichedOrdersController", () => {
       expect(service.bulkUpdateOrderStatus).not.toHaveBeenCalled();
     });
 
-    it("should bulkUpdateOrderStatus proceeds when every order is the fitter's own", async () => {
-      service.getOrderFitterIds.mockResolvedValue(
+    it("should bulkUpdateOrderStatus refuses when any own order is locked", async () => {
+      service.getOrderLockStates.mockResolvedValue(
         new Map([
-          [1, 49],
-          [2, 49],
+          [1, lockState(49, 1, "Ordered")],
+          [2, lockState(49, 6, "On trial")],
+        ]),
+      );
+
+      await expect(
+        controller.bulkUpdateOrderStatus(
+          { orderIds: [1, 2], status: "Ordered" },
+          fitterReq,
+        ),
+      ).rejects.toThrow("Fitters cannot edit orders with status: On trial");
+      expect(service.bulkUpdateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("should bulkUpdateOrderStatus proceeds when every order is the fitter's own and open", async () => {
+      service.getOrderLockStates.mockResolvedValue(
+        new Map([
+          [1, lockState(49, 1, "Ordered")],
+          [2, lockState(49, 15, "Awaiting Client Confirmation")],
         ]),
       );
       service.bulkUpdateOrderStatus.mockResolvedValue({
@@ -888,6 +968,7 @@ describe("EnrichedOrdersController", () => {
       );
 
       expect(service.getOrderFitterIds).not.toHaveBeenCalled();
+      expect(service.getOrderLockStates).not.toHaveBeenCalled();
     });
   });
 });

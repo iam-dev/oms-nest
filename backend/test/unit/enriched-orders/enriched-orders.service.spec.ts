@@ -227,7 +227,9 @@ describe("EnrichedOrdersService", () => {
     });
 
     it("should throw ForbiddenException for all restricted status IDs", async () => {
-      const restrictedIds = [2, 3, 5, 7, 9, 10, 11];
+      // Every status after approval, including On hold (4), On trial (6)
+      // and the three Inventory statuses (12-14).
+      const restrictedIds = [2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14];
 
       for (const statusId of restrictedIds) {
         queryRunner.query

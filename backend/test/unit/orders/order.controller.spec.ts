@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { NotFoundException, BadRequestException } from "@nestjs/common";
+import {
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { OrderController } from "../../../src/orders/order.controller";
 import { OrderService } from "../../../src/orders/order.service";
 import { OrderSearchService } from "../../../src/orders/order-search.service";
@@ -459,6 +463,18 @@ describe("OrderController", () => {
   });
 
   describe("update", () => {
+    it("should refuse fitters outright: this endpoint cannot apply the post-approval lock", async () => {
+      const fitterReq = {
+        user: { legacyId: 83, role: { id: 1, name: "fitter" } },
+      };
+
+      await expect(
+        controller.update(12345, { priority: "high" }, fitterReq),
+      ).rejects.toThrow(ForbiddenException);
+      expect(orderService.update).not.toHaveBeenCalled();
+      expect(orderService.findOne).not.toHaveBeenCalled();
+    });
+
     it("should update order successfully", async () => {
       // Arrange
       const orderId = 12345;

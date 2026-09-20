@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -28,12 +29,22 @@ import { CreateOrderProductSaddleDto } from "./dto/create-order-product-saddle.d
 import { UpdateOrderProductSaddleDto } from "./dto/update-order-product-saddle.dto";
 import { QueryOrderProductSaddleDto } from "./dto/query-order-product-saddle.dto";
 import { OrderProductSaddleDto } from "./dto/order-product-saddle.dto";
+import { EnrichedOrdersService } from "../enriched-orders/enriched-orders.service";
+import {
+  assertFitterMayEditOrders,
+  isScopedFitter,
+  type ScopedUser,
+} from "../enriched-orders/fitter-order-lock";
+
+type ScopedRequest = { user?: ScopedUser };
 
 /**
  * OrderProductSaddle REST API Controller
  *
  * Handles HTTP requests for managing order-product-saddle relationships.
  * Provides endpoints for linking products (saddles) to orders with configuration details.
+ * Writes are subject to the fitter lock: a fitter may only touch rows of
+ * their own, not-yet-approved orders.
  */
 @ApiTags("Order Product Saddles")
 @Controller({
@@ -46,7 +57,28 @@ import { OrderProductSaddleDto } from "./dto/order-product-saddle.dto";
 export class OrderProductSaddleController {
   constructor(
     private readonly orderProductSaddleService: OrderProductSaddleService,
+    private readonly enrichedOrdersService: EnrichedOrdersService,
   ) {}
+
+  private assertMayEdit(orderIds: number[], req?: ScopedRequest) {
+    return assertFitterMayEditOrders(
+      this.enrichedOrdersService,
+      [...new Set(orderIds)],
+      req?.user,
+    );
+  }
+
+  /** Lock check for a row addressed by its own id: resolve the order first. */
+  private async assertMayEditRow(
+    rowId: number,
+    req?: ScopedRequest,
+  ): Promise<void> {
+    if (!isScopedFitter(req?.user)) {
+      return;
+    }
+    const row = await this.orderProductSaddleService.findOne(rowId);
+    await this.assertMayEdit([row.orderId], req);
+  }
 
   @Post()
   @ApiOperation({
@@ -65,7 +97,9 @@ export class OrderProductSaddleController {
   })
   async create(
     @Body() createDto: CreateOrderProductSaddleDto,
+    @Req() req?: ScopedRequest,
   ): Promise<OrderProductSaddleDto> {
+    await this.assertMayEdit([createDto.orderId], req);
     return this.orderProductSaddleService.create(createDto);
   }
 
@@ -213,7 +247,9 @@ export class OrderProductSaddleController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateOrderProductSaddleDto,
+    @Req() req?: ScopedRequest,
   ): Promise<OrderProductSaddleDto> {
+    await this.assertMayEditRow(id, req);
     return this.orderProductSaddleService.update(id, updateDto);
   }
 
@@ -237,7 +273,11 @@ export class OrderProductSaddleController {
     status: 404,
     description: "Relationship not found",
   })
-  async remove(@Param("id", ParseIntPipe) id: number): Promise<void> {
+  async remove(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req?: ScopedRequest,
+  ): Promise<void> {
+    await this.assertMayEditRow(id, req);
     return this.orderProductSaddleService.remove(id);
   }
 
@@ -257,7 +297,12 @@ export class OrderProductSaddleController {
   })
   async bulkCreate(
     @Body() createDtos: CreateOrderProductSaddleDto[],
+    @Req() req?: ScopedRequest,
   ): Promise<OrderProductSaddleDto[]> {
+    await this.assertMayEdit(
+      createDtos.map((dto) => dto.orderId),
+      req,
+    );
     return this.orderProductSaddleService.bulkCreate(createDtos);
   }
 }
