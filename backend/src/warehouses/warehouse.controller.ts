@@ -30,7 +30,7 @@ import { WarehouseEntity } from "./infrastructure/persistence/relational/entitie
 
 @ApiTags("Warehouses")
 @ApiCookieAuth("token")
-@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@Roles(RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller({
   path: "warehouses",

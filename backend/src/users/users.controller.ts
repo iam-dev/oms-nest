@@ -39,7 +39,7 @@ import { infinityPagination } from "../utils/infinity-pagination";
 import { AuditLog } from "../audit-logging/decorators";
 
 @ApiCookieAuth("token")
-@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@Roles(RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @ApiTags("Users")
 @Controller({

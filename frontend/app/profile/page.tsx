@@ -10,8 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { User, Mail, IdCard, Edit, Save, X, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
-import { updateUser, type UpdateUserData } from "@/services/users";
-import { changePassword } from "@/services/auth";
+import { changePassword, updateProfile } from "@/services/auth";
 import { UserRole } from "@/types/Role";
 import { toast } from "sonner";
 import { logger } from '@/utils/logger';
@@ -23,8 +22,6 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    email: "",
-    username: "",
   });
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -41,8 +38,6 @@ export default function ProfilePage() {
       setFormData({
         firstName: user.firstName || "",
         lastName: user.lastName || "",
-        email: user.email || "",
-        username: user.username || "",
       });
     }
   }, [user]);
@@ -107,21 +102,13 @@ export default function ProfilePage() {
 
     setIsLoading(true);
     try {
-      const updateData: UpdateUserData = {
-        firstName: formData.firstName || undefined,
-        lastName: formData.lastName || undefined,
-        email: formData.email || undefined,
-        username: formData.username || undefined,
-      };
-
-      // Remove undefined values
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key as keyof UpdateUserData] === undefined) {
-          delete updateData[key as keyof UpdateUserData];
-        }
+      // Self-service edits go through /auth/me so every role can update
+      // their own name. Username/email are the login identity and are
+      // managed by Supervisors in User Management, not here.
+      await updateProfile({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
       });
-
-      await updateUser(String(user.id), updateData);
       await refreshUser();
       setIsEditing(false);
       toast.success("Profile updated successfully");
@@ -138,8 +125,6 @@ export default function ProfilePage() {
       setFormData({
         firstName: user.firstName || "",
         lastName: user.lastName || "",
-        email: user.email || "",
-        username: user.username || "",
       });
     }
     setIsEditing(false);
@@ -294,38 +279,29 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Username */}
+              {/* Username — login identity, changed by a Supervisor in User Management */}
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>
-                {isEditing ? (
-                  <Input
-                    id="username"
-                    value={formData.username}
-                    onChange={(e) => handleInputChange("username", e.target.value)}
-                    placeholder="Enter username"
-                  />
-                ) : (
-                  <p className="text-sm p-2 border rounded-md bg-muted/50">
-                    {user.username}
+                <p id="username" className="text-sm p-2 border rounded-md bg-muted/50">
+                  {user.username}
+                </p>
+                {isEditing && (
+                  <p className="text-xs text-muted-foreground">
+                    Contact a supervisor to change your username.
                   </p>
                 )}
               </div>
 
-              {/* Email */}
+              {/* Email — login identity, changed by a Supervisor in User Management */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                {isEditing ? (
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    placeholder="Enter email address"
-                  />
-                ) : (
-                  <p className="text-sm p-2 border rounded-md bg-muted/50 flex items-center">
-                    <Mail className="h-4 w-4 mr-2" />
-                    {user.email || "Not provided"}
+                <p id="email" className="text-sm p-2 border rounded-md bg-muted/50 flex items-center">
+                  <Mail className="h-4 w-4 mr-2" />
+                  {user.email || "Not provided"}
+                </p>
+                {isEditing && (
+                  <p className="text-xs text-muted-foreground">
+                    Contact a supervisor to change your email.
                   </p>
                 )}
               </div>

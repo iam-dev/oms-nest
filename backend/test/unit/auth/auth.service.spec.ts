@@ -600,6 +600,74 @@ describe("AuthService", () => {
     });
   });
 
+  describe("update (PATCH /auth/me)", () => {
+    const jwtPayload = {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      role: { id: 2, name: "admin" },
+      iat: 1234567890,
+      exp: 1234567990,
+    };
+
+    it("should store firstName + lastName as the legacy full_name column", async () => {
+      // Arrange — the legacy credentials table only has full_name, so the
+      // self-service profile form's firstName/lastName must be joined.
+      usersService.findById.mockResolvedValue(mockUser as User);
+      usersService.update.mockResolvedValue(mockUser as User);
+
+      // Act
+      await service.update(jwtPayload, {
+        firstName: "Ada",
+        lastName: "Lovelace",
+      });
+
+      // Assert
+      expect(usersService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({ name: "Ada Lovelace" }),
+      );
+    });
+
+    it("should keep the existing surname when only firstName is sent", async () => {
+      usersService.findById.mockResolvedValue({
+        ...mockUser,
+        name: "Test User",
+      } as User);
+      usersService.update.mockResolvedValue(mockUser as User);
+
+      await service.update(jwtPayload, { firstName: "Ada" });
+
+      expect(usersService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({ name: "Ada User" }),
+      );
+    });
+
+    it("should clear the surname when lastName is sent empty", async () => {
+      usersService.findById.mockResolvedValue({
+        ...mockUser,
+        name: "Test User",
+      } as User);
+      usersService.update.mockResolvedValue(mockUser as User);
+
+      await service.update(jwtPayload, { firstName: "Test", lastName: "" });
+
+      expect(usersService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({ name: "Test" }),
+      );
+    });
+
+    it("should not touch name when neither firstName nor lastName is sent", async () => {
+      usersService.findById.mockResolvedValue(mockUser as User);
+      usersService.update.mockResolvedValue(mockUser as User);
+
+      await service.update(jwtPayload, {});
+
+      const [, dto] = usersService.update.mock.calls[0];
+      expect(dto).not.toHaveProperty("name");
+    });
+  });
+
   describe("refreshToken", () => {
     it("should refresh token with valid session", async () => {
       // Arrange

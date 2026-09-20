@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEmail, IsNotEmpty, IsOptional, MinLength } from "class-validator";
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from "class-validator";
 import { FileDto } from "../../files/dto/file.dto";
 import { Transform } from "class-transformer";
 import { lowerCaseTransformer } from "../../utils/transformers/lower-case.transformer";
@@ -14,9 +20,11 @@ export class AuthUpdateDto {
   @IsNotEmpty({ message: "mustBeNotEmpty" })
   firstName?: string;
 
+  // May be empty: legacy accounts often carry a single-word full_name, and a
+  // user must be able to save their profile (or clear a surname) in that case.
   @ApiPropertyOptional({ example: "Doe" })
   @IsOptional()
-  @IsNotEmpty({ message: "mustBeNotEmpty" })
+  @IsString()
   lastName?: string;
 
   @ApiPropertyOptional({ example: "new.email@example.com" })

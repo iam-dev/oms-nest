@@ -593,9 +593,42 @@ export class AuthService {
     delete userDto.email;
     delete userDto.oldPassword;
 
-    await this.usersService.update(userJwtPayload.id, userDto);
+    // The legacy credentials table stores a single full_name, while the
+    // self-service profile form edits firstName/lastName. Join them here so
+    // a partial update keeps the half the caller did not send.
+    const { firstName, lastName, ...updateDto } = userDto;
+    const name = this.composeName(currentUser.name, firstName, lastName);
+
+    await this.usersService.update(userJwtPayload.id, {
+      ...updateDto,
+      ...(name !== undefined ? { name } : {}),
+    });
 
     return this.usersService.findById(userJwtPayload.id);
+  }
+
+  /**
+   * Merge a firstName/lastName pair into the legacy single `name` column.
+   * Returns undefined when neither part was sent so the column is untouched.
+   * The current name is split on its first space: everything before is the
+   * first name, everything after is the surname (matches the frontend's
+   * AuthContext mapping).
+   */
+  private composeName(
+    currentName: string | null | undefined,
+    firstName?: string,
+    lastName?: string,
+  ): string | undefined {
+    if (firstName === undefined && lastName === undefined) return undefined;
+
+    const parts = (currentName ?? "").trim().split(/\s+/).filter(Boolean);
+    const currentFirst = parts[0] ?? "";
+    const currentLast = parts.slice(1).join(" ");
+
+    return [firstName ?? currentFirst, lastName ?? currentLast]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ");
   }
 
   async refreshToken(
