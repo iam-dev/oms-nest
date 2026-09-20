@@ -27,11 +27,13 @@ import {
   EnrichedOrdersQueryDto,
   UpdateOrderDto,
 } from "./enriched-orders.service";
+import {
+  assertFitterMayEditOrders,
+  type ScopedUser,
+} from "./fitter-order-lock";
 
 /** What the JWT guard puts on the request; only the bits scoping needs. */
-type ScopedRequest = {
-  user?: { legacyId?: number; role?: { id: number; name?: string } };
-};
+type ScopedRequest = { user?: ScopedUser };
 
 @ApiTags("Enriched Orders")
 @Controller({
@@ -79,6 +81,21 @@ export class EnrichedOrdersController {
     if (foreign !== undefined) {
       throw new NotFoundException(`Order with ID ${foreign} not found`);
     }
+  }
+
+  /**
+   * Ownership plus the post-approval lock: a fitter may change their own
+   * order only while it is still before approval (403 otherwise).
+   */
+  private assertFitterMayEdit(
+    orderIds: number[],
+    req?: ScopedRequest,
+  ): Promise<void> {
+    return assertFitterMayEditOrders(
+      this.enrichedOrdersService,
+      orderIds,
+      req?.user,
+    );
   }
 
   @Get()
@@ -243,7 +260,7 @@ export class EnrichedOrdersController {
           HttpStatus.BAD_REQUEST,
         );
       }
-      await this.assertFitterOwnsOrders(body.orderIds, req);
+      await this.assertFitterMayEdit(body.orderIds, req);
       this.logger.log(
         `Bulk updating ${body.orderIds.length} orders to status: ${body.status}`,
       );
@@ -277,7 +294,7 @@ export class EnrichedOrdersController {
     @Req() req: ScopedRequest,
   ) {
     try {
-      await this.assertFitterOwnsOrders([id], req);
+      await this.assertFitterMayEdit([id], req);
       this.logger.log(`Updating order status for ID ${id} to: ${body.status}`);
       const userId = req.user?.legacyId;
       const result = await this.enrichedOrdersService.updateOrderStatus(
@@ -287,7 +304,10 @@ export class EnrichedOrdersController {
       );
       return result;
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       this.logger.error(`Failed to update order status for ID ${id}`, error);
@@ -406,7 +426,10 @@ export class EnrichedOrdersController {
       this.logger.log(`Updating order ${id}`);
       const userId = req.user?.legacyId;
       const userRoleId = req.user?.role?.id;
-      // A fitter can neither edit someone else's order nor hand theirs over.
+      // A fitter can neither edit someone else's order, nor an approved one,
+      // nor hand theirs over. The service repeats the status check for its
+      // other callers; this is the one that answers the request.
+      await this.assertFitterMayEdit([id], req);
       const ownFitterId = await this.scopedFitterId(req);
       if (ownFitterId !== undefined) {
         body = { ...body, fitterId: ownFitterId };

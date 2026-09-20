@@ -18,6 +18,25 @@ jest.mock('@/services/api-config', () => ({
   API_URL: 'http://localhost:3001',
 }));
 
+// Role: admin unless a test says otherwise (the fitter lock hides controls).
+const mockUseUserRole = jest.fn();
+jest.mock('@/hooks/useUserRole', () => ({
+  useUserRole: () => mockUseUserRole(),
+}));
+function setMockRole(role: 'admin' | 'fitter') {
+  const value = role === 'admin' ? 'ROLE_ADMIN' : 'ROLE_FITTER';
+  mockUseUserRole.mockReturnValue({
+    role: value,
+    isAdmin: role === 'admin',
+    isSupervisor: false,
+    isFitter: role === 'fitter',
+    isSupplier: false,
+    isUser: false,
+    hasRole: jest.fn(),
+    hasAnyRole: jest.fn(),
+  });
+}
+
 // FE-039: OrderDetails now uses useRouter for client-side navigation
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -210,6 +229,42 @@ const defaultOrder = { id: '42', orderId: 1001, status: 'Ordered' };
 describe('OrderDetails component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    setMockRole('admin');
+  });
+
+  // -------------------------------------------------------------------------
+  // 0. Fitter lock: no status changes once the order is past approval
+  // -------------------------------------------------------------------------
+  describe('fitter lock', () => {
+    it('hides the status change controls from a fitter once the order is locked', async () => {
+      setMockRole('fitter');
+      fetchOrderDetail.mockResolvedValue({ ...mockOrderDetail, orderStatus: 'On hold' });
+
+      render(<OrderDetails order={{ ...defaultOrder, status: 'On hold' }} onClose={jest.fn()} />);
+
+      await waitFor(() => expect(screen.getByText('On hold')).toBeInTheDocument());
+      expect(screen.queryByText('Change orderstatus')).not.toBeInTheDocument();
+      expect(screen.getByText(/cannot be changed by fitters/i)).toBeInTheDocument();
+      // Commenting stays open on a locked order.
+      expect(screen.getByText('Add comment')).toBeInTheDocument();
+    });
+
+    it('keeps the status change controls for a fitter while the order is open', async () => {
+      setMockRole('fitter');
+      fetchOrderDetail.mockResolvedValue(mockOrderDetail);
+
+      render(<OrderDetails order={defaultOrder} onClose={jest.fn()} />);
+
+      await waitFor(() => expect(screen.getByText('Change orderstatus')).toBeInTheDocument());
+    });
+
+    it('keeps the status change controls for an admin on a locked order', async () => {
+      fetchOrderDetail.mockResolvedValue({ ...mockOrderDetail, orderStatus: 'Completed sale' });
+
+      render(<OrderDetails order={{ ...defaultOrder, status: 'Completed sale' }} onClose={jest.fn()} />);
+
+      await waitFor(() => expect(screen.getByText('Change orderstatus')).toBeInTheDocument());
+    });
   });
 
   // -------------------------------------------------------------------------

@@ -28,6 +28,9 @@ import { sanitizeForCell } from '@/utils/cellSanitization';
 import { renderLegacyLogContent } from '@/utils/legacyLogContent';
 import { logger } from '@/utils/logger';
 import { API_URL } from '@/services/api-config';
+import { useUserRole } from '@/hooks/useUserRole';
+import { canEditOrder } from '@/utils/rolePermissions';
+import { UserRole } from '@/types/Role';
 
 interface OrderDetailsProps {
   order: {
@@ -89,6 +92,10 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
 
   const [orderStatus, setOrderStatus] = useState(order.orderStatus || order.status || '');
   const [statusChanging, setStatusChanging] = useState(false);
+  // Fitter lock: once an order is past approval a fitter may no longer change
+  // its status (the backend refuses with 403; this just hides the controls).
+  const { role } = useUserRole();
+  const statusLockedForFitter = role === UserRole.FITTER && !canEditOrder(role, orderStatus);
   const [comment, setComment] = useState('');
   const [sendTo, setSendTo] = useState('fitter-factory');
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -628,6 +635,17 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
                 {/* Order Status section */}
                 <div className="border rounded-lg p-4">
                   <h3 className="font-semibold text-sm mb-4">Order Status</h3>
+                  {statusLockedForFitter ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-gray-700 text-sm">Order Status:</span>
+                        <span className="text-sm text-gray-900" data-testid="locked-order-status">{orderStatus}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        This order has been approved and cannot be changed by fitters.
+                      </p>
+                    </div>
+                  ) : (
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <span className="font-medium text-gray-700 text-sm">Order Status:</span>
@@ -665,6 +683,7 @@ export function OrderDetails({ order, onClose, onOrderChanged }: OrderDetailsPro
                       {statusChanging ? 'Changing...' : 'Change orderstatus'}
                     </Button>
                   </div>
+                  )}
                 </div>
               </div>
 

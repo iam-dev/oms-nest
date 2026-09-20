@@ -719,5 +719,36 @@ describe("EnrichedOrdersService - Create & Update methods", () => {
         [[1, 2, 3]],
       );
     });
+
+    it("should getOrderLockStates maps each order id to its fitter and status", async () => {
+      mockDataSource.query.mockResolvedValue([
+        { id: 1, fitter_id: 49, order_status: 4, status_name: "On hold" },
+        { id: 2, fitter_id: 274, order_status: 1, status_name: "Ordered" },
+        { id: 4, fitter_id: 49, order_status: 99, status_name: null },
+      ]);
+
+      const map = await service.getOrderLockStates([1, 2, 3, 4]);
+
+      expect(map.get(1)).toEqual({
+        fitterId: 49,
+        statusId: 4,
+        statusName: "On hold",
+      });
+      expect(map.get(2)).toEqual({
+        fitterId: 274,
+        statusId: 1,
+        statusName: "Ordered",
+      });
+      expect(map.has(3)).toBe(false);
+      expect(map.get(4)).toEqual({
+        fitterId: 49,
+        statusId: 99,
+        statusName: "ID 99",
+      });
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringMatching(/LEFT JOIN statuses/),
+        [[1, 2, 3, 4]],
+      );
+    });
   });
 });

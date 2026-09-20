@@ -1,12 +1,18 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { OrderLineController } from "../../../src/order-lines/order-line.controller";
 import { OrderLineService } from "../../../src/order-lines/order-line.service";
+import { EnrichedOrdersService } from "../../../src/enriched-orders/enriched-orders.service";
 import { CreateOrderLineDto } from "../../../src/order-lines/dto/create-order-line.dto";
 import { UpdateOrderLineDto } from "../../../src/order-lines/dto/update-order-line.dto";
 
 describe("OrderLineController", () => {
   let controller: OrderLineController;
   let service: jest.Mocked<OrderLineService>;
+  let orderAccess: {
+    getFitterIdByUserId: jest.Mock;
+    getOrderLockStates: jest.Mock;
+  };
 
   const mockOrderLineDto = {
     id: 1,
@@ -36,6 +42,11 @@ describe("OrderLineController", () => {
       resequence: jest.fn(),
     };
 
+    orderAccess = {
+      getFitterIdByUserId: jest.fn().mockResolvedValue(49),
+      getOrderLockStates: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrderLineController],
       providers: [
@@ -43,6 +54,7 @@ describe("OrderLineController", () => {
           provide: OrderLineService,
           useValue: mockService,
         },
+        { provide: EnrichedOrdersService, useValue: orderAccess },
       ],
     }).compile();
 
@@ -335,6 +347,119 @@ describe("OrderLineController", () => {
       await expect(controller.remove(999)).rejects.toThrow(
         "Order line not found",
       );
+    });
+  });
+
+  describe("fitter lock", () => {
+    const fitterReq = {
+      user: { legacyId: 83, role: { id: 1, name: "fitter" } },
+    };
+    const adminReq = { user: { legacyId: 1, role: { id: 2, name: "admin" } } };
+    const locked = new Map([
+      [100, { fitterId: 49, statusId: 2, statusName: "Approved" }],
+    ]);
+    const open = new Map([
+      [100, { fitterId: 49, statusId: 1, statusName: "Ordered" }],
+    ]);
+
+    it("should create refuses a line on the fitter's own approved order", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(
+        controller.create({ orderId: 100, productId: 1 } as any, fitterReq),
+      ).rejects.toThrow(
+        new ForbiddenException(
+          "Fitters cannot edit orders with status: Approved",
+        ),
+      );
+      expect(service.create).not.toHaveBeenCalled();
+    });
+
+    it("should create hides another fitter's order behind a 404", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(
+        new Map([[100, { fitterId: 274, statusId: 1, statusName: "Ordered" }]]),
+      );
+
+      await expect(
+        controller.create({ orderId: 100, productId: 1 } as any, fitterReq),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.create).not.toHaveBeenCalled();
+    });
+
+    it("should create proceeds on the fitter's own open order", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(open);
+      service.create.mockResolvedValue(mockOrderLineDto as any);
+
+      await controller.create({ orderId: 100, productId: 1 } as any, fitterReq);
+
+      expect(orderAccess.getOrderLockStates).toHaveBeenCalledWith([100]);
+      expect(service.create).toHaveBeenCalled();
+    });
+
+    it("should create skips the lookup for admins", async () => {
+      service.create.mockResolvedValue(mockOrderLineDto as any);
+
+      await controller.create({ orderId: 100, productId: 1 } as any, adminReq);
+
+      expect(orderAccess.getOrderLockStates).not.toHaveBeenCalled();
+    });
+
+    it("should bulkCreate checks every distinct order once", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(
+        new Map([
+          [100, { fitterId: 49, statusId: 1, statusName: "Ordered" }],
+          [200, { fitterId: 49, statusId: 6, statusName: "On trial" }],
+        ]),
+      );
+
+      await expect(
+        controller.bulkCreate(
+          [{ orderId: 100 }, { orderId: 200 }, { orderId: 100 }] as any,
+          fitterReq,
+        ),
+      ).rejects.toThrow("Fitters cannot edit orders with status: On trial");
+      expect(orderAccess.getOrderLockStates).toHaveBeenCalledWith([100, 200]);
+      expect(service.bulkCreate).not.toHaveBeenCalled();
+    });
+
+    it("should resequence refuses a locked order", async () => {
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(
+        controller.resequence(100, [1, 2], fitterReq),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.resequence).not.toHaveBeenCalled();
+    });
+
+    it("should update resolves the line's order before applying the lock", async () => {
+      service.findOne.mockResolvedValue({ ...mockOrderLineDto, orderId: 100 });
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(
+        controller.update(1, { quantity: 3 }, fitterReq),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.findOne).toHaveBeenCalledWith(1);
+      expect(orderAccess.getOrderLockStates).toHaveBeenCalledWith([100]);
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it("should remove resolves the line's order before applying the lock", async () => {
+      service.findOne.mockResolvedValue({ ...mockOrderLineDto, orderId: 100 });
+      orderAccess.getOrderLockStates.mockResolvedValue(locked);
+
+      await expect(controller.remove(1, fitterReq)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(service.remove).not.toHaveBeenCalled();
+    });
+
+    it("should update does not look the line up for admins", async () => {
+      service.update.mockResolvedValue(mockOrderLineDto as any);
+
+      await controller.update(1, { quantity: 3 }, adminReq);
+
+      expect(service.findOne).not.toHaveBeenCalled();
+      expect(service.update).toHaveBeenCalledWith(1, { quantity: 3 });
     });
   });
 });

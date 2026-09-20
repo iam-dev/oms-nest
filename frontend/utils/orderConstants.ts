@@ -25,16 +25,23 @@ export const orderStatuses = [
   'Inventory HOLLAND'
 ];
 
-// Statuses where fitters are NOT allowed to edit orders
-// Admins and Supervisors can edit orders in any status
+// Statuses where fitters are NOT allowed to edit orders: everything an order
+// can be in once it has been approved. Admins and Supervisors can edit orders
+// in any status. Keep in step with FITTER_LOCKED_STATUS_IDS in
+// backend/src/enriched-orders/fitter-order-lock.ts (the backend is authoritative).
 export const FITTER_RESTRICTED_STATUSES = [
   'Approved',
   'In Production P1',
   'In Production P2',
   'In Production P3',
+  'On hold',
+  'On trial',
   'Shipped to Fitter',
   'Shipped to Customer',
   'Completed sale',
+  'Inventory Aiken',
+  'Inventory UK',
+  'Inventory HOLLAND',
 ];
 
 // Legacy statuses for compatibility

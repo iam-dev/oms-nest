@@ -3,6 +3,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { OrderProductSaddleEntity } from "./infrastructure/persistence/relational/entities/order-product-saddle.entity";
 import { OrderProductSaddleController } from "./order-product-saddle.controller";
 import { OrderProductSaddleService } from "./order-product-saddle.service";
+import { EnrichedOrdersModule } from "../enriched-orders/enriched-orders.module";
 
 /**
  * OrderProductSaddle Module
@@ -12,7 +13,11 @@ import { OrderProductSaddleService } from "./order-product-saddle.service";
  * quantity, and product-specific details.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([OrderProductSaddleEntity])],
+  // EnrichedOrdersModule supplies the fitter lock lookups for writes.
+  imports: [
+    TypeOrmModule.forFeature([OrderProductSaddleEntity]),
+    EnrichedOrdersModule,
+  ],
   controllers: [OrderProductSaddleController],
   providers: [OrderProductSaddleService],
   exports: [OrderProductSaddleService],

@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -28,12 +29,22 @@ import { CreateOrderLineDto } from "./dto/create-order-line.dto";
 import { UpdateOrderLineDto } from "./dto/update-order-line.dto";
 import { QueryOrderLineDto } from "./dto/query-order-line.dto";
 import { OrderLineDto } from "./dto/order-line.dto";
+import { EnrichedOrdersService } from "../enriched-orders/enriched-orders.service";
+import {
+  assertFitterMayEditOrders,
+  isScopedFitter,
+  type ScopedUser,
+} from "../enriched-orders/fitter-order-lock";
+
+type ScopedRequest = { user?: ScopedUser };
 
 /**
  * OrderLine REST API Controller
  *
  * Handles HTTP requests for order line item management operations.
  * Provides CRUD operations and order-specific line item queries.
+ * Writes are subject to the fitter lock: a fitter may only touch lines of
+ * their own, not-yet-approved orders.
  */
 @ApiTags("Order Lines")
 @Controller({
@@ -44,7 +55,30 @@ import { OrderLineDto } from "./dto/order-line.dto";
 @Roles(RoleEnum.admin, RoleEnum.supervisor, RoleEnum.fitter)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class OrderLineController {
-  constructor(private readonly orderLineService: OrderLineService) {}
+  constructor(
+    private readonly orderLineService: OrderLineService,
+    private readonly enrichedOrdersService: EnrichedOrdersService,
+  ) {}
+
+  private assertMayEdit(orderIds: number[], req?: ScopedRequest) {
+    return assertFitterMayEditOrders(
+      this.enrichedOrdersService,
+      [...new Set(orderIds)],
+      req?.user,
+    );
+  }
+
+  /** Lock check for a line addressed by its own id: resolve the order first. */
+  private async assertMayEditLine(
+    lineId: number,
+    req?: ScopedRequest,
+  ): Promise<void> {
+    if (!isScopedFitter(req?.user)) {
+      return;
+    }
+    const line = await this.orderLineService.findOne(lineId);
+    await this.assertMayEdit([line.orderId], req);
+  }
 
   @Post()
   @ApiOperation({
@@ -61,7 +95,11 @@ export class OrderLineController {
     status: 400,
     description: "Invalid input data",
   })
-  async create(@Body() createDto: CreateOrderLineDto): Promise<OrderLineDto> {
+  async create(
+    @Body() createDto: CreateOrderLineDto,
+    @Req() req?: ScopedRequest,
+  ): Promise<OrderLineDto> {
+    await this.assertMayEdit([createDto.orderId], req);
     return this.orderLineService.create(createDto);
   }
 
@@ -81,7 +119,12 @@ export class OrderLineController {
   })
   async bulkCreate(
     @Body() createDtos: CreateOrderLineDto[],
+    @Req() req?: ScopedRequest,
   ): Promise<OrderLineDto[]> {
+    await this.assertMayEdit(
+      createDtos.map((dto) => dto.orderId),
+      req,
+    );
     return this.orderLineService.bulkCreate(createDtos);
   }
 
@@ -186,7 +229,9 @@ export class OrderLineController {
   async resequence(
     @Param("orderId", ParseIntPipe) orderId: number,
     @Body("lineIds") lineIds: number[],
+    @Req() req?: ScopedRequest,
   ): Promise<OrderLineDto[]> {
+    await this.assertMayEdit([orderId], req);
     return this.orderLineService.resequence(orderId, lineIds);
   }
 
@@ -257,7 +302,9 @@ export class OrderLineController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateOrderLineDto,
+    @Req() req?: ScopedRequest,
   ): Promise<OrderLineDto> {
+    await this.assertMayEditLine(id, req);
     return this.orderLineService.update(id, updateDto);
   }
 
@@ -280,7 +327,11 @@ export class OrderLineController {
     status: 404,
     description: "Order line not found",
   })
-  async remove(@Param("id", ParseIntPipe) id: number): Promise<void> {
+  async remove(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req?: ScopedRequest,
+  ): Promise<void> {
+    await this.assertMayEditLine(id, req);
     return this.orderLineService.remove(id);
   }
 }
