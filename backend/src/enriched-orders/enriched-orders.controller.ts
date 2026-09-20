@@ -28,6 +28,11 @@ import {
   UpdateOrderDto,
 } from "./enriched-orders.service";
 
+/** What the JWT guard puts on the request; only the bits scoping needs. */
+type ScopedRequest = {
+  user?: { legacyId?: number; role?: { id: number; name?: string } };
+};
+
 @ApiTags("Enriched Orders")
 @Controller({
   path: "enriched_orders",
@@ -41,11 +46,45 @@ export class EnrichedOrdersController {
 
   constructor(private readonly enrichedOrdersService: EnrichedOrdersService) {}
 
+  /**
+   * fitters.id of the logged-in user when they are a fitter; undefined for
+   * admins/supervisors, who are never scoped.
+   */
+  private async scopedFitterId(
+    req?: ScopedRequest,
+  ): Promise<number | undefined> {
+    if (req?.user?.role?.id !== RoleEnum.fitter || !req.user.legacyId) {
+      return undefined;
+    }
+    const fitterId = await this.enrichedOrdersService.getFitterIdByUserId(
+      req.user.legacyId,
+    );
+    return fitterId ?? undefined;
+  }
+
+  /**
+   * A fitter may only act on their own orders. Foreign ids are reported as
+   * missing (same as the scoped list) so they can't be enumerated.
+   */
+  private async assertFitterOwnsOrders(
+    orderIds: number[],
+    req?: ScopedRequest,
+  ): Promise<void> {
+    const ownFitterId = await this.scopedFitterId(req);
+    if (ownFitterId === undefined) {
+      return;
+    }
+    const owners = await this.enrichedOrdersService.getOrderFitterIds(orderIds);
+    const foreign = orderIds.find((id) => owners.get(id) !== ownFitterId);
+    if (foreign !== undefined) {
+      throw new NotFoundException(`Order with ID ${foreign} not found`);
+    }
+  }
+
   @Get()
   async getEnrichedOrders(
     @Query() query: EnrichedOrdersQueryDto,
-    @Req()
-    req: { user?: { legacyId?: number; role?: { id: number; name: string } } },
+    @Req() req: ScopedRequest,
   ) {
     try {
       this.logger.log(
@@ -56,16 +95,12 @@ export class EnrichedOrdersController {
       const sanitizedQuery = this.sanitizeQuery(query);
 
       // Auto-filter for fitter users: only show their own orders
-      if (req.user?.role?.id === RoleEnum.fitter && req.user?.legacyId) {
-        const fitterId = await this.enrichedOrdersService.getFitterIdByUserId(
-          req.user.legacyId,
+      const ownFitterId = await this.scopedFitterId(req);
+      if (ownFitterId !== undefined) {
+        sanitizedQuery.fitterId = ownFitterId;
+        this.logger.log(
+          `Fitter user ${req.user?.legacyId} auto-filtered to fitterId=${ownFitterId}`,
         );
-        if (fitterId) {
-          sanitizedQuery.fitterId = fitterId;
-          this.logger.log(
-            `Fitter user ${req.user.legacyId} auto-filtered to fitterId=${fitterId}`,
-          );
-        }
       }
 
       const result =
@@ -119,6 +154,7 @@ export class EnrichedOrdersController {
   async getEditFormOptions(
     @Query("saddleId") saddleIdStr?: string,
     @Query("includeDiscontinued") includeDiscontinuedStr?: string,
+    @Req() req?: ScopedRequest,
   ) {
     try {
       const saddleId = saddleIdStr ? parseInt(saddleIdStr, 10) : undefined;
@@ -130,6 +166,17 @@ export class EnrichedOrdersController {
         saddleId && !isNaN(saddleId) ? saddleId : undefined,
         includeDiscontinued,
       );
+      // Legacy locks the Fitter LOV to the logged-in fitter: offer only
+      // themselves and tell the form which one that is.
+      const ownFitterId = await this.scopedFitterId(req);
+      if (ownFitterId !== undefined) {
+        const fitters = (result.fitters ?? []) as Array<{ id: number }>;
+        return {
+          ...result,
+          fitters: fitters.filter((f) => f.id === ownFitterId),
+          currentFitterId: ownFitterId,
+        };
+      }
       return result;
     } catch (error) {
       this.logger.error("Failed to fetch edit form options", error);
@@ -145,12 +192,19 @@ export class EnrichedOrdersController {
   }
 
   @Get("detail/:id")
-  async getOrderDetail(@Param("id", ParseIntPipe) id: number) {
+  async getOrderDetail(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req?: ScopedRequest,
+  ) {
     try {
       this.logger.log(`Fetching order detail for ID: ${id}`);
       const result = await this.enrichedOrdersService.getOrderDetail(id);
 
-      if (!result) {
+      const ownFitterId = await this.scopedFitterId(req);
+      if (
+        !result ||
+        (ownFitterId !== undefined && result.fitterId !== ownFitterId)
+      ) {
         throw new NotFoundException(`Order with ID ${id} not found`);
       }
 
@@ -174,7 +228,7 @@ export class EnrichedOrdersController {
   @Patch("bulk-update-status")
   async bulkUpdateOrderStatus(
     @Body() body: { orderIds: number[]; status: string },
-    @Req() req: { user?: { legacyId?: number } },
+    @Req() req: ScopedRequest,
   ) {
     try {
       if (!Array.isArray(body.orderIds) || body.orderIds.length === 0) {
@@ -189,6 +243,7 @@ export class EnrichedOrdersController {
           HttpStatus.BAD_REQUEST,
         );
       }
+      await this.assertFitterOwnsOrders(body.orderIds, req);
       this.logger.log(
         `Bulk updating ${body.orderIds.length} orders to status: ${body.status}`,
       );
@@ -219,9 +274,10 @@ export class EnrichedOrdersController {
   async updateOrderStatus(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: { status: string },
-    @Req() req: { user?: { legacyId?: number } },
+    @Req() req: ScopedRequest,
   ) {
     try {
+      await this.assertFitterOwnsOrders([id], req);
       this.logger.log(`Updating order status for ID ${id} to: ${body.status}`);
       const userId = req.user?.legacyId;
       const result = await this.enrichedOrdersService.updateOrderStatus(
@@ -247,13 +303,15 @@ export class EnrichedOrdersController {
   }
 
   @Post("create")
-  async createOrder(
-    @Body() body: UpdateOrderDto,
-    @Req() req: { user?: { legacyId?: number } },
-  ) {
+  async createOrder(@Body() body: UpdateOrderDto, @Req() req: ScopedRequest) {
     try {
       this.logger.log("Creating new order");
       const userId = req.user?.legacyId;
+      // A fitter's order is always their own, whatever the client sent.
+      const ownFitterId = await this.scopedFitterId(req);
+      if (ownFitterId !== undefined) {
+        body = { ...body, fitterId: ownFitterId };
+      }
       const result = await this.enrichedOrdersService.createOrder(body, userId);
       return result;
     } catch (error) {
@@ -275,8 +333,9 @@ export class EnrichedOrdersController {
   @Post("draft-from/:id")
   async createDraftFromOrder(
     @Param("id", ParseIntPipe) id: number,
-    @Req() req: { user?: { legacyId?: number } },
+    @Req() req: ScopedRequest,
   ) {
+    await this.assertFitterOwnsOrders([id], req);
     try {
       this.logger.log(`Creating draft from order ${id}`);
       const userId = req.user?.legacyId;
@@ -302,7 +361,7 @@ export class EnrichedOrdersController {
   async bulkCreateDraftFromOrder(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: { count: number },
-    @Req() req: { user?: { legacyId?: number } },
+    @Req() req: ScopedRequest,
   ) {
     const count = body.count;
     if (!count || count < 1 || count > 50 || !Number.isInteger(count)) {
@@ -315,6 +374,7 @@ export class EnrichedOrdersController {
       );
     }
 
+    await this.assertFitterOwnsOrders([id], req);
     try {
       this.logger.log(`Creating ${count} draft orders from order ${id}`);
       const userId = req.user?.legacyId;
@@ -340,17 +400,23 @@ export class EnrichedOrdersController {
   async updateOrder(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateOrderDto,
-    @Req() req: { user?: { legacyId?: number; role?: { id: number } } },
+    @Req() req: ScopedRequest,
   ) {
     try {
       this.logger.log(`Updating order ${id}`);
       const userId = req.user?.legacyId;
       const userRoleId = req.user?.role?.id;
+      // A fitter can neither edit someone else's order nor hand theirs over.
+      const ownFitterId = await this.scopedFitterId(req);
+      if (ownFitterId !== undefined) {
+        body = { ...body, fitterId: ownFitterId };
+      }
       const result = await this.enrichedOrdersService.updateOrder(
         id,
         body,
         userId,
         userRoleId,
+        ownFitterId,
       );
       return result;
     } catch (error) {

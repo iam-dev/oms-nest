@@ -26,56 +26,76 @@ The OMS frontend uses JWT (JSON Web Token) based authentication with httpOnly co
 
 ### Role Hierarchy
 
+Roles are defined in `types/Role.ts` and the permission matrix lives in
+`utils/rolePermissions.ts` (`SCREEN_PERMISSIONS`). The backend derives the
+role at login from two legacy columns on `credentials`: `user_type` picks the
+base role, and `supervisor = 1` promotes an account to Supervisor regardless
+of its type.
+
 ```typescript
 export enum UserRole {
-  USER = 'USER',           // Basic customers
-  FITTER = 'FITTER',       // Measurement professionals
-  SUPPLIER = 'SUPPLIER',   // Product suppliers
-  ADMIN = 'ADMIN',         // System administrators
-  SUPERVISOR = 'SUPERVISOR' // Management oversight
+  USER = 'ROLE_USER',             // Basic access: dashboard, orders, saddle modeling
+  FITTER = 'ROLE_FITTER',         // Own customers/orders, saddle stock
+  SUPPLIER = 'ROLE_SUPPLIER',     // Factory: supplier screens, order viewing
+  ADMIN = 'ROLE_ADMIN',           // Runs the business: orders, customers, fitters, catalog
+  SUPERVISOR = 'ROLE_SUPERVISOR', // Administrator + Account Management
 }
-
-// Permission levels (cumulative)
-const rolePermissions = {
-  USER: ['read:own_orders', 'create:orders', 'update:own_profile'],
-  FITTER: ['read:assigned_orders', 'update:measurements', 'read:customers'],
-  SUPPLIER: ['read:orders', 'update:fulfillment', 'manage:inventory'],
-  SUPERVISOR: ['read:all_orders', 'approve:orders', 'read:reports'],
-  ADMIN: ['*'] // Full system access
-};
 ```
+
+**Hierarchy**: `SUPERVISOR > ADMIN > FITTER / SUPPLIER > USER`.
+
+`hasScreenPermission()` gives Supervisor every screen Administrator has plus
+the Supervisor-only ones. It does *not* give Supervisor the Fitter-only
+screens (e.g. My Saddle Stock): those model a job, not a rank.
+
+### Administrator vs Supervisor
+
+| Area | Administrator | Supervisor |
+|------|:-------------:|:----------:|
+| Dashboard, Orders, Customers, Fitters, Reports, My Views | ✓ | ✓ |
+| Saddle Modeling (brands, models, leather types, options, extras, presets, suppliers) | ✓ | ✓ |
+| Order create / edit / delete / approve | ✓ | ✓ |
+| Customer, Fitter, Supplier create / edit / delete | ✓ | ✓ |
+| All Saddle Stock, Repairs | ✓ | ✓ |
+| **Account Management**: User Management, Warehouses, Access Filter Groups, Country Managers, User Permissions view | ✗ | ✓ |
+
+The Account Management boundary is enforced on the API, not just hidden in
+the UI: the `users`, `warehouses`, `access-filter-groups` and
+`country-managers` controllers carry `@Roles(RoleEnum.supervisor)` and reject
+Administrator tokens with 403. `backend/test/unit/roles/account-management-roles.spec.ts`
+pins this.
+
+Every role can still edit their own name on the Profile page: that goes
+through `PATCH /auth/me`, never through the Supervisor-only `/users/:id`.
+Username and email are the legacy login identity and are changed by a
+Supervisor in User Management.
 
 ### Role-Based Features
 
-**User (Customer)**
-- Place and track orders
-- View order history
-- Manage personal profile
-- Configure saddle preferences
+**User**
+- Dashboard and orders
+- Saddle modeling catalog (brands, models, leather types, options, extras, presets)
+- Repairs
 
 **Fitter**
-- View assigned orders
-- Record measurements
-- Update order status
-- Access customer information
+- Own customers and orders (scoped on every endpoint)
+- Create orders and customers, edit orders in non-restricted statuses
+- My Saddle Stock, Available Saddle Stock, Repairs
 
-**Supplier**
-- View production orders
-- Update fulfillment status
-- Manage inventory
-- Track delivery schedules
+**Supplier (Factory)**
+- Dashboard and order viewing
+- Supplier screens
+
+**Administrator**
+- Everything above except Fitter-only saddle stock views
+- Fitters, Reports, My Views
+- Delete and approve orders; manage customers, fitters and suppliers
+- All Saddle Stock
 
 **Supervisor**
-- Monitor all operations
-- Approve special requests
-- Generate reports
-- Oversee performance
-
-**Admin**
-- Full system access
-- User management
-- System configuration
-- Security settings
+- Everything an Administrator can do
+- Account Management: users, warehouses, access filter groups, country managers
+- User Permissions view
 
 ## 🏪 State Management
 

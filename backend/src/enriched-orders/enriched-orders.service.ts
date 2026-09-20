@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  NotFoundException,
 } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource, QueryRunner } from "typeorm";
@@ -246,6 +247,18 @@ export class EnrichedOrdersService {
       [legacyUserId],
     );
     return result[0]?.id ?? null;
+  }
+
+  /** Map each order id to its fitter_id; ids that don't exist are absent. */
+  async getOrderFitterIds(
+    orderIds: number[],
+  ): Promise<Map<number, number | null>> {
+    const rows: Array<{ id: number; fitter_id: number | null }> =
+      await this.dataSource.query(
+        "SELECT id, fitter_id FROM orders WHERE id = ANY($1) AND deleted_at IS NULL",
+        [orderIds],
+      );
+    return new Map(rows.map((r) => [Number(r.id), r.fitter_id]));
   }
 
   async getEnrichedOrders(
@@ -2021,6 +2034,7 @@ export class EnrichedOrdersService {
     dto: UpdateOrderDto,
     userId?: number,
     userRoleId?: number,
+    scopedFitterId?: number,
   ): Promise<{ success: boolean; orderId: number }> {
     this.logger.log(`Updating order ${orderId}`);
 
@@ -2047,6 +2061,11 @@ export class EnrichedOrdersService {
       const existingFitterId = existing[0].fitter_id;
       const existingCustomerId = existing[0].customer_id;
       const existingSaddleId = existing[0].saddle_id;
+
+      // A fitter only ever sees their own orders; anyone else's is "not found".
+      if (scopedFitterId !== undefined && existingFitterId !== scopedFitterId) {
+        throw new NotFoundException(`Order ${orderId} not found`);
+      }
 
       // Fitter role-based status restriction
       if (

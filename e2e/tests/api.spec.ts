@@ -336,22 +336,37 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
 
   // ==================== Users ====================
 
-  test('should handle users API @api', async () => {
+  test('should deny users API to admin @api', async () => {
+    // Account Management is Supervisor-only on the API. The admin session
+    // must be refused by the RolesGuard before the handler runs.
     const usersResponse = await apiContext.get(`${API_URL}/api/v1/users`);
+    expect(
+      usersResponse.status(),
+      'Admin must not be able to list users',
+    ).toBe(403);
+  });
+
+  test('should handle users API as supervisor @api', async () => {
+    test.skip(!isAuthenticated('supervisor'), authFailureReason('supervisor'));
+    const supervisorContext = await request.newContext(apiContextOptions('supervisor'));
+
+    const usersResponse = await supervisorContext.get(`${API_URL}/api/v1/users`);
     const status = usersResponse.status();
 
-    // Users endpoint requires admin/supervisor role — accept 200, 403, 401, or 500 (internal error in staging)
+    // Accept 500 too — internal error on the legacy user view in staging
     if (!usersResponse.ok()) {
       const body = await usersResponse.text().catch(() => '(no body)');
       console.log(`Users API returned status ${status}: ${body.slice(0, 300)}`);
       expect(
-        [403, 401, 500].includes(status),
-        `Users API returned unexpected status ${status}: ${body.slice(0, 200)}`
+        status === 500,
+        `Supervisor accessing /users returned unexpected status ${status}: ${body.slice(0, 200)}`
       ).toBeTruthy();
+      await supervisorContext.dispose();
       return;
     }
 
     const usersData = await usersResponse.json();
+    await supervisorContext.dispose();
 
     // Users endpoint returns infinity pagination format
     if (usersData.data) {
@@ -367,11 +382,24 @@ test.describe('API Endpoints @api @critical @smoke @readonly', () => {
 
   // ==================== Warehouses ====================
 
-  test('should handle warehouses API @api', async () => {
+  test('should deny warehouses API to admin @api', async () => {
+    // Account Management is Supervisor-only on the API.
     const warehousesResponse = await apiContext.get(`${API_URL}/api/v1/warehouses`);
+    expect(
+      warehousesResponse.status(),
+      'Admin must not be able to list warehouses',
+    ).toBe(403);
+  });
+
+  test('should handle warehouses API as supervisor @api', async () => {
+    test.skip(!isAuthenticated('supervisor'), authFailureReason('supervisor'));
+    const supervisorContext = await request.newContext(apiContextOptions('supervisor'));
+
+    const warehousesResponse = await supervisorContext.get(`${API_URL}/api/v1/warehouses`);
     expect(warehousesResponse.ok()).toBeTruthy();
 
     const warehousesData = await warehousesResponse.json();
+    await supervisorContext.dispose();
 
     // Warehouses return { data: [], meta: { total, page, limit, totalPages } }
     if (warehousesData.data) {

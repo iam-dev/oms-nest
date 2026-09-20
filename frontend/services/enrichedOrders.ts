@@ -908,6 +908,8 @@ export async function paginatedSearch(searchParams: SearchFilters & { page?: num
 
 export interface EditFormOptions {
   fitters: Array<{ id: number; username: string; fullName: string; active?: boolean; currency?: number }>;
+  /** Set for fitter-role users: the backend offers only this fitter and the form locks the LOV to it. */
+  currentFitterId?: number;
   saddles: Array<{ id: number; brand: string; modelName: string; displayName: string; active?: number }>;
   leatherTypes: Array<{ id: number; name: string } & PricedLeather>;
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type?: number; price1?: number; extraAllowed: number }>;

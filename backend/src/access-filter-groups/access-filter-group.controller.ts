@@ -36,7 +36,7 @@ import { AccessFilterGroupEntity } from "./infrastructure/persistence/relational
   version: "1",
 })
 @ApiCookieAuth("token")
-@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@Roles(RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class AccessFilterGroupController {
   constructor(private readonly service: AccessFilterGroupService) {}

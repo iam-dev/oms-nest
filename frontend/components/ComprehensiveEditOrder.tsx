@@ -172,8 +172,9 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       setOrderDetail(detail);
       setEditOptions(options);
 
-      // Populate form state from order detail
-      setFitterId(String(detail.fitterId || ''));
+      // Populate form state from order detail. A fitter-role user's order is
+      // always their own, so an order saved without a fitter gets theirs.
+      setFitterId(String(detail.fitterId || options?.currentFitterId || ''));
       setSaddleId(String(detail.saddleId || ''));
       setLeatherId(String(detail.leatherId || ''));
       setIsStock(!!detail.fitterStock);
@@ -278,6 +279,10 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
       setLoadingData(false);
     }
   }, [orderId, isDuplicate, fetchEditOptions]);
+
+  // A fitter can't hand an order to someone else: when the backend names the
+  // current fitter (fitter-role user) the Fitter LOV is locked.
+  const lockedFitterId = editOptions?.currentFitterId;
 
   // Load order data and edit options
   useEffect(() => {
@@ -843,7 +848,7 @@ export function ComprehensiveEditOrder({ order, isDuplicate = false, draftOrderI
                     <Label className="text-sm font-medium">
                       Fitter: <span className="text-red-500">*</span>
                     </Label>
-                    <Select value={fitterId} onValueChange={setFitterId}>
+                    <Select value={fitterId} onValueChange={setFitterId} disabled={!!lockedFitterId}>
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Select fitter..." />
                       </SelectTrigger>

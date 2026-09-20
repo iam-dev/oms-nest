@@ -67,9 +67,9 @@ jest.mock('@/components/ui/select', () => {
   // No type annotations with identifiers here: babel-plugin-jest-hoist rejects them.
   const ChangeContext = ReactActual.createContext(undefined as unknown);
   return {
-    Select: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: unknown }) => (
+    Select: ({ children, value, onValueChange, disabled }: { children: React.ReactNode; value?: string; onValueChange?: unknown; disabled?: boolean }) => (
       <ChangeContext.Provider value={onValueChange}>
-        <div data-testid="select" data-value={value}>
+        <div data-testid="select" data-value={value} data-disabled={disabled ? 'true' : undefined}>
           {children}
         </div>
       </ChangeContext.Provider>
@@ -1686,6 +1686,36 @@ describe('EditOrder component', () => {
       });
 
       await waitFor(() => expect(screen.getByText(/email must be an email/)).toBeInTheDocument());
+    });
+  });
+
+  // =========================================================================
+  // Fitter-role user: the backend offers only the fitter themselves and names
+  // them in `currentFitterId`; the LOV must be pre-filled and locked (legacy).
+  // =========================================================================
+  describe('fitter-role user (locked Fitter LOV)', () => {
+    const fitterSelect = () =>
+      screen.getByText('- Choose fitter -').closest('[data-testid="select"]');
+
+    it('pre-selects the only fitter offered and locks the select when edit-options name the current fitter', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...minimalStep1Options, currentFitterId: 1 }),
+      }) as unknown as typeof fetch;
+
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Test Fitter')).toBeInTheDocument());
+
+      await waitFor(() => expect(fitterSelect()).toHaveAttribute('data-value', '1'));
+      expect(fitterSelect()).toHaveAttribute('data-disabled', 'true');
+    });
+
+    it('leaves the Fitter LOV open and empty when edit-options carry no current fitter (admin)', async () => {
+      renderNewOrder();
+      await waitFor(() => expect(screen.getByText('Test Fitter')).toBeInTheDocument());
+
+      expect(fitterSelect()).toHaveAttribute('data-value', '');
+      expect(fitterSelect()).not.toHaveAttribute('data-disabled');
     });
   });
 });

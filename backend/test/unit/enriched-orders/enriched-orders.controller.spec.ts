@@ -44,6 +44,13 @@ describe("EnrichedOrdersController", () => {
       getOrderDetail: jest.fn(),
       updateOrder: jest.fn(),
       getFitterIdByUserId: jest.fn(),
+      getOrderFitterIds: jest.fn(),
+      createOrder: jest.fn(),
+      getEditFormOptions: jest.fn(),
+      updateOrderStatus: jest.fn(),
+      bulkUpdateOrderStatus: jest.fn(),
+      createDraftFromOrder: jest.fn(),
+      bulkCreateDraftFromOrder: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -360,7 +367,13 @@ describe("EnrichedOrdersController", () => {
       const result = await controller.updateOrder(1, body, req);
 
       // Assert
-      expect(service.updateOrder).toHaveBeenCalledWith(1, body, 42, 1);
+      expect(service.updateOrder).toHaveBeenCalledWith(
+        1,
+        body,
+        42,
+        1,
+        undefined,
+      );
       expect(result).toEqual({ success: true, orderId: 1 });
     });
 
@@ -374,7 +387,13 @@ describe("EnrichedOrdersController", () => {
       await controller.updateOrder(1, body, req);
 
       // Assert
-      expect(service.updateOrder).toHaveBeenCalledWith(1, body, 42, undefined);
+      expect(service.updateOrder).toHaveBeenCalledWith(
+        1,
+        body,
+        42,
+        undefined,
+        undefined,
+      );
     });
 
     it("should propagate ForbiddenException from service", async () => {
@@ -661,6 +680,214 @@ describe("EnrichedOrdersController", () => {
       await controller.getEnrichedOrders({} as any, {});
 
       expect(service.getFitterIdByUserId).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("fitter scoping", () => {
+    const fitterReq = {
+      user: { legacyId: 83, role: { id: 1, name: "fitter" } },
+    };
+    const adminReq = {
+      user: { legacyId: 138, role: { id: 5, name: "supervisor" } },
+    };
+
+    beforeEach(() => {
+      service.getFitterIdByUserId.mockResolvedValue(49);
+    });
+
+    it("should getOrderDetail hides another fitter's order behind a 404", async () => {
+      service.getOrderDetail.mockResolvedValue({ id: 53810, fitterId: 274 });
+
+      await expect(controller.getOrderDetail(53810, fitterReq)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("should getOrderDetail returns the fitter's own order", async () => {
+      const own = { id: 51133, fitterId: 49 };
+      service.getOrderDetail.mockResolvedValue(own);
+
+      await expect(controller.getOrderDetail(51133, fitterReq)).resolves.toBe(
+        own,
+      );
+    });
+
+    it("should getOrderDetail returns any order for admins without a fitter lookup", async () => {
+      const other = { id: 53810, fitterId: 274 };
+      service.getOrderDetail.mockResolvedValue(other);
+
+      await expect(controller.getOrderDetail(53810, adminReq)).resolves.toBe(
+        other,
+      );
+      expect(service.getFitterIdByUserId).not.toHaveBeenCalled();
+    });
+
+    it("should createOrder files the order under the fitter's own id whatever the client sent", async () => {
+      service.createOrder.mockResolvedValue({ success: true, orderId: 1 });
+
+      await controller.createOrder({ fitterId: 274, saddleId: 5 }, fitterReq);
+
+      expect(service.createOrder).toHaveBeenCalledWith(
+        { fitterId: 49, saddleId: 5 },
+        83,
+      );
+    });
+
+    it("should createOrder keeps the admin's chosen fitter", async () => {
+      service.createOrder.mockResolvedValue({ success: true, orderId: 1 });
+
+      await controller.createOrder({ fitterId: 274 }, adminReq);
+
+      expect(service.createOrder).toHaveBeenCalledWith({ fitterId: 274 }, 138);
+    });
+
+    it("should updateOrder forces the fitter's own id and scopes the service call", async () => {
+      service.updateOrder.mockResolvedValue({ success: true, orderId: 1 });
+
+      await controller.updateOrder(
+        1,
+        { fitterId: 274, specialNotes: "n" },
+        fitterReq,
+      );
+
+      expect(service.updateOrder).toHaveBeenCalledWith(
+        1,
+        { fitterId: 49, specialNotes: "n" },
+        83,
+        1,
+        49,
+      );
+    });
+
+    it("should updateOrder passes no scope for admins", async () => {
+      service.updateOrder.mockResolvedValue({ success: true, orderId: 1 });
+
+      await controller.updateOrder(1, { fitterId: 274 }, adminReq);
+
+      expect(service.updateOrder).toHaveBeenCalledWith(
+        1,
+        { fitterId: 274 },
+        138,
+        5,
+        undefined,
+      );
+    });
+
+    it("should getEditFormOptions offers a fitter only themselves and names the current fitter", async () => {
+      service.getEditFormOptions.mockResolvedValue({
+        fitters: [{ id: 49 }, { id: 274 }],
+        saddles: [],
+      });
+
+      const result = await controller.getEditFormOptions(
+        undefined,
+        undefined,
+        fitterReq,
+      );
+
+      expect(result.fitters).toEqual([{ id: 49 }]);
+      expect(result.currentFitterId).toBe(49);
+    });
+
+    it("should getEditFormOptions leaves the fitter list alone for admins", async () => {
+      const opts = { fitters: [{ id: 49 }, { id: 274 }], saddles: [] };
+      service.getEditFormOptions.mockResolvedValue(opts);
+
+      const result = await controller.getEditFormOptions(
+        undefined,
+        undefined,
+        adminReq,
+      );
+
+      expect(result.fitters).toEqual(opts.fitters);
+      expect(result.currentFitterId).toBeUndefined();
+    });
+
+    it("should updateOrderStatus refuses another fitter's order", async () => {
+      service.getOrderFitterIds.mockResolvedValue(new Map([[53810, 274]]));
+
+      await expect(
+        controller.updateOrderStatus(53810, { status: "Ordered" }, fitterReq),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("should createDraftFromOrder refuses another fitter's order", async () => {
+      service.getOrderFitterIds.mockResolvedValue(new Map([[53810, 274]]));
+
+      await expect(
+        controller.createDraftFromOrder(53810, fitterReq),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.createDraftFromOrder).not.toHaveBeenCalled();
+    });
+
+    it("should bulkCreateDraftFromOrder refuses another fitter's order", async () => {
+      service.getOrderFitterIds.mockResolvedValue(new Map([[53810, 274]]));
+
+      await expect(
+        controller.bulkCreateDraftFromOrder(53810, { count: 2 }, fitterReq),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.bulkCreateDraftFromOrder).not.toHaveBeenCalled();
+    });
+
+    it("should bulkUpdateOrderStatus refuses when any order belongs to another fitter", async () => {
+      service.getOrderFitterIds.mockResolvedValue(
+        new Map([
+          [1, 49],
+          [2, 274],
+        ]),
+      );
+
+      await expect(
+        controller.bulkUpdateOrderStatus(
+          { orderIds: [1, 2], status: "Ordered" },
+          fitterReq,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.bulkUpdateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("should bulkUpdateOrderStatus proceeds when every order is the fitter's own", async () => {
+      service.getOrderFitterIds.mockResolvedValue(
+        new Map([
+          [1, 49],
+          [2, 49],
+        ]),
+      );
+      service.bulkUpdateOrderStatus.mockResolvedValue({
+        success: true,
+        updated: 2,
+        failed: 0,
+        results: [],
+      });
+
+      await controller.bulkUpdateOrderStatus(
+        { orderIds: [1, 2], status: "Ordered" },
+        fitterReq,
+      );
+
+      expect(service.bulkUpdateOrderStatus).toHaveBeenCalledWith(
+        [1, 2],
+        "Ordered",
+        83,
+      );
+    });
+
+    it("should status and draft endpoints skip the ownership lookup for admins", async () => {
+      service.updateOrderStatus.mockResolvedValue({
+        success: true,
+        orderId: 53810,
+        status: "Ordered",
+        statusId: 1,
+      });
+
+      await controller.updateOrderStatus(
+        53810,
+        { status: "Ordered" },
+        adminReq,
+      );
+
+      expect(service.getOrderFitterIds).not.toHaveBeenCalled();
     });
   });
 });

@@ -3,7 +3,7 @@
 import React from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { UserRole } from '@/types/Role';
-import { SCREEN_PERMISSIONS, getRoleDisplayName } from '@/utils/rolePermissions';
+import { SCREEN_PERMISSIONS, getRoleDisplayName, hasScreenPermission } from '@/utils/rolePermissions';
 
 // Screen categories for better organization
 const SCREEN_CATEGORIES = {
@@ -108,20 +108,6 @@ function getScreenDisplayName(screen: string): string {
 }
 
 /**
- * Check if a role has access to a specific screen
- */
-function hasRolePermission(role: UserRole, screen: keyof typeof SCREEN_PERMISSIONS): boolean {
-  const allowedRoles = SCREEN_PERMISSIONS[screen] as unknown as UserRole[];
-
-  // Handle role hierarchy - SUPERVISOR inherits ADMIN permissions
-  if (role === UserRole.SUPERVISOR) {
-    return allowedRoles.includes(UserRole.SUPERVISOR) || allowedRoles.includes(UserRole.ADMIN);
-  }
-
-  return allowedRoles.includes(role);
-}
-
-/**
  * Get role badge styling
  */
 function getRoleBadgeStyle(role: UserRole): string {
@@ -207,7 +193,7 @@ export default function UserPermissions() {
                         </td>
                         {allRoles.map(role => (
                           <td key={role} className="px-4 py-3 text-center border-b">
-                            {hasRolePermission(role, permissionKey) ? (
+                            {hasScreenPermission(role, permissionKey) ? (
                               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-600">
                                 ✓
                               </span>

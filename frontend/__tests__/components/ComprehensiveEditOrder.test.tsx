@@ -62,9 +62,9 @@ jest.mock('@/components/ui/select', () => {
   // No type annotations with identifiers here: babel-plugin-jest-hoist rejects them.
   const ChangeContext = ReactActual.createContext(undefined as unknown);
   return {
-    Select: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: unknown }) => (
+    Select: ({ children, value, onValueChange, disabled }: { children: React.ReactNode; value?: string; onValueChange?: unknown; disabled?: boolean }) => (
       <ChangeContext.Provider value={onValueChange}>
-        <div data-testid="select" data-value={value}>
+        <div data-testid="select" data-value={value} data-disabled={disabled ? 'true' : undefined}>
           {children}
         </div>
       </ChangeContext.Provider>
@@ -2088,6 +2088,34 @@ describe('ComprehensiveEditOrder component', () => {
 
         expect(screen.getByLabelText('Complete Re-Flock')).not.toBeChecked();
       });
+    });
+  });
+
+  // =========================================================================
+  // Fitter-role user: the backend names the current fitter in edit-options,
+  // so the Fitter LOV is locked (a fitter can't hand an order to someone else).
+  // =========================================================================
+  describe('fitter-role user (locked Fitter LOV)', () => {
+    const fitterSelect = () =>
+      screen.getByText('Select fitter...').closest('[data-testid="select"]');
+
+    it('locks the Fitter select when edit-options name the current fitter', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockEditOptions, currentFitterId: 5 }),
+      });
+      await renderAndWaitForLoad();
+      await waitFor(() => expect(screen.getByText('Expert Fitter')).toBeInTheDocument());
+
+      expect(fitterSelect()).toHaveAttribute('data-value', '5');
+      expect(fitterSelect()).toHaveAttribute('data-disabled', 'true');
+    });
+
+    it('keeps the Fitter select editable when no current fitter is named (admin)', async () => {
+      await renderAndWaitForLoad();
+      await waitFor(() => expect(screen.getByText('Expert Fitter')).toBeInTheDocument());
+
+      expect(fitterSelect()).not.toHaveAttribute('data-disabled');
     });
   });
 });

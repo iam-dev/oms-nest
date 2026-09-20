@@ -167,6 +167,8 @@ Defined in `src/roles/roles.enum.ts`:
 
 **Hierarchy**: SUPERVISOR > ADMIN > FITTER/FACTORY > USER. Users with `is_supervisor=1` in the database get the SUPERVISOR role regardless of `user_type`.
 
+**Account Management is Supervisor-only on the API**: the `users`, `warehouses`, `access-filter-groups` and `country-managers` controllers carry `@Roles(RoleEnum.supervisor)`; Administrators get 403. `test/unit/roles/account-management-roles.spec.ts` pins this — keep it green when adding routes. Self-service profile edits use `PATCH /auth/me` (any role), never `/users/:id`.
+
 ## Common Tasks
 
 ### Adding a New Entity

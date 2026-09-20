@@ -41,7 +41,7 @@ import { RoleEnum } from "../roles/roles.enum";
   version: "1",
 })
 @ApiCookieAuth("token")
-@Roles(RoleEnum.admin, RoleEnum.supervisor)
+@Roles(RoleEnum.supervisor)
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 export class CountryManagerController {
   constructor(private readonly countryManagerService: CountryManagerService) {}
