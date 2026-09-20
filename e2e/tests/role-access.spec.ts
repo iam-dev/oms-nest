@@ -70,7 +70,7 @@ const ENDPOINT_ACCESS: EndpointConfig[] = [
   },
   {
     path: '/api/v1/users',
-    roles: { admin: true, supervisor: true, fitter: false, factory: false, user: false },
+    roles: { admin: false, supervisor: true, fitter: false, factory: false, user: false },
   },
   {
     path: '/api/v1/brands',
@@ -94,7 +94,7 @@ const ENDPOINT_ACCESS: EndpointConfig[] = [
   },
   {
     path: '/api/v1/warehouses',
-    roles: { admin: true, supervisor: true, fitter: false, factory: false, user: false },
+    roles: { admin: false, supervisor: true, fitter: false, factory: false, user: false },
   },
   {
     path: '/api/v1/saddle-extras',
@@ -110,7 +110,7 @@ const ENDPOINT_ACCESS: EndpointConfig[] = [
   },
   {
     path: '/api/v1/access-filter-groups',
-    roles: { admin: true, supervisor: true, fitter: false, factory: false, user: false },
+    roles: { admin: false, supervisor: true, fitter: false, factory: false, user: false },
   },
   {
     path: '/api/v1/audit-logs',
