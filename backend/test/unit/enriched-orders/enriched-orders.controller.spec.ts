@@ -807,8 +807,11 @@ describe("EnrichedOrdersController", () => {
       expect(result.currentFitterId).toBeUndefined();
     });
 
-    const lockState = (fitterId: number, statusId: number, statusName: string) =>
-      ({ fitterId, statusId, statusName }) as const;
+    const lockState = (
+      fitterId: number,
+      statusId: number,
+      statusName: string,
+    ) => ({ fitterId, statusId, statusName }) as const;
 
     it("should updateOrderStatus refuses another fitter's order", async () => {
       service.getOrderLockStates.mockResolvedValue(

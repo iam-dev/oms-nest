@@ -347,7 +347,10 @@ describe("OrderProductSaddleController", () => {
     it("should create skips the lookup for admins", async () => {
       service.create.mockResolvedValue(mockOrderProductSaddleDto);
 
-      await controller.create({ orderId: 1001, productId: 500 } as any, adminReq);
+      await controller.create(
+        { orderId: 1001, productId: 500 } as any,
+        adminReq,
+      );
 
       expect(orderAccess.getOrderLockStates).not.toHaveBeenCalled();
     });
