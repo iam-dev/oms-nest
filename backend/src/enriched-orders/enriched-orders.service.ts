@@ -1659,9 +1659,13 @@ export class EnrichedOrdersService {
         // leather only, so it offers every leather ticked anywhere on the saddle,
         // as long as the leather is an item of the option. Reproduced 401/401
         // against production on 2026-09-17 — keep it this way.
+        // user_color / user_leather ride on the options_items row that links
+        // the option to the leather: legacy shows "Specify color" for e.g.
+        // "PAT - PATENT (Specify Color)" under Facing / Gusset Leather.
         optionLeathers = await queryRunner.query(
           `
-          SELECT DISTINCT o.id as "optionId", lt.id as "leatherId", lt.name, lt.sequence
+          SELECT DISTINCT o.id as "optionId", lt.id as "leatherId", lt.name, lt.sequence,
+                 oi.user_color as "userColor", oi.user_leather as "userLeather"
           FROM options o
           INNER JOIN saddle_options_items en
             ON en.saddle_id = $1 AND en.option_id = o.id AND en.deleted = 0

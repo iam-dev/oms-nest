@@ -1756,6 +1756,8 @@ describe('ComprehensiveEditOrder component', () => {
       ],
       optionLeathers: [
         { optionId: OPTION_SEAT_LEATHER, leatherId: 48, name: 'Aviar Smooth Black' },
+        // options_items.user_color = 1 on the row linking Seat Leather to this leather
+        { optionId: OPTION_SEAT_LEATHER, leatherId: 28, name: 'PAT - PATENT', userColor: 1, userLeather: 0 },
       ],
     };
 
@@ -1786,6 +1788,19 @@ describe('ComprehensiveEditOrder component', () => {
       expect(screen.getByText('Aviar Smooth Black')).toBeInTheDocument();
       // The base leather list is only the top-level Leathertype dropdown
       expect(screen.getAllByText('Italian Leather')).toHaveLength(1);
+    });
+
+    it('shows "Specify color" when a leather flagged user_color is picked for a leather option', async () => {
+      // Legacy parity: "PAT - PATENT (Specify Color)" under Facing / Gusset /
+      // Seat Leather asks for the colour just like a flagged options_items row.
+      await renderWithSpecs([]);
+      expect(screen.queryByText('Specify color:')).not.toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('PAT - PATENT'));
+      });
+
+      expect(screen.getByLabelText('Specify color:')).toBeInTheDocument();
     });
 
     it('keeps a saved item selectable when the model no longer ticks it', async () => {
