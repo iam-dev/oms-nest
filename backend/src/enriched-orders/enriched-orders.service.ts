@@ -2626,7 +2626,9 @@ export class EnrichedOrdersService {
       // Plan: add currentUser param and check order.fitter_id === currentUser.legacyId for FITTER role.
       await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
 
-      // Copy the source order into a new row with Unordered status (0)
+      // Copy the source order into a new row with Unordered status (0).
+      // Urgency is not copied: a duplicate is a fresh order and must not
+      // open with Urgent pre-selected (repair/demo/sponsored still carry over).
       const result = await queryRunner.query(
         `INSERT INTO orders (
           fitter_id, saddle_id, leather_id, factory_id,
@@ -2655,7 +2657,7 @@ export class EnrichedOrdersService {
           0, 0, 0,
           0, 0, 0,
           special_notes, '', custom_order, 0,
-          repair, demo, sponsored, rushed,
+          repair, demo, sponsored, false,
           2, currency, '', seat_sizes
         FROM orders WHERE id = $1
         RETURNING id`,
@@ -2751,7 +2753,8 @@ export class EnrichedOrdersService {
       const orderIds: number[] = [];
 
       for (let i = 0; i < count; i++) {
-        // Copy the source order into a new row with Unordered status (0)
+        // Copy the source order into a new row with Unordered status (0);
+        // like the single copy, urgency (rushed) is reset, not inherited.
         const result = await queryRunner.query(
           `INSERT INTO orders (
             fitter_id, saddle_id, leather_id, factory_id,
@@ -2780,7 +2783,7 @@ export class EnrichedOrdersService {
             0, 0, 0,
             0, 0, 0,
             special_notes, '', custom_order, 0,
-            repair, demo, sponsored, rushed,
+            repair, demo, sponsored, false,
             2, currency, '', seat_sizes
           FROM orders WHERE id = $1
           RETURNING id`,

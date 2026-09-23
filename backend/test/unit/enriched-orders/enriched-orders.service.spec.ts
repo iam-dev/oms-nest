@@ -806,4 +806,53 @@ describe("EnrichedOrdersService", () => {
         expect(withoutSaddle).toContain(`o.price${n}`);
     });
   });
+
+  describe("draft from order - urgency is never inherited", () => {
+    // The SELECT list of the INSERT … SELECT that copies the source order.
+    const copiedColumns = (sql: string) => sql.split(/\bSELECT\b/)[1];
+
+    it("should createDraftFromOrder reset rushed instead of copying it", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // set_config
+        .mockResolvedValueOnce([{ id: 53811 }]) // INSERT INTO orders … SELECT
+        .mockResolvedValueOnce([]) // orders_info copy
+        .mockResolvedValueOnce([]); // log
+
+      await service.createDraftFromOrder(53789, 138);
+
+      const insert = queryRunner.query.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("INSERT INTO orders ("),
+      );
+      expect(insert).toBeDefined();
+      const copied = copiedColumns(insert[0]);
+      expect(copied).toMatch(/repair,\s*demo,\s*sponsored,\s*false,/);
+      expect(copied).not.toMatch(/\brushed\b/);
+    });
+
+    it("should bulkCreateDraftFromOrder reset rushed on every copy", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // set_config
+        .mockResolvedValueOnce([{ id: 53789 }]) // source check
+        .mockResolvedValueOnce([{ id: 53812 }]) // INSERT #1
+        .mockResolvedValueOnce([]) // orders_info #1
+        .mockResolvedValueOnce([]) // log #1
+        .mockResolvedValueOnce([{ id: 53813 }]) // INSERT #2
+        .mockResolvedValueOnce([]) // orders_info #2
+        .mockResolvedValueOnce([]); // log #2
+
+      await service.bulkCreateDraftFromOrder(53789, 2, 138);
+
+      const inserts = queryRunner.query.mock.calls.filter(
+        (c: unknown[]) =>
+          typeof c[0] === "string" && c[0].includes("INSERT INTO orders ("),
+      );
+      expect(inserts).toHaveLength(2);
+      for (const [sql] of inserts) {
+        const copied = copiedColumns(sql);
+        expect(copied).toMatch(/repair,\s*demo,\s*sponsored,\s*false,/);
+        expect(copied).not.toMatch(/\brushed\b/);
+      }
+    });
+  });
 });
