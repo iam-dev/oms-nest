@@ -744,6 +744,44 @@ describe("EnrichedOrdersService", () => {
       ]);
     });
 
+    it("should carry the options_items user_color / user_leather flags on each leather of a leather option", async () => {
+      // Legacy shows "Specify color" for e.g. "PAT - PATENT (Specify Color)"
+      // under Facing / Gusset Leather: the flag lives on the options_items
+      // row that links the option to the leather, so the dropdown needs it.
+      queryRunner.query.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql.includes("t.leather_id = lt.id")
+            ? [
+                {
+                  optionId: 22,
+                  leatherId: 28,
+                  name: "PAT - PATENT(Specify Color)",
+                  sequence: 1,
+                  userColor: 1,
+                  userLeather: 0,
+                },
+              ]
+            : [],
+        ),
+      );
+
+      const result = await service.getEditFormOptions(100);
+
+      const sql = sqlContaining("t.leather_id = lt.id");
+      expect(sql).toContain('oi.user_color as "userColor"');
+      expect(sql).toContain('oi.user_leather as "userLeather"');
+      expect(result.optionLeathers).toEqual([
+        {
+          optionId: 22,
+          leatherId: 28,
+          name: "PAT - PATENT(Specify Color)",
+          sequence: 1,
+          userColor: 1,
+          userLeather: 0,
+        },
+      ]);
+    });
+
     it("should only return the saddle's own base leather types", async () => {
       queryRunner.query.mockResolvedValue([]);
 

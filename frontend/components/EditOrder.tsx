@@ -645,18 +645,21 @@ export function EditOrder({ order, isLoading = false, error, onClose, onBack, is
 
   // Get available items for a given option. Leather options (type 1) pick a
   // leather_types row (saved as orders_info.leather_id) rather than an options_items row.
-  const getItemsForOption = (opt: { optionId: number; type?: number }): Array<{ id: number; name: string }> => {
+  const getItemsForOption = (opt: { optionId: number; type?: number }): Array<{ id: number; name: string; userColor?: number; userLeather?: number }> => {
     if (!editOptions) return [];
     if (opt.type === 1) {
       return (editOptions.optionLeathers ?? [])
         .filter(l => l.optionId === opt.optionId)
-        .map(l => ({ id: l.leatherId, name: l.name }));
+        .map(l => ({ id: l.leatherId, name: l.name, userColor: l.userColor, userLeather: l.userLeather }));
     }
     return editOptions.optionItems.filter(i => i.optionId === opt.optionId);
   };
 
   const getSpecInputs = (optionId: number, selectedItemId: string): SpecInputs => {
-    const item = editOptions?.optionItems.find(i => i.optionId === optionId && String(i.id) === selectedItemId);
+    // Leather options (type 1) list leathers, whose "specify" flags ride on
+    // the options_items row linking option and leather — same rule as items.
+    const option = editOptions?.options.find(o => o.optionId === optionId);
+    const item = option ? getItemsForOption(option).find(i => String(i.id) === selectedItemId) : undefined;
     return specInputsForItem(selectedItemId, item);
   };
 
