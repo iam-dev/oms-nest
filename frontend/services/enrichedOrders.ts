@@ -914,7 +914,8 @@ export interface EditFormOptions {
   leatherTypes: Array<{ id: number; name: string } & PricedLeather>;
   options: Array<{ optionId: number; optionName: string; sequence: number; group: string | null; type?: number; price1?: number; extraAllowed: number }>;
   optionItems: Array<{ id: number; name: string; optionId: number; price1?: number; userColor?: number; userLeather?: number }>;
-  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string }>;
+  /** Leathers offered by a leather option (type 1); the flags come from the options_items row linking option and leather. */
+  optionLeathers?: Array<{ optionId: number; leatherId: number; name: string; userColor?: number; userLeather?: number }>;
   statuses: Array<{ id: number; name: string }>;
   presets: Array<{ id: number; name: string; sequence: number }>;
   presetItems: Array<{ presetId: number; optionId: number; itemId: number }>;
