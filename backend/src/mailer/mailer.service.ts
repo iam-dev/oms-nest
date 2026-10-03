@@ -2,14 +2,14 @@ import { Injectable } from "@nestjs/common";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ConfigService } from "@nestjs/config";
-import nodemailer from "nodemailer";
+import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
 import Handlebars from "handlebars";
 import { AllConfigType } from "../config/config.type";
 
 @Injectable()
 export class MailerService {
-  private readonly transporter: nodemailer.Transporter;
-  private readonly mailgunTransporter?: nodemailer.Transporter;
+  private readonly transporter: Transporter;
+  private readonly mailgunTransporter?: Transporter;
 
   constructor(private readonly configService: ConfigService<AllConfigType>) {
     // Default SMTP/localhost transporter
@@ -41,7 +41,7 @@ export class MailerService {
     }
   }
 
-  private getTransporter(_brand?: string): nodemailer.Transporter {
+  private getTransporter(_brand?: string): Transporter {
     void _brand;
     // Use Mailgun for production, localhost for development
     if (this.mailgunTransporter && process.env.NODE_ENV === "production") {
@@ -77,7 +77,7 @@ export class MailerService {
     context,
     brand,
     ...mailOptions
-  }: nodemailer.SendMailOptions & {
+  }: SendMailOptions & {
     templatePath: string;
     context: Record<string, unknown>;
     brand?: string;

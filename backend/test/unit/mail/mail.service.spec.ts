@@ -89,7 +89,7 @@ describe("MailService", () => {
       await service.userSignUp(mailData);
 
       const callArgs = mailerService.sendMail.mock.calls[0][0];
-      const url = new URL(callArgs.context.url);
+      const url = new URL(callArgs.context.url as string);
       expect(url.searchParams.get("hash")).toBe("special-hash-value");
       expect(url.pathname).toBe("/confirm-email");
     });
@@ -127,7 +127,7 @@ describe("MailService", () => {
       await service.forgotPassword(mailData);
 
       const callArgs = mailerService.sendMail.mock.calls[0][0];
-      const url = new URL(callArgs.context.url);
+      const url = new URL(callArgs.context.url as string);
       expect(url.searchParams.get("hash")).toBe("reset-hash");
       expect(url.searchParams.get("expires")).toBe("1700000000");
       expect(url.pathname).toBe("/password-change");
