@@ -1,4 +1,4 @@
-import { getEnrichedOrders } from '@/services/enrichedOrders';
+import { getEnrichedOrders, getSaddleGroups } from '@/services/enrichedOrders';
 import { fetchEntities } from '@/services/api';
 
 // Mock the API service
@@ -15,6 +15,37 @@ const mockFetchEntities = fetchEntities as jest.MockedFunction<typeof fetchEntit
 describe('Enriched Orders Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('getSaddleGroups (Group by saddle report)', () => {
+    const originalFetch = global.fetch;
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('GETs /enriched_orders/saddle-groups with the list filters as query params', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ saddleName: 'Aviar - Rook', count: 4 }], total: 1 }),
+      });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      const result = await getSaddleGroups({ orderStatus: 'Approved', dateFrom: '2026-09-01' });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(String(url)).toMatch(/\/api\/v1\/enriched_orders\/saddle-groups\?/);
+      expect(String(url)).toContain('orderStatus=Approved');
+      expect(String(url)).toContain('dateFrom=2026-09-01');
+      expect(init.credentials).toBe('include');
+      expect(result).toEqual({ data: [{ saddleName: 'Aviar - Rook', count: 4 }], total: 1 });
+    });
+
+    it('throws when the API answers with an error status', async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
+
+      await expect(getSaddleGroups({})).rejects.toThrow('500');
+    });
   });
 
   describe('Filter Passthrough', () => {

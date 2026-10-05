@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
+import { instanceToPlain } from "class-transformer";
 import bcrypt from "bcryptjs";
 import { AuthService } from "../../../src/auth/auth.service";
 import { UsersService } from "../../../src/users/users.service";
@@ -577,6 +578,30 @@ describe("AuthService", () => {
         1,
         0,
       );
+    });
+
+    it("should never expose the password hash once serialized for the response", async () => {
+      const jwtPayload = {
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        role: { id: 1, name: "user" },
+        iat: 1234567890,
+        exp: 1234567990,
+      };
+      usersService.findById.mockResolvedValue({
+        ...mockUser,
+        password: "$2a$10$hashedsecret",
+      } as User);
+      usersService.getUserRole.mockResolvedValue({ id: 2, name: "supervisor" });
+
+      const result = await service.me(jwtPayload);
+
+      // ClassSerializerInterceptor only honours @Exclude on class instances,
+      // so the service must hand back a User, not a spread plain object.
+      expect(result).toBeInstanceOf(User);
+      const plain = instanceToPlain(result, { groups: ["me"] });
+      expect(plain).not.toHaveProperty("password");
+      expect(plain.username).toBe("testuser");
+      expect(plain.typeName).toBe("supervisor");
     });
 
     it("should return null when user not found", async () => {

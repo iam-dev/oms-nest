@@ -178,6 +178,106 @@ describe("EnrichedOrdersService", () => {
     });
   });
 
+  describe("report date-range filters", () => {
+    beforeEach(() => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config call
+        .mockResolvedValueOnce([{ total: "0" }]) // Count query
+        .mockResolvedValueOnce([]); // Data query
+    });
+
+    it("should filter on order_time for dateFrom/dateTo", async () => {
+      await service.getEnrichedOrders({
+        page: 1,
+        limit: 10,
+        dateFrom: "2026-09-01",
+        dateTo: "2026-09-30",
+      } as any);
+
+      const dataSql: string = queryRunner.query.mock.calls[2][0];
+      const params: any[] = queryRunner.query.mock.calls[2][1];
+      expect(dataSql).toMatch(/o\.order_time >= \$1/);
+      expect(dataSql).toMatch(/o\.order_time <= \$2/);
+      expect(params[0]).toBe(Math.floor(Date.parse("2026-09-01") / 1000));
+    });
+
+    it("should filter on payment_time for paymentFrom/paymentTo", async () => {
+      await service.getEnrichedOrders({
+        page: 1,
+        limit: 10,
+        paymentFrom: "2026-01-01",
+        paymentTo: "2026-06-30",
+      } as any);
+
+      const dataSql: string = queryRunner.query.mock.calls[2][0];
+      const params: any[] = queryRunner.query.mock.calls[2][1];
+      expect(dataSql).toMatch(/o\.payment_time >= \$1/);
+      expect(dataSql).toMatch(/o\.payment_time <= \$2/);
+      expect(params[0]).toBe(Math.floor(Date.parse("2026-01-01") / 1000));
+      // An unpaid order has payment_time = 0 and must never match a range.
+      expect(dataSql).toMatch(/o\.payment_time > 0/);
+    });
+
+    it("should put the date ranges in the cache key so different ranges never share a cached page", async () => {
+      configService.get.mockImplementation((key: string) =>
+        key === "cache" ? { enabled: true, ttl: 1000 } : undefined,
+      );
+      const cacheManager = (service as any).cacheManager;
+      cacheManager.get.mockResolvedValue(undefined);
+      queryRunner.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ total: "0" }])
+        .mockResolvedValueOnce([]);
+
+      await service.getEnrichedOrders({
+        page: 1,
+        dateFrom: "2026-09-01",
+      } as any);
+      await service.getEnrichedOrders({
+        page: 1,
+        dateFrom: "2026-09-01",
+        dateTo: "2026-09-30",
+        paymentFrom: "2026-01-01",
+      } as any);
+
+      const keys = cacheManager.set.mock.calls.map((c: any[]) => c[0]);
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).not.toEqual(keys[1]);
+      expect(keys[0]).toContain("dateFrom:2026-09-01");
+      expect(keys[1]).toContain("paymentFrom:2026-01-01");
+    });
+  });
+
+  describe("getSaddleGroups (Group by saddle report)", () => {
+    it("should count orders per saddle with the same filters as the list", async () => {
+      queryRunner.query
+        .mockResolvedValueOnce([]) // RLS set_config call
+        .mockResolvedValueOnce([
+          { saddleName: "Aviar - Rook 2.0 (K644B)", count: "12" },
+          { saddleName: "Icon - Flight X", count: "3" },
+        ]);
+
+      const result = await (service as any).getSaddleGroups({
+        orderStatus: "Approved",
+        dateFrom: "2026-09-01",
+      });
+
+      const sql: string = queryRunner.query.mock.calls[1][0];
+      expect(sql).toMatch(/GROUP BY/);
+      expect(sql).toMatch(/o\.deleted_at IS NULL/);
+      expect(sql).toMatch(/o\.order_time >= \$/);
+      expect(sql).toMatch(/st\.name ILIKE \$|o\.order_status/);
+      expect(result).toEqual({
+        data: [
+          { saddleName: "Aviar - Rook 2.0 (K644B)", count: 12 },
+          { saddleName: "Icon - Flight X", count: 3 },
+        ],
+        total: 2,
+      });
+      expect(queryRunner.release).toHaveBeenCalled();
+    });
+  });
+
   describe("Configuration", () => {
     it("should use default pagination settings", async () => {
       // Trigger a call that uses configuration

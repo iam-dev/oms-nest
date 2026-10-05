@@ -106,6 +106,30 @@ export async function exportOrderToXlsx(
   URL.revokeObjectURL(url);
 }
 
+/** XLSX for the "Group by saddle" report: one row per saddle with its order count. */
+export async function exportSaddleGroupsToXlsx(
+  groups: Array<{ saddleName: string; count: number }>,
+): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Report');
+  ws.columns = [
+    { header: 'Saddle', width: Math.min(Math.max(6, ...groups.map(g => g.saddleName.length + 2)), 60) },
+    { header: 'Orders', width: 10 },
+  ];
+  groups.forEach(g => ws.addRow([sanitizeForCell(g.saddleName), g.count]));
+  ws.addRow(['Total', groups.reduce((sum, g) => sum + g.count, 0)]).font = { bold: true };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `report-by-saddle-${today}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function exportToXlsx(orders: Order[]): Promise<void> {
   const columns = ['ID', 'Brand', 'Saddle', 'Seat Size', 'Customer', 'Fitter', 'Date', 'Payment', 'Status', 'Options'];
 

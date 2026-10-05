@@ -76,9 +76,18 @@ export interface EnrichedOrdersQueryDto {
   leatherType?: string;
   // Filter by fitter reference
   fitterReference?: string;
-  // Date range filter (ISO date strings, e.g. "2026-01-01")
+  // Order date range filter on orders.order_time (ISO date strings, e.g. "2026-01-01")
   dateFrom?: string;
   dateTo?: string;
+  // Payment date range filter on orders.payment_time (ISO date strings)
+  paymentFrom?: string;
+  paymentTo?: string;
+}
+
+/** One row of the "Group by saddle" report: orders per brand + model. */
+export interface SaddleGroupRow {
+  saddleName: string;
+  count: number;
 }
 
 export interface PaginationMetadata {
@@ -596,6 +605,69 @@ export class EnrichedOrdersService {
     }
   }
 
+  /** Unix timestamp for the start of an ISO date, or undefined when absent/invalid. */
+  private dayStartTimestamp(isoDate?: string): number | undefined {
+    if (!isoDate) return undefined;
+    const ts = Math.floor(new Date(isoDate).getTime() / 1000);
+    return Number.isNaN(ts) ? undefined : ts;
+  }
+
+  /** Unix timestamp for 23:59:59 of an ISO date, or undefined when absent/invalid. */
+  private dayEndTimestamp(isoDate?: string): number | undefined {
+    if (!isoDate) return undefined;
+    const d = new Date(isoDate);
+    if (Number.isNaN(d.getTime())) return undefined;
+    d.setHours(23, 59, 59, 999);
+    return Math.floor(d.getTime() / 1000);
+  }
+
+  /**
+   * "Group by saddle" report: how many orders (matching the same filters as
+   * the list) exist per brand + model. Mirrors the legacy grouped grid.
+   */
+  async getSaddleGroups(
+    query: EnrichedOrdersQueryDto,
+  ): Promise<{ data: SaddleGroupRow[]; total: number }> {
+    const conditions = this.buildWhereConditions(query);
+    let sql = `
+      SELECT
+        CONCAT_WS(' - ', NULLIF(s.brand, ''), NULLIF(s.model_name, '')) AS "saddleName",
+        COUNT(*) AS count
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN fitters f ON o.fitter_id = f.id
+      LEFT JOIN credentials fc ON f.user_id = fc.user_id
+      LEFT JOIN saddles s ON o.saddle_id = s.id
+      LEFT JOIN factories fa ON o.factory_id = fa.id
+      LEFT JOIN credentials fac ON fa.user_id = fac.user_id
+      LEFT JOIN statuses st ON o.order_status = st.id
+      LEFT JOIN leather_types lt ON o.leather_id = lt.id`;
+    if (conditions.where) {
+      sql += ` WHERE ${conditions.where}`;
+    }
+    sql += `
+      GROUP BY s.brand, s.model_name
+      ORDER BY count DESC, "saddleName" ASC`;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.query(`SELECT set_config('rls.user_id', '0', true)`);
+      const rows: Array<{ saddleName: string | null; count: string }> =
+        await queryRunner.query(sql, conditions.params);
+      const data = rows.map((r) => ({
+        saddleName: r.saddleName || "(no saddle)",
+        count: parseInt(r.count, 10),
+      }));
+      return { data, total: data.length };
+    } catch (error) {
+      this.logger.error("Saddle group query failed", error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   private buildWhereConditions(query: EnrichedOrdersQueryDto): {
     where: string;
     params: any[];
@@ -730,6 +802,23 @@ export class EnrichedOrdersService {
         params.push(toTs);
         paramIndex++;
       }
+    }
+
+    // Filter by payment date range (payment_time is a unix timestamp; 0 = unpaid)
+    const paymentFromTs = this.dayStartTimestamp(query.paymentFrom);
+    const paymentToTs = this.dayEndTimestamp(query.paymentTo);
+    if (paymentFromTs !== undefined || paymentToTs !== undefined) {
+      conditions.push(`o.payment_time > 0`);
+    }
+    if (paymentFromTs !== undefined) {
+      conditions.push(`o.payment_time >= $${paramIndex}`);
+      params.push(paymentFromTs);
+      paramIndex++;
+    }
+    if (paymentToTs !== undefined) {
+      conditions.push(`o.payment_time <= $${paramIndex}`);
+      params.push(paymentToTs);
+      paramIndex++;
     }
 
     // Filter by fitter ID
@@ -1272,6 +1361,11 @@ export class EnrichedOrdersService {
     if (query.leatherType) keyParts.push(`leatherType:${query.leatherType}`);
     if (query.fitterReference)
       keyParts.push(`fitterReference:${query.fitterReference}`);
+    // Date range filters
+    if (query.dateFrom) keyParts.push(`dateFrom:${query.dateFrom}`);
+    if (query.dateTo) keyParts.push(`dateTo:${query.dateTo}`);
+    if (query.paymentFrom) keyParts.push(`paymentFrom:${query.paymentFrom}`);
+    if (query.paymentTo) keyParts.push(`paymentTo:${query.paymentTo}`);
 
     return keyParts.join(":");
   }

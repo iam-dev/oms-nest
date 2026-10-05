@@ -493,11 +493,10 @@ export class AuthService {
       user.isSupervisor,
     );
 
-    // Return user with typeName for frontend role mapping
-    return {
-      ...user,
-      typeName: role.name,
-    };
+    // Return a User instance (not a spread plain object) so the global
+    // ClassSerializerInterceptor honours @Exclude on `password`; typeName is
+    // added for frontend role mapping.
+    return Object.assign(new User(), user, { typeName: role.name });
   }
 
   async update(

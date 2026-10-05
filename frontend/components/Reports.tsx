@@ -26,16 +26,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { OrderDetails } from './OrderDetails';
 import { ComprehensiveEditOrder } from './ComprehensiveEditOrder';
-import { getFitterName, getCustomerName, getSupplierName, getStatus, getUrgent, getDate } from '../utils/orderHydration';
+import { getFitterName, getCustomerName, getSupplierName, getStatus, getUrgent } from '../utils/orderHydration';
 import { getOrderTableColumns } from '../utils/orderTableColumns';
 import { seatSizes, statuses, orderStatuses } from '../utils/orderConstants';
 import { logger } from '@/utils/logger';
-import { getEnrichedOrders, getFilterOptions, deleteOrder } from '../services/enrichedOrders';
+import { getEnrichedOrders, getFilterOptions, getSaddleGroups, deleteOrder } from '../services/enrichedOrders';
 import { toast } from 'sonner';
-import type { FilterOptions } from '../services/enrichedOrders';
+import type { FilterOptions, SaddleGroup } from '../services/enrichedOrders';
 import { extractDynamicFactories, extractDynamicSeatSizes, extractSeatSizes } from '../utils/orderProcessing';
 import { fetchEntities } from '../services/api';
-import { exportToXlsx } from '../utils/exportXlsx';
+import { exportToXlsx, exportSaddleGroupsToXlsx } from '../utils/exportXlsx';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
 import { getSavedFilters, getDefaultFilter, createSavedFilter, updateSavedFilter, deleteSavedFilter } from '../services/reportSavedFilters';
 import type { SavedFilter } from '../services/reportSavedFilters';
@@ -48,6 +48,56 @@ const saleTypeOptions = [
   { label: 'Urgent orders', value: 'urgent' },
   { label: 'Repair orders', value: 'repair' },
 ];
+
+type DateRange = { from: Date | undefined; to: Date | undefined };
+const emptyRange: DateRange = { from: undefined, to: undefined };
+
+/** Local calendar day as YYYY-MM-DD, the format the backend date filters accept. */
+const toIsoDate = (d: Date): string => {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+};
+
+/** Map the page's header filters + date ranges to enriched_orders query params. */
+const buildApiFilters = (
+  headerFilters: Record<string, string>,
+  orderedDate: DateRange,
+  paymentDate: DateRange,
+): Record<string, string | boolean> => {
+  const keyMap: Record<string, string> = {
+    orderId: 'orderId',
+    reference: 'fitterReference',
+    customer: 'customerName',
+    status: 'orderStatus',
+    fitter: 'fitterName',
+    supplier: 'supplierName',
+    seatSize: 'seatSizes',
+    customerCountry: 'customerCountry',
+    fitterCountry: 'fitterCountry',
+    saddle: 'saddleName',
+    kneeRoll: 'kneeRoll',
+    leatherType: 'leatherType',
+    saleType: 'saleType',
+  };
+  const filters: Record<string, string | boolean> = {};
+  Object.keys(headerFilters).forEach(key => {
+    const value = headerFilters[key];
+    if (!value) return;
+    if (key === 'urgent') {
+      // Convert string boolean to actual boolean for the API
+      if (value === 'true') filters.urgent = true;
+      else if (value === 'false') filters.urgent = false;
+    } else if (keyMap[key]) {
+      filters[keyMap[key]] = value;
+    }
+  });
+  if (orderedDate.from) filters.dateFrom = toIsoDate(orderedDate.from);
+  if (orderedDate.to) filters.dateTo = toIsoDate(orderedDate.to);
+  if (paymentDate.from) filters.paymentFrom = toIsoDate(paymentDate.from);
+  if (paymentDate.to) filters.paymentTo = toIsoDate(paymentDate.to);
+  return filters;
+};
 
 export default function Reports() {
   const [page, setPage] = useState(1);
@@ -185,57 +235,41 @@ export default function Reports() {
     return Array.from(countriesSet).sort();
   }, [filterOptions, orders]);
 
+  const [groupBySaddle, setGroupBySaddle] = useState(false);
+  const [saddleGroups, setSaddleGroups] = useState<SaddleGroup[]>([]);
+  const [orderedDate, setOrderedDate] = useState<DateRange>(emptyRange);
+  const [paymentDate, setPaymentDate] = useState<DateRange>(emptyRange);
+
+  const apiFilters = React.useMemo(
+    () => buildApiFilters(headerFilters, orderedDate, paymentDate),
+    [headerFilters, orderedDate, paymentDate],
+  );
+
   useEffect(() => {
     // TODO(react-hooks): setLoading drives loading spinner; safe synchronous flag before async fetch
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    // Build filters for API Platform
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filters: Record<string, any> = {};
-    Object.keys(headerFilters).forEach(key => {
-      if (headerFilters[key] && headerFilters[key] !== '') {
-        // Map frontend filter keys to API keys if needed
-        if (key === 'orderId') {
-          filters.orderId = headerFilters[key];
-        } else if (key === 'reference') {
-          filters.fitterReference = headerFilters[key];
-        } else if (key === 'customer') {
-          filters.customerName = headerFilters[key];
-        } else if (key === 'status') {
-          filters.orderStatus = headerFilters[key];
-        } else if (key === 'fitter') {
-          filters.fitterName = headerFilters[key];
-        } else if (key === 'supplier') {
-          filters.supplierName = headerFilters[key];
-        } else if (key === 'urgent') {
-          // Convert string boolean to actual boolean for API Platform BooleanFilter
-          if (headerFilters[key] === 'true') {
-            filters.urgent = true;
-          } else if (headerFilters[key] === 'false') {
-            filters.urgent = false;
-          }
-        } else if (key === 'seatSize') {
-          filters.seatSizes = headerFilters[key];
-        } else if (key === 'customerCountry') {
-          filters.customerCountry = headerFilters[key];
-        } else if (key === 'fitterCountry') {
-          filters.fitterCountry = headerFilters[key];
-        } else if (key === 'saddle') {
-          filters.saddleName = headerFilters[key];
-        } else if (key === 'kneeRoll') {
-          filters.kneeRoll = headerFilters[key];
-        } else if (key === 'leatherType') {
-          filters.leatherType = headerFilters[key];
-        } else if (key === 'saleType') {
-          filters.saleType = headerFilters[key];
-        }
-      }
-    });
+    setError('');
+
+    if (groupBySaddle) {
+      // "Group by saddle": one row per brand + model with the order count,
+      // computed server-side for the same filters as the flat list.
+      getSaddleGroups(apiFilters)
+        .then(result => {
+          setSaddleGroups(result.data);
+          setLoading(false);
+        })
+        .catch(() => {
+          setError('Failed to load the saddle report from API');
+          setLoading(false);
+        });
+      return;
+    }
 
     getEnrichedOrders({
       page,
       partial: true,
-      filters,
+      filters: apiFilters as Record<string, string>,
       orderBy: 'orderId',
       order: 'desc',
       bustCache: refreshKey > 0,
@@ -260,9 +294,7 @@ export default function Reports() {
         setError('Failed to load orders from API');
         setLoading(false);
       });
-  }, [page, headerFilters, refreshKey]);
-
-  const [groupBySaddle, setGroupBySaddle] = useState(false);
+  }, [page, apiFilters, refreshKey, groupBySaddle]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [localFilters, setLocalFilters] = useState<Record<string, string>>({
     orderId: '',
@@ -289,10 +321,6 @@ export default function Reports() {
   // Urgent stays single-select (boolean toggle)
   const [selectedUrgent, setSelectedUrgent] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-
-  const [date, setDate] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
-  const [orderedDate, setOrderedDate] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
-  const [paymentDate, setPaymentDate] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
 
   // Extract unique seat sizes from orders (handles both snake_case and camelCase)
   const dynamicSeatSizes = React.useMemo(() => {
@@ -459,13 +487,6 @@ export default function Reports() {
       });
     })();
 
-    let matchesDate = true;
-    if (date.from || date.to) {
-      const orderDate = new Date(getDate(order));
-      if (date.from && orderDate < date.from) matchesDate = false;
-      if (date.to && orderDate > date.to) matchesDate = false;
-    }
-
     return (
       matchesOrderId &&
       matchesReference &&
@@ -480,8 +501,7 @@ export default function Reports() {
       matchesFitterCountry &&
       matchesKneeRoll &&
       matchesLeatherType &&
-      matchesSaleType &&
-      matchesDate
+      matchesSaleType
     );
   });
 
@@ -491,39 +511,21 @@ export default function Reports() {
     logger.log('Processed orders:', processedOrders);
     logger.log('Filtered orders:', filteredOrders);
     logger.log('Header filters:', headerFilters);
-    logger.log('Date filter:', date);
     logger.log('Ordered date filter:', orderedDate);
     logger.log('Payment date filter:', paymentDate);
-  }, [orders, processedOrders, filteredOrders, headerFilters, date, orderedDate, paymentDate]);
+  }, [orders, processedOrders, filteredOrders, headerFilters, orderedDate, paymentDate]);
 
   // ========== EXPORT ALL ==========
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
-      // Build the same filters as the current view
-      const filters: Record<string, string | boolean> = {};
-      Object.keys(headerFilters).forEach(key => {
-        if (headerFilters[key] && headerFilters[key] !== '') {
-          if (key === 'orderId') filters.orderId = headerFilters[key];
-          else if (key === 'reference') filters.fitterReference = headerFilters[key];
-          else if (key === 'customer') filters.customerName = headerFilters[key];
-          else if (key === 'status') filters.orderStatus = headerFilters[key];
-          else if (key === 'fitter') filters.fitterName = headerFilters[key];
-          else if (key === 'supplier') filters.supplierName = headerFilters[key];
-          else if (key === 'urgent') {
-            if (headerFilters[key] === 'true') filters.urgent = true;
-            else if (headerFilters[key] === 'false') filters.urgent = false;
-          } else if (key === 'seatSize') filters.seatSizes = headerFilters[key];
-          else if (key === 'customerCountry') filters.customerCountry = headerFilters[key];
-          else if (key === 'fitterCountry') filters.fitterCountry = headerFilters[key];
-          else if (key === 'saddle') filters.saddleName = headerFilters[key];
-          else if (key === 'kneeRoll') filters.kneeRoll = headerFilters[key];
-          else if (key === 'leatherType') filters.leatherType = headerFilters[key];
-          else if (key === 'saleType') filters.saleType = headerFilters[key];
-        }
-      });
+      if (groupBySaddle) {
+        await exportSaddleGroupsToXlsx(saddleGroups);
+        return;
+      }
 
-      // Fetch all pages (backend caps at 100/page)
+      // Fetch all pages for the current filters (backend caps at 100/page).
+      // Date ranges are part of apiFilters, so the server does the filtering.
       const allOrders: unknown[] = [];
       let currentPage = 1;
       let hasMore = true;
@@ -532,7 +534,7 @@ export default function Reports() {
         const data = await getEnrichedOrders({
           page: currentPage,
           partial: true,
-          filters: { ...filters, limit: '100' } as Record<string, string>,
+          filters: { ...apiFilters, limit: '100' } as Record<string, string>,
           orderBy: 'orderId',
           order: 'desc',
         });
@@ -549,22 +551,13 @@ export default function Reports() {
         currentPage++;
       }
 
-      // Apply client-side date filtering consistent with filteredOrders
-      const filteredAll = allOrders.filter((order: unknown) => {
-        if (!date.from && !date.to) return true;
-        const orderDate = new Date(getDate(order as unknown as OrderDomainType & Record<string, unknown>));
-        if (date.from && orderDate < date.from) return false;
-        if (date.to && orderDate > date.to) return false;
-        return true;
-      });
-
-      await exportToXlsx(filteredAll as unknown as OrderDomainType[]);
+      await exportToXlsx(allOrders as unknown as OrderDomainType[]);
     } catch (err) {
       logger.error('Export failed:', err);
     } finally {
       setIsExporting(false);
     }
-  }, [headerFilters, date]);
+  }, [apiFilters, groupBySaddle, saddleGroups]);
 
   // ========== SAVED FILTERS: serialize / apply / effects ==========
 
@@ -586,10 +579,6 @@ export default function Reports() {
         from: orderedDate.from?.toISOString() ?? null,
         to: orderedDate.to?.toISOString() ?? null,
       },
-      date: {
-        from: date.from?.toISOString() ?? null,
-        to: date.to?.toISOString() ?? null,
-      },
       paymentDate: {
         from: paymentDate.from?.toISOString() ?? null,
         to: paymentDate.to?.toISOString() ?? null,
@@ -600,7 +589,7 @@ export default function Reports() {
     selectedFitters, selectedStatuses, selectedSaleTypes, selectedCustomers,
     selectedFactories, selectedSaddles, selectedCustomerCountries, selectedFitterCountries,
     selectedSeatSizes, selectedKneeRolls, selectedLeatherTypes, selectedUrgent,
-    orderedDate, date, paymentDate, groupBySaddle,
+    orderedDate, paymentDate, groupBySaddle,
   ]);
 
   const applyFilterState = useCallback((f: Record<string, unknown>) => {
@@ -621,11 +610,14 @@ export default function Reports() {
     setSelectedUrgent(typeof f.urgent === 'string' ? f.urgent : 'all');
     setGroupBySaddle(f.groupBySaddle === true);
 
-    const dateObj = f.orderedDate as { from?: string | null; to?: string | null } | undefined;
-    setOrderedDate({ from: parseDate(dateObj?.from), to: parseDate(dateObj?.to) });
-    const dObj = f.date as { from?: string | null; to?: string | null } | undefined;
-    setDate({ from: parseDate(dObj?.from), to: parseDate(dObj?.to) });
-    const pObj = f.paymentDate as { from?: string | null; to?: string | null } | undefined;
+    type StoredRange = { from?: string | null; to?: string | null } | undefined;
+    // Filters saved before the "Date from/to" row was removed may only carry
+    // the old `date` range; treat it as the Ordered range.
+    const dateObj = (f.orderedDate as StoredRange) ?? (f.date as StoredRange);
+    const hasOrdered = Boolean((f.orderedDate as StoredRange)?.from || (f.orderedDate as StoredRange)?.to);
+    const orderedSrc = hasOrdered ? (f.orderedDate as StoredRange) : dateObj;
+    setOrderedDate({ from: parseDate(orderedSrc?.from), to: parseDate(orderedSrc?.to) });
+    const pObj = f.paymentDate as StoredRange;
     setPaymentDate({ from: parseDate(pObj?.from), to: parseDate(pObj?.to) });
 
     // Rebuild headerFilters from multi-select arrays
@@ -779,43 +771,6 @@ export default function Reports() {
                     mode="single"
                     selected={orderedDate.to}
                     onSelect={(date) => setOrderedDate(prev => ({ ...prev, to: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="w-32">Date from</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date.from ? formatDate(date.from) : 'Select date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date.from}
-                    onSelect={(selectedDate) => setDate(prev => ({ ...prev, from: selectedDate }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <span>to</span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date.to ? formatDate(date.to) : 'Select date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date.to}
-                    onSelect={(selectedDate) => setDate(prev => ({ ...prev, to: selectedDate }))}
                     initialFocus
                   />
                 </PopoverContent>
@@ -1007,17 +962,19 @@ export default function Reports() {
             </div>
 
             <div className="flex items-center gap-4 mt-8">
-              <Button variant="destructive" className="bg-[#8B0000]">
+              {/* Filters apply as they change; "Generate report" re-runs the
+                  current report bypassing the backend's list cache. */}
+              <Button variant="destructive" className="bg-[#8B0000]" onClick={() => setRefreshKey(k => k + 1)}>
                 Generate report
               </Button>
               <Button variant="destructive" className="bg-[#8B0000]" onClick={handleExport} disabled={isExporting}>
                 {isExporting ? 'Exporting...' : 'Export report'}
               </Button>
-              
+
               {/* Reset All Filters Button */}
               {(Object.keys(headerFilters).some(key => headerFilters[key]) ||
-                selectedUrgent !== 'all' ||
-                date.from || date.to) && (
+                selectedUrgent !== 'all' || groupBySaddle ||
+                orderedDate.from || orderedDate.to || paymentDate.from || paymentDate.to) && (
                 <Button
                   variant="outline"
                   className="border-red-600 text-red-600 hover:bg-red-50"
@@ -1036,9 +993,9 @@ export default function Reports() {
                     setSelectedKneeRolls([]);
                     setSelectedLeatherTypes([]);
                     setSelectedUrgent('all');
-                    setDate({ from: undefined, to: undefined });
-                    setOrderedDate({ from: undefined, to: undefined });
-                    setPaymentDate({ from: undefined, to: undefined });
+                    setOrderedDate(emptyRange);
+                    setPaymentDate(emptyRange);
+                    setGroupBySaddle(false);
                     setPage(1);
                     setSearchTerm('');
                   }}
@@ -1091,6 +1048,55 @@ export default function Reports() {
 
       {error ? (
         <div>Error: {error}</div>
+      ) : groupBySaddle ? (
+        <div className="rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="text-left px-4 py-2 w-24">Orders</th>
+                <th className="text-left px-4 py-2">Saddle</th>
+                <th className="px-4 py-2 w-28"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && saddleGroups.length === 0 && (
+                <tr><td className="px-4 py-3" colSpan={3}>Loading...</td></tr>
+              )}
+              {!loading && saddleGroups.length === 0 && (
+                <tr><td className="px-4 py-3" colSpan={3}>No orders match the current filters.</td></tr>
+              )}
+              {saddleGroups.map(group => (
+                <tr key={group.saddleName} className="border-t">
+                  <td className="px-4 py-2 font-semibold">{group.count}</td>
+                  <td className="px-4 py-2">{group.saddleName}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      type="button"
+                      className="text-[#8B0000] underline"
+                      onClick={() => {
+                        // Like the legacy "Show all": switch to the flat list
+                        // filtered to this one saddle.
+                        setSelectedSaddles([group.saddleName]);
+                        updateMultiFilter('saddle', [group.saddleName]);
+                        setGroupBySaddle(false);
+                      }}
+                    >
+                      Show all
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {saddleGroups.length > 0 && (
+              <tfoot className="bg-gray-50 border-t">
+                <tr>
+                  <td className="px-4 py-2 font-semibold">{saddleGroups.reduce((sum, g) => sum + g.count, 0)}</td>
+                  <td className="px-4 py-2 font-semibold" colSpan={2}>Total orders in {saddleGroups.length} saddles</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
       ) : (
         <div>
           <OrdersTable
@@ -1129,10 +1135,11 @@ export default function Reports() {
               seatSizes,
               statuses,
               fitters: fittersList.map(f => f.label),
-              dateFrom: date.from,
-              setDateFrom: (from: Date | undefined) => setDate(d => ({ ...d, from })),
-              dateTo: date.to,
-              setDateTo: (to: Date | undefined) => setDate(d => ({ ...d, to })),
+              // The table's own date bar edits the same Ordered range as the panel above.
+              dateFrom: orderedDate.from,
+              setDateFrom: (from: Date | undefined) => setOrderedDate(d => ({ ...d, from })),
+              dateTo: orderedDate.to,
+              setDateTo: (to: Date | undefined) => setOrderedDate(d => ({ ...d, to })),
               loading,
               error: error ?? undefined,
               pagination: {
