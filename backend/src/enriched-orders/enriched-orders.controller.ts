@@ -149,6 +149,34 @@ export class EnrichedOrdersController {
     }
   }
 
+  /**
+   * "Group by saddle" report: orders per brand + model for the same filters
+   * the list endpoint accepts. Fitters are scoped to their own orders.
+   */
+  @Get("saddle-groups")
+  async getSaddleGroups(
+    @Query() query: EnrichedOrdersQueryDto,
+    @Req() req: ScopedRequest,
+  ) {
+    try {
+      const sanitizedQuery = this.sanitizeQuery(query);
+      const ownFitterId = await this.scopedFitterId(req);
+      if (ownFitterId !== undefined) {
+        sanitizedQuery.fitterId = ownFitterId;
+      }
+      return await this.enrichedOrdersService.getSaddleGroups(sanitizedQuery);
+    } catch (error) {
+      this.logger.error("Failed to fetch saddle groups", error);
+      throw new HttpException(
+        {
+          message: "Failed to fetch saddle groups",
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get("filter-options")
   async getFilterOptions() {
     try {
@@ -600,6 +628,14 @@ export class EnrichedOrdersController {
       fitterReference: query.fitterReference
         ? String(query.fitterReference).trim()
         : undefined,
+      // Order date range (orders.order_time)
+      dateFrom: query.dateFrom ? String(query.dateFrom).trim() : undefined,
+      dateTo: query.dateTo ? String(query.dateTo).trim() : undefined,
+      // Payment date range (orders.payment_time)
+      paymentFrom: query.paymentFrom
+        ? String(query.paymentFrom).trim()
+        : undefined,
+      paymentTo: query.paymentTo ? String(query.paymentTo).trim() : undefined,
     };
   }
 

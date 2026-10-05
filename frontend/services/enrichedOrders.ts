@@ -234,6 +234,39 @@ export async function getFilterOptions(): Promise<FilterOptions> {
   return response.json();
 }
 
+// ========== GROUP BY SADDLE (Reports) ==========
+
+export interface SaddleGroup {
+  saddleName: string;
+  count: number;
+}
+
+/**
+ * Orders per brand + model for the same filters `getEnrichedOrders` accepts.
+ * Backs the "Group by saddle" checkbox on the Reports page.
+ */
+export async function getSaddleGroups(
+  filters: Record<string, string | boolean | undefined>,
+): Promise<{ data: SaddleGroup[]; total: number }> {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value));
+    }
+  });
+
+  const response = await fetch(`${API_URL}/api/v1/enriched_orders/saddle-groups?${params.toString()}`, {
+    headers: { 'Accept': 'application/json' },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch saddle groups: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 // ========== BULK STATUS UPDATE ==========
 
 export async function bulkUpdateOrderStatus(

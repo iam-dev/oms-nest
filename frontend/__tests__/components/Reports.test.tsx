@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Reports from '@/components/Reports';
 import * as enrichedOrdersModule from '@/services/enrichedOrders';
+import * as reportSavedFiltersModule from '@/services/reportSavedFilters';
 import * as exportXlsxModule from '@/utils/exportXlsx';
 import { AuthTestProvider } from '../utils/AuthTestProvider';
 
@@ -27,6 +28,17 @@ jest.mock('@/services/enrichedOrders', () => ({
     leatherTypes: ['Calfskin', 'Pigskin', 'Buffalo'],
     factories: ['Factory Alpha', 'Factory Beta'],
   }),
+  getSaddleGroups: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+}));
+
+// Saved filters: the default filter is the only way to seed date ranges
+// without driving the calendar popovers, so tests set it per case.
+jest.mock('@/services/reportSavedFilters', () => ({
+  getSavedFilters: jest.fn().mockResolvedValue([]),
+  getDefaultFilter: jest.fn().mockResolvedValue(null),
+  createSavedFilter: jest.fn(),
+  updateSavedFilter: jest.fn(),
+  deleteSavedFilter: jest.fn(),
 }));
 
 jest.mock('@/services/api', () => ({
@@ -48,14 +60,15 @@ jest.mock('@/lib/generate-pdf', () => ({
 // Mock exportXlsx to avoid exceljs/uuid ESM import issues in Jest
 jest.mock('@/utils/exportXlsx', () => ({
   exportToXlsx: jest.fn(),
+  exportSaddleGroupsToXlsx: jest.fn(),
 }));
 
 interface MockOrdersTableProps {
   searchTerm: string;
   onSearch: (val: string) => void;
   headerFilters?: Record<string, string>;
-  dateFrom?: string;
-  dateTo?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
   orders?: unknown[];
   pagination?: { totalItems?: number; itemsPerPage?: number; totalPages?: number };
   loading?: boolean;
@@ -100,10 +113,10 @@ jest.mock('@/components/shared/OrdersTable', () => ({
         Urgent: {headerFilters?.urgent || 'all'}
       </div>
       <div data-testid="date-from">
-        From: {dateFrom || 'none'}
+        From: {dateFrom ? dateFrom.toISOString() : 'none'}
       </div>
       <div data-testid="date-to">
-        To: {dateTo || 'none'}
+        To: {dateTo ? dateTo.toISOString() : 'none'}
       </div>
       <div data-testid="orders-count">
         Orders: {orders?.length || 0}
@@ -282,6 +295,10 @@ const mockOrders = [
 
 const mockGetEnrichedOrders = enrichedOrdersModule.getEnrichedOrders as jest.Mock;
 const mockGetFilterOptions = enrichedOrdersModule.getFilterOptions as jest.Mock;
+const mockGetSaddleGroups = enrichedOrdersModule.getSaddleGroups as jest.Mock;
+const mockGetDefaultFilter = reportSavedFiltersModule.getDefaultFilter as jest.Mock;
+const lastOrdersCall = () =>
+  mockGetEnrichedOrders.mock.calls[mockGetEnrichedOrders.mock.calls.length - 1][0];
 
 const renderWithAuth = (ui: React.ReactElement, userRole = 'admin') => {
   return render(
@@ -307,7 +324,6 @@ describe('Reports Component', () => {
 
       expect(screen.getByText('Order Reports')).toBeInTheDocument();
       expect(screen.getByText('Ordered from')).toBeInTheDocument();
-      expect(screen.getByText('Date from')).toBeInTheDocument();
       expect(screen.getByText('Payment from')).toBeInTheDocument();
       expect(screen.getByText('Fitters')).toBeInTheDocument();
       expect(screen.getByText('Order statuses')).toBeInTheDocument();
@@ -691,19 +707,169 @@ describe('Reports Component', () => {
   });
 
   describe('Date Range Filtering', () => {
-    it('renders date range selection', async () => {
+    it('renders the Ordered and Payment ranges and no ambiguous "Date from" row', async () => {
       renderWithAuth(<Reports />);
 
       expect(screen.getByText('Ordered from')).toBeInTheDocument();
-      expect(screen.getByText('Date from')).toBeInTheDocument();
       expect(screen.getByText('Payment from')).toBeInTheDocument();
+      expect(screen.queryByText('Date from')).not.toBeInTheDocument();
     });
 
     it('renders calendar date pickers', async () => {
       renderWithAuth(<Reports />);
 
       const calendarButtons = screen.getAllByText('Select date');
-      expect(calendarButtons.length).toBe(6); // 3 date ranges × 2 (from/to)
+      expect(calendarButtons.length).toBe(4); // 2 date ranges × 2 (from/to)
+    });
+
+    it('sends the Ordered range as dateFrom/dateTo and the Payment range as paymentFrom/paymentTo', async () => {
+      mockGetDefaultFilter.mockResolvedValueOnce({
+        id: 7,
+        name: 'September',
+        isDefault: true,
+        filters: {
+          orderedDate: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-30T00:00:00.000Z' },
+          paymentDate: { from: '2026-01-15T00:00:00.000Z', to: null },
+        },
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(lastOrdersCall().filters).toEqual(
+          expect.objectContaining({
+            dateFrom: '2026-09-01',
+            dateTo: '2026-09-30',
+            paymentFrom: '2026-01-15',
+          }),
+        );
+      });
+      expect(lastOrdersCall().filters).not.toHaveProperty('paymentTo');
+    });
+
+    it('still honours the legacy "date" key of older saved filters as the Ordered range', async () => {
+      mockGetDefaultFilter.mockResolvedValueOnce({
+        id: 8,
+        name: 'Old',
+        isDefault: true,
+        filters: { date: { from: '2026-08-01T00:00:00.000Z', to: null } },
+      });
+
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(lastOrdersCall().filters).toEqual(expect.objectContaining({ dateFrom: '2026-08-01' }));
+      });
+    });
+  });
+
+  describe('Generate report', () => {
+    it('refetches the current filters bypassing the backend cache', async () => {
+      const user = userEvent.setup();
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      const callsBefore = mockGetEnrichedOrders.mock.calls.length;
+
+      await user.click(screen.getByText('Generate report'));
+
+      await waitFor(() => {
+        expect(mockGetEnrichedOrders.mock.calls.length).toBe(callsBefore + 1);
+      });
+      expect(lastOrdersCall().bustCache).toBe(true);
+    });
+  });
+
+  describe('Group by saddle', () => {
+    const groups = {
+      data: [
+        { saddleName: 'Aviar - Rook 2.0 (K644B)', count: 12 },
+        { saddleName: 'Icon - Flight X', count: 3 },
+      ],
+      total: 2,
+    };
+
+    it('replaces the order list with per-saddle counts for the active filters', async () => {
+      const user = userEvent.setup();
+      mockGetSaddleGroups.mockResolvedValue(groups);
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId('multi-select-add-fitters'));
+      await user.click(screen.getByLabelText('Group by saddle'));
+
+      await waitFor(() => {
+        expect(mockGetSaddleGroups).toHaveBeenCalledWith(
+          expect.objectContaining({ fitterName: 'Jane Fitter' }),
+        );
+      });
+      expect(await screen.findByText('Aviar - Rook 2.0 (K644B)')).toBeInTheDocument();
+      expect(screen.getByText('12')).toBeInTheDocument();
+      expect(screen.getByText('Icon - Flight X')).toBeInTheDocument();
+      expect(screen.queryByTestId('orders-table')).not.toBeInTheDocument();
+    });
+
+    it('"Show all" on a group filters the flat list to that saddle', async () => {
+      const user = userEvent.setup();
+      mockGetSaddleGroups.mockResolvedValue(groups);
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      await user.click(screen.getByLabelText('Group by saddle'));
+      const showAll = await screen.findAllByText('Show all');
+      await user.click(showAll[1]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      expect(lastOrdersCall().filters).toEqual(
+        expect.objectContaining({ saddleName: 'Icon - Flight X' }),
+      );
+      expect(screen.getByLabelText('Group by saddle')).not.toBeChecked();
+    });
+
+    it('"Reset All Filters" returns to the flat order list', async () => {
+      const user = userEvent.setup();
+      mockGetSaddleGroups.mockResolvedValue(groups);
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      await user.click(screen.getByLabelText('Group by saddle'));
+      await screen.findByText('Icon - Flight X');
+      await user.click(screen.getByText('Reset All Filters'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      expect(screen.getByLabelText('Group by saddle')).not.toBeChecked();
+    });
+
+    it('exports the groups instead of the orders while grouped', async () => {
+      const user = userEvent.setup();
+      mockGetSaddleGroups.mockResolvedValue(groups);
+      const exportGroups = exportXlsxModule.exportSaddleGroupsToXlsx as jest.Mock;
+      const exportOrders = exportXlsxModule.exportToXlsx as jest.Mock;
+      renderWithAuth(<Reports />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('orders-table')).toBeInTheDocument();
+      });
+      await user.click(screen.getByLabelText('Group by saddle'));
+      await screen.findByText('Icon - Flight X');
+      await user.click(screen.getByText('Export report'));
+
+      await waitFor(() => {
+        expect(exportGroups).toHaveBeenCalledWith(groups.data);
+      });
+      expect(exportOrders).not.toHaveBeenCalled();
     });
   });
 

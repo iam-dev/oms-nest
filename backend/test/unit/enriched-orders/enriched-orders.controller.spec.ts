@@ -308,6 +308,48 @@ describe("EnrichedOrdersController", () => {
     });
   });
 
+  describe("getSaddleGroups (GET /enriched_orders/saddle-groups)", () => {
+    const groupsResponse = {
+      data: [{ saddleName: "Aviar - Rook 2.0", count: 12 }],
+      total: 1,
+    };
+
+    it("should pass the sanitized list filters to the service and return the groups", async () => {
+      (service as any).getSaddleGroups = jest
+        .fn()
+        .mockResolvedValue(groupsResponse);
+
+      const result = await (controller as any).getSaddleGroups(
+        { orderStatus: " Approved ", dateFrom: "2026-09-01" },
+        { user: { legacyId: 1, role: { id: 2, name: "admin" } } },
+      );
+
+      expect((service as any).getSaddleGroups).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderStatus: "Approved",
+          dateFrom: "2026-09-01",
+        }),
+      );
+      expect(result).toEqual(groupsResponse);
+    });
+
+    it("should scope a fitter to their own orders, like the list endpoint", async () => {
+      (service as any).getSaddleGroups = jest
+        .fn()
+        .mockResolvedValue(groupsResponse);
+      service.getFitterIdByUserId.mockResolvedValue(49);
+
+      await (controller as any).getSaddleGroups(
+        {},
+        { user: { legacyId: 83, role: { id: 1, name: "fitter" } } },
+      );
+
+      expect((service as any).getSaddleGroups).toHaveBeenCalledWith(
+        expect.objectContaining({ fitterId: 49 }),
+      );
+    });
+  });
+
   describe("getOrderDetail", () => {
     it("should return order detail", async () => {
       // Arrange
@@ -441,6 +483,29 @@ describe("EnrichedOrdersController", () => {
   });
 
   describe("sanitizeQuery (private method via getEnrichedOrders)", () => {
+    it("should forward the order-date and payment-date range filters to the service", async () => {
+      service.getEnrichedOrders.mockResolvedValue(mockServiceResponse);
+
+      await controller.getEnrichedOrders(
+        {
+          dateFrom: " 2026-09-01 ",
+          dateTo: "2026-09-30",
+          paymentFrom: "2026-01-01",
+          paymentTo: " 2026-06-30",
+        } as any,
+        { user: { legacyId: 1, role: { id: 2, name: "admin" } } },
+      );
+
+      expect(service.getEnrichedOrders).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dateFrom: "2026-09-01",
+          dateTo: "2026-09-30",
+          paymentFrom: "2026-01-01",
+          paymentTo: "2026-06-30",
+        }),
+      );
+    });
+
     it("should parse positive integers correctly", async () => {
       // Arrange
       const query = {
