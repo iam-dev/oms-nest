@@ -21,14 +21,8 @@
   - [Environment Configuration](#environment-configuration)
   - [Running Migrations on Staging/Production](#running-migrations-on-stagingproduction)
   - [Importing Production Data](#importing-production-data)
-  - [Validating Migration](#validating-migration)
   - [Troubleshooting](#troubleshooting)
 - [Production Data Sync Workflow](#production-data-sync-workflow)
-  - [Initial Setup](#initial-setup)
-  - [Full Data Import](#full-data-import)
-  - [Seat Size Extraction](#seat-size-extraction)
-  - [Importing New Production Data](#importing-new-production-data)
-  - [Sync Commands Reference](#sync-commands-reference)
 - [Performance optimization (PostgreSQL + TypeORM)](#performance-optimization-postgresql--typeorm)
   - [Indexes and Foreign Keys](#indexes-and-foreign-keys)
   - [Max connections](#max-connections)
@@ -316,58 +310,23 @@ npm run migration:revert
 
 ### Importing Production Data
 
-The import scripts automatically load environment variables from `.env`:
+Production data is loaded with one procedure: [`docs/production-data-migration.md`](../../docs/production-data-migration.md). Part A turns a new export into a verified dump on your machine; Part B loads that dump into any migrated database (local dev, staging, production) and verifies it cell by cell against the source.
+
+In short, for a target that already has an empty schema from `migration:run`:
 
 ```bash
-# Step 1: Import users (must run first for relationship mappings)
-npx ts-node -r tsconfig-paths/register scripts/import-production-users.ts
-
-# Step 2: Import core business data (fitters, customers, orders)
-npx ts-node -r tsconfig-paths/register scripts/import-production-data.ts
-
-# Step 3: Import product catalog (statuses, leather types, options, models)
-npx ts-node -r tsconfig-paths/register scripts/import-remaining-data.ts
+cd src/database/seeds/relational/production-data/postgres/scripts
+./load-legacy-dump.sh ~/db-backups/oms-legacy-data-<time>.sql.gz "<connection string>"
+python3 verify-against-mysql.py --pg-dsn "<connection string>"     # must say PASS
 ```
 
-**Note:** Scripts support `--dry-run` flag to preview changes without committing:
+followed by the data migrations and the materialized view refresh (steps B7 and B8 of the procedure).
+
+To run the migrations against a database other than the one in `.env`, use an env file. Variables set in the shell are ignored because `env-cmd` lets `.env` win:
+
 ```bash
-npx ts-node -r tsconfig-paths/register scripts/import-production-data.ts --dry-run
+npx env-cmd -f .env.staging typeorm-ts-node-commonjs --dataSource=src/database/data-source.ts migration:run
 ```
-
-### Import Order Dependencies
-
-The import scripts must be run in order due to foreign key relationships:
-
-1. **Users** - Creates user records with `legacy_id` mappings
-2. **Fitters** - Requires user mappings (fitter → user relationship)
-3. **Customers** - Requires fitter mappings (customer → fitter relationship)
-4. **Orders** - Requires customer and fitter mappings
-
-### Validating Migration
-
-After import, verify data counts:
-
-```sql
-SELECT 'Users' as entity, COUNT(*) FROM "user"
-UNION ALL SELECT 'Fitters', COUNT(*) FROM fitters
-UNION ALL SELECT 'Customers', COUNT(*) FROM customer
-UNION ALL SELECT 'Orders', COUNT(*) FROM orders
-UNION ALL SELECT 'Models', COUNT(*) FROM models
-UNION ALL SELECT 'Options', COUNT(*) FROM options
-UNION ALL SELECT 'Statuses', COUNT(*) FROM status
-UNION ALL SELECT 'Leather Types', COUNT(*) FROM leather_type
-ORDER BY entity;
-```
-
-Expected production data counts:
-- Users: ~340
-- Fitters: ~269
-- Customers: ~27,061
-- Orders: ~48,142
-- Models: ~88
-- Options: ~51
-- Statuses: ~16
-- Leather Types: ~69
 
 ### Troubleshooting
 
@@ -376,9 +335,6 @@ Expected production data counts:
 
 **Error: "no pg_hba.conf entry... no encryption"**
 - Set `DATABASE_SSL_ENABLED=true` in `.env`
-
-**Error: "No user mapping for UserID"**
-- Run `import-production-users.ts` first to create user mappings
 
 **Migration fails with constraint errors**
 - Migrations use SAVEPOINTs for error recovery
@@ -403,145 +359,18 @@ DATABASE_SSL_ENABLED=false
 
 ## Production Data Sync Workflow
 
-This section covers the complete workflow for syncing production data to local/staging databases, including seat size extraction from order notes.
+There is one workflow, described in [`docs/production-data-migration.md`](../../docs/production-data-migration.md):
 
-### Initial Setup
-
-```bash
-cd src/database/seeds/relational/production-data/postgres/scripts
-
-# 1. Start PostgreSQL container (port 5433)
-./setup-postgres.sh
-
-# 2. Transform MySQL data to PostgreSQL format (first time only)
-./transform-mysql-to-postgres.sh
+```text
+export zip → MySQL container → per-table files → PostgreSQL files → build database
+          → verify-against-mysql.py (must PASS) → dump file → each target → verify again
 ```
 
-### Full Data Import
+The scripts live in `src/database/seeds/relational/production-data/` (tracked; the data in that folder is never committed). `sync-production-data.sh` and the PostgreSQL container on port 5433 in that folder are not part of the workflow: the first was never used for a real load, and the migrations cannot run on the second.
 
-For initial setup or complete data refresh:
+Seat sizes (`orders.seat_sizes`, JSONB) are filled by `extract-seat-sizes.sh` from `orders_info` (option "Seat Size") with a regex over `special_notes` as fallback, in the build database, so they travel with the dump.
 
-```bash
-# Full sync: schema + data + seat size extraction + validation
-./sync-production-data.sh
-
-# Or run individual steps:
-./import-data.sh          # Import schema and data
-./extract-seat-sizes.sh   # Extract seat sizes (preview only)
-./extract-seat-sizes.sh --apply  # Apply seat size extraction
-./validate-data.sh        # Validate imported data
-```
-
-### Seat Size Extraction
-
-The system extracts seat size information from the `special_notes` field and stores it in the `seat_sizes` JSONB column.
-
-**Patterns Extracted:**
-
-| Pattern | Example | Extracted |
-|---------|---------|-----------|
-| `seat size X.X` | "seat size 17.5" | `["17,5"]` |
-| `size X.X` | "size 18" | `["18"]` |
-| `X.X seat` | "17.5 seat" | `["17,5"]` |
-| `X.X"` or `inch` | `17.5"` | `["17,5"]` |
-| `stamped X.X` | "stamped in 17.5" | `["17,5"]` |
-
-**Commands:**
-
-```bash
-# Preview what will be extracted (no changes)
-./extract-seat-sizes.sh
-
-# Apply the extraction
-./extract-seat-sizes.sh --apply
-
-# Or use the sync script
-./sync-production-data.sh --extract-seats
-```
-
-**Manual extraction via SQL:**
-
-```sql
--- Preview extraction
-SELECT id,
-       SUBSTRING(special_notes FROM 1 FOR 60) AS notes,
-       extract_seat_sizes(special_notes) AS sizes
-FROM orders
-WHERE extract_seat_sizes(special_notes) IS NOT NULL
-LIMIT 20;
-
--- Apply extraction
-UPDATE orders
-SET seat_sizes = extract_seat_sizes(special_notes)
-WHERE extract_seat_sizes(special_notes) IS NOT NULL
-  AND seat_sizes IS NULL;
-```
-
-### Importing New Production Data
-
-When you have a new database dump from production:
-
-```bash
-# Option 1: From a MySQL dump file
-./sync-production-data.sh --from-dump /path/to/production_dump.sql
-
-# Option 2: Manual process
-# 1. Place new SQL files in the data/ directories
-# 2. Run import
-./import-data.sh
-
-# 3. Extract seat sizes from new orders
-./sync-production-data.sh --extract-seats
-
-# 4. Validate
-./validate-data.sh
-```
-
-### Sync Commands Reference
-
-| Command | Description |
-|---------|-------------|
-| `./setup-postgres.sh` | Start PostgreSQL container on port 5433 |
-| `./transform-mysql-to-postgres.sh` | Convert MySQL dump to PostgreSQL format |
-| `./import-data.sh` | Import schema and data |
-| `./import-data.sh --schema` | Import schema only |
-| `./import-data.sh --data` | Import data only |
-| `./extract-seat-sizes.sh` | Preview seat size extraction |
-| `./extract-seat-sizes.sh --apply` | Apply seat size extraction |
-| `./validate-data.sh` | Validate data counts and integrity |
-| `./sync-production-data.sh` | Full sync (import + extract + validate) |
-| `./sync-production-data.sh --extract-seats` | Extract seat sizes only |
-| `./sync-production-data.sh --from-dump FILE` | Import from MySQL dump |
-
-### Environment Variables
-
-You can override default database connection settings:
-
-```bash
-export PG_HOST=127.0.0.1
-export PG_PORT=5433
-export PG_USER=oms_user
-export PG_PASSWORD=oms_password
-export PG_DATABASE=oms_legacy
-export CONTAINER_NAME=oms_postgres_legacy
-
-./sync-production-data.sh
-```
-
-### Data Volume Reference
-
-| Table | Expected Records |
-|-------|-----------------|
-| orders | ~48,142 |
-| customers | ~27,279 |
-| orders_info | ~1,098,273 |
-| fitters | ~282 |
-| credentials | ~360 |
-| saddles | ~109 |
-| options_items | ~887 |
-| role | 6 |
-
----
+Current row counts are in the [procedure](../../docs/production-data-migration.md#row-counts).
 
 ## Performance optimization (PostgreSQL + TypeORM)
 

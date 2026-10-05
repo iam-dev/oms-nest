@@ -91,115 +91,37 @@ Each command uses `env-cmd` to load the specified env file. Variables from the e
 
 ## Database Migration
 
-### Migrate to Staging Database with Production Data
+### Production data
 
-This project includes scripts to set up a staging database with production data for development and testing. The production data is organized in:
+Production data from the legacy OMS is loaded with one procedure: **[docs/production-data-migration.md](docs/production-data-migration.md)**.
 
+```text
+export zip → MySQL container → per-table files → PostgreSQL files → build database
+          → verify-against-mysql.py (every row and cell, must PASS)
+          → dump file → local dev / staging / production → verify again
 ```
-backend/src/database/seeds/relational/production-data/
-```
 
-For complete documentation, see the [Production Data README](backend/src/database/seeds/relational/production-data/README.md).
+- **Part A** (once per export, about 15 minutes, all local) ends with a verified dump file.
+- **Part B** (once per database) loads that dump into a database created by `npm run migration:run` and verifies it against the source.
+- The production cutover wraps Part B in the steps of [backend/docs/prod-cutover-runbook.md](backend/docs/prod-cutover-runbook.md).
 
-### Quick Migration Steps
+The scripts and the data live in `backend/src/database/seeds/relational/production-data/`. The scripts are in git. The data (the export and everything generated from it) is never committed; get the export zip from a teammate and put it in `mysql-legacy/`.
 
-#### Option 1: PostgreSQL (Recommended for NestJS)
+The export of 2026-09-23 has 2,211,463 rows in 21 tables (51,339 orders, 28,241 customers, 1,171,181 order line items).
+
+### Local containers
+
+| Container | Port | Database | Used for |
+|-----------|------|----------|----------|
+| `backend-postgres-1` | 5432 | `oms_nest` (dev), `oms_build` (clean build) | The app and the data procedure |
+| `oms_mysql_legacy` | 3307 | `oms_legacy` | The loaded export, source of every comparison |
 
 ```bash
-# Navigate to PostgreSQL scripts
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
-
-# 1. Start PostgreSQL 15 container (port 5433)
-./setup-postgres.sh
-
-# 2. Transform MySQL data to PostgreSQL format (first time only)
-./transform-mysql-to-postgres.sh
-
-# 3. Import all schema and data
-./import-data.sh
-
-# 4. Validate the import
-./validate-data.sh
+docker exec -it backend-postgres-1 psql -U oms -d oms_nest
+docker exec -it oms_mysql_legacy mysql --default-character-set=utf8mb4 -u oms_user -poms_password oms_legacy
 ```
 
-#### Option 2: MySQL Legacy (for comparison/testing)
-
-```bash
-# Navigate to MySQL scripts
-cd backend/src/database/seeds/relational/production-data/mysql-legacy/scripts
-
-# 1. Start MySQL 8.0 container (port 3307)
-./setup-mysql.sh
-
-# 2. Import all schema and data
-./import-data.sh
-
-# 3. Validate the import
-./validate-data.sh
-```
-
-### Staging Database Connection Details
-
-#### PostgreSQL (Primary)
-| Parameter | Value |
-|-----------|-------|
-| Host | 127.0.0.1 |
-| Port | **5433** |
-| Database | oms_legacy |
-| User | oms_user |
-| Password | oms_password |
-
-```bash
-# Connect via Docker
-docker exec -it oms_postgres_legacy psql -U oms_user -d oms_legacy
-
-# Connect via psql client
-psql -h 127.0.0.1 -p 5433 -U oms_user -d oms_legacy
-```
-
-#### MySQL Legacy (Optional)
-| Parameter | Value |
-|-----------|-------|
-| Host | 127.0.0.1 |
-| Port | **3307** |
-| Database | oms_legacy |
-| User | oms_user |
-| Password | oms_password |
-
-```bash
-# Connect via Docker
-docker exec -it oms_mysql_legacy mysql -u oms_user -poms_password oms_legacy
-
-# Connect via mysql client
-mysql -h 127.0.0.1 -P 3307 -u oms_user -poms_password oms_legacy
-```
-
-### Connect NestJS to Staging Database
-
-Update your `backend/.env` to point to the staging database:
-
-```env
-DATABASE_TYPE=postgres
-DATABASE_HOST=127.0.0.1
-DATABASE_PORT=5433
-DATABASE_USERNAME=oms_user
-DATABASE_PASSWORD=oms_password
-DATABASE_NAME=oms_legacy
-```
-
-### Data Overview
-
-The staging database contains ~3 million records across 21 tables:
-
-| Category | Key Tables | Records |
-|----------|------------|---------|
-| Product Catalog | brands, saddles, options, leather_types | ~24,000 |
-| Core Business | orders, customers, fitters, factories | ~76,000 |
-| System Admin | credentials, statuses, user_types | ~24,000 |
-| Relationships | orders_info, saddle_leathers | ~1,100,000 |
-| Audit Logging | log, dblog | ~840,000 |
-
----
+The app runs on a database created by the migrations. A third container on port 5433 (`oms_postgres_legacy`) may exist from older instructions; the migrations cannot run on it, so do not point `backend/.env` at it.
 
 ## Development Commands
 
@@ -358,13 +280,12 @@ curl http://localhost:3000/api/v1/orders \
 
 ```bash
 # Check if ports are in use
-lsof -i :5433  # PostgreSQL
-lsof -i :3307  # MySQL
+lsof -i :5432  # PostgreSQL (backend-postgres-1)
+lsof -i :3307  # MySQL (oms_mysql_legacy)
 
-# Remove and restart containers
-docker rm -f oms_postgres_legacy
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
-./setup-postgres.sh
+# Container logs
+docker logs backend-postgres-1
+docker logs oms_mysql_legacy
 ```
 
 ### Migration Script Permissions
@@ -378,13 +299,12 @@ chmod +x backend/src/database/seeds/relational/production-data/mysql-legacy/scri
 ### Validation Failures
 
 ```bash
-# Run validation to see specific issues
-./validate-data.sh
-
-# Check specific table count
-docker exec -it oms_postgres_legacy psql -U oms_user -d oms_legacy \
-  -c "SELECT COUNT(*) FROM orders;"
+# Compare a database with the loaded export, every row and cell
+cd backend/src/database/seeds/relational/production-data/postgres/scripts
+python3 verify-against-mysql.py --pg-container backend-postgres-1 --pg-user oms --pg-database oms_build
 ```
+
+If it reports `FAIL`, read the sample rows it prints and see [docs/production-data-migration.md](docs/production-data-migration.md). A dev database with seed users always shows those extra rows; add `--allow-extra` for it.
 
 ---
 

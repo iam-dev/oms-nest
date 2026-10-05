@@ -78,36 +78,18 @@ src/[entity]/
 
 Materialized views (`enriched_order_view`, `order_edit_view`) provide pre-computed order data. The service uses Redis caching with fallback queries when views are unavailable.
 
-## Staging Database
+## Production Data
 
-### PostgreSQL Setup (Recommended)
-```bash
-cd src/database/seeds/relational/production-data/postgres/scripts
-./setup-postgres.sh              # Start PostgreSQL 15 (port 5433)
-./transform-mysql-to-postgres.sh # First time only
-./import-data.sh                 # Import data
-./validate-data.sh
+Loading production data (local dev, staging, production) follows one procedure: [`docs/production-data-migration.md`](../docs/production-data-migration.md). Do not improvise another path.
+
+```text
+export zip → oms_mysql_legacy (3307) → per-table files → PostgreSQL files → build database oms_build
+          → verify-against-mysql.py (must PASS) → dump → each target → verify-against-mysql.py (must PASS)
 ```
 
-### Connection
-```
-Host: 127.0.0.1
-Port: 5433
-Database: oms_legacy
-User: oms_user
-Password: oms_password
-```
-
-### Connect NestJS
-Update `.env`:
-```env
-DATABASE_TYPE=postgres
-DATABASE_HOST=127.0.0.1
-DATABASE_PORT=5433
-DATABASE_USERNAME=oms_user
-DATABASE_PASSWORD=oms_password
-DATABASE_NAME=oms_legacy
-```
+- The app runs on a database created by `npm run migration:run` (`backend-postgres-1`, port 5432, `oms_nest`). The `oms_postgres_legacy` container on port 5433 has a hand-written schema; the migrations fail on it, so never point `.env` at it.
+- To run migrations against another database use an env file: `npx env-cmd -f .env.staging typeorm-ts-node-commonjs --dataSource=src/database/data-source.ts migration:run`. Shell variables do not work, `env-cmd` lets `.env` win.
+- Scripts and data are in `src/database/seeds/relational/production-data/`. The scripts are tracked; the data is ignored by a whitelist in `.gitignore` and must never be committed (no `git add -f` there).
 
 ## API
 
@@ -199,8 +181,8 @@ Defined in `src/roles/roles.enum.ts`:
 | [Development Workflow](../docs/development-workflow.md) | Branching, CI/CD, testing |
 | [Deployment Guide](../docs/deployment.md) | Production deployment |
 | [Staging Deployment](../docs/staging-deployment.md) | Staging environment |
-| [Migration Quick Start](../docs/migration-readme.md) | Legacy data import |
-| [Production Data Migration](../docs/production-data-migration.md) | Full migration reference |
+| [Migration Quick Start](../docs/migration-readme.md) | Which document to use, short version |
+| [Production Data Migration](../docs/production-data-migration.md) | The procedure for loading production data |
 
 ### Backend-specific (`backend/docs/`)
 

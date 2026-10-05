@@ -1,181 +1,79 @@
 # Production Data Migration — Quick Start
 
-## Overview
+This page is the short version. **The procedure itself is [Production Data Migration](./production-data-migration.md)**; when the two differ, that document is right.
 
-This guide covers how to import ~3 million records from the legacy MySQL production database (`ordermys_new.sql`) into a local or staging PostgreSQL database. The migration preserves legacy integer primary keys and uses shell scripts for transformation, import, and validation.
+## Which document do I use?
 
-For the full technical reference, see [Production Data Migration](./production-data-migration.md).
+| I want to… | Use |
+|---|---|
+| Process a new production export | [Production Data Migration](./production-data-migration.md), Part A, then Part B for each database |
+| Give my local dev database production data | The same document, Part B with the dump from Part A |
+| Refresh staging | Part B, wrapped in the scale-down and scale-up steps of the [cutover runbook](../backend/docs/prod-cutover-runbook.md) |
+| Cut production over | The [cutover runbook](../backend/docs/prod-cutover-runbook.md), which calls Part A and Part B |
+| Understand the data (volumes, relationships) | `production-data/mysql-legacy/documentation/` in the pipeline folder |
 
-## Prerequisites
+The pipeline folder is `backend/src/database/seeds/relational/production-data/`. Its scripts are in git; the data in it (export, generated files) never is. Its `README.md` describes the layout.
 
-- Docker installed and running
-- Access to `ordermys_new.sql` production dump file (place in `mysql-legacy/data/`)
-- Node.js 20+ with npm (for running TypeORM migrations)
+## The path
 
-## Scripts Location
-
-All scripts are in:
+```text
+export zip → MySQL container → per-table files → PostgreSQL files → build database
+          → GATE (verify-against-mysql.py: every row and cell, must PASS)
+          → dump file → each target → GATE again → data migrations → view refresh
 ```
-backend/src/database/seeds/relational/production-data/postgres/scripts/
-```
 
-## Quick Start (Legacy Container)
+There is one path. The 5433 container (`oms_postgres_legacy`), `sync-production-data.sh --from-dump` and `backend/scripts/import-mysql-data.ts` are not part of it.
 
-The fastest path to a working legacy database:
+## Part A in short (once per export, about 15 minutes)
 
 ```bash
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
+PD=backend/src/database/seeds/relational/production-data
 
-# 1. Start a PostgreSQL 15 container (port 5433)
-./setup-postgres.sh
+cd $PD/mysql-legacy/scripts
+./setup-mysql.sh --clean
+unzip -p ../ordermysaddle-DD-MM-YYYY.sql.zip | docker exec -i oms_mysql_legacy \
+  mysql --max_allowed_packet=512M --default-character-set=utf8mb4 -u oms_user -poms_password oms_legacy
+docker exec oms_mysql_legacy mysql -u oms_user -poms_password oms_legacy -e \
+  "UPDATE FactoryEmployees fe JOIN Factories f ON f.UserID = fe.FactoryID SET fe.FactoryID = f.ID"
+./export-table-files.sh
 
-# 2. Transform MySQL data to PostgreSQL format (first time only)
+cd ../../postgres/scripts
 ./transform-mysql-to-postgres.sh
-
-# 3. Import schema and data
-./import-data.sh
-
-# 4. Validate the import
-./validate-data.sh
-
-# 5. Extract seat sizes into orders.seat_sizes JSONB column
-./extract-seat-sizes.sh --apply
-
-# 6. Repair double-encoded UTF-8 inherited from the legacy database (dry run without --apply)
-(cd backend && npm run data:fix-utf8 -- --apply)
+# create the build database oms_build and run the migrations on it: see A6 of the procedure
+PG_USER=oms PG_DATABASE=oms_build ./import-data.sh --env local --data
+python3 verify-against-mysql.py --pg-container backend-postgres-1 --pg-user oms --pg-database oms_build   # must say PASS
+PG_USER=oms PG_DATABASE=oms_build ./extract-seat-sizes.sh --env local --apply
+./dump-legacy-data.sh
 ```
 
-Connection details after setup:
-```
-Host: 127.0.0.1  Port: 5433  Database: oms_legacy
-User: oms_user   Password: oms_password
-Container: oms_postgres_legacy
-```
+## Part B in short (once per database)
 
-## Quick Start (Local Dev Database)
-
-Import production data into the backend's Docker Compose PostgreSQL (port 5432):
+Empty the database, run the migrations, then:
 
 ```bash
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
-
-# Import into backend-postgres-1
-./import-data.sh --env local
-
-# Validate
-./validate-data.sh --env local
-
-# Extract seat sizes
-./extract-seat-sizes.sh --apply
+./load-legacy-dump.sh ~/db-backups/oms-legacy-data-<time>.sql.gz "<connection string>"
+python3 verify-against-mysql.py --pg-dsn "<connection string>"                                 # must say PASS
 ```
 
-## Full Sync (New MySQL Dump)
+Then re-run the three data migrations and refresh the two materialized views (steps B7 and B8 of the procedure).
 
-When you receive a new production dump, run the full pipeline:
+## Mistakes that have happened
 
-```bash
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
+| Mistake | What it does |
+|---|---|
+| Loading the export without `--default-character-set=utf8mb4` | Aborts with `ERROR 1406 Data too long for column 'PhoneNo'`, 4 of 21 tables loaded |
+| `DATABASE_NAME=… npm run migration:run` | Runs against the database in `backend/.env` anyway; use `npx env-cmd -f <env file> …` |
+| Running the migrations on the 5433 container | Fails: `relation "user_types" already exists` |
+| Dumping from a dev database that has seed users | Seed rows end up in staging or production |
+| Trusting row counts | Counts were right on 2026-09-28 while 12 `dblog` rows held a wrong character |
 
-./sync-production-data.sh --from-dump /path/to/ordermys_new.sql
-```
+## Current data
 
-This runs: transform → import → extract seat sizes in one command.
-
-## Connect NestJS to Legacy Data
-
-Update `backend/.env`:
-```env
-DATABASE_TYPE=postgres
-DATABASE_HOST=127.0.0.1
-DATABASE_PORT=5433
-DATABASE_USERNAME=oms_user
-DATABASE_PASSWORD=oms_password
-DATABASE_NAME=oms_legacy
-```
-
-Then run TypeORM migrations (creates enriched views, indexes, etc.):
-```bash
-cd backend
-npm run migration:run
-```
-
-## Data Summary
-
-| Category | Tables | Key Counts |
-|----------|--------|------------|
-| Core Business | orders, customers, fitters, factories, factory_employees | 48,142 orders · 27,279 customers · 282 fitters · 7 factories |
-| Product Catalog | brands, saddles, leather_types, options, options_items, presets, presets_items | 3 brands · 109 saddles · 85 leather types · 52 options · 887 option items |
-| Relationships | orders_info, saddle_leathers, saddle_options_items | 1,099,961 order line items |
-| System Admin | credentials, user_types, statuses, role, client_confirmation | 360 users · 6 roles · 16 statuses |
-| Audit Logging | log, dblog | Partial import |
-
-## Scripts Reference
-
-| Script | Purpose |
-|--------|---------|
-| `setup-postgres.sh` | Start/reset PostgreSQL 15 Docker container (port 5433) |
-| `transform-mysql-to-postgres.sh` | Transform MySQL INSERTs to PostgreSQL format (run once per dump) |
-| `transform-orders-booleans.py` | Convert integer booleans (0/1) to PostgreSQL booleans in orders.sql |
-| `import-data.sh` | Import schema + data (`--env local` or `--env legacy`, `--schema` or `--data`) |
-| `validate-data.sh` | Check record counts and referential integrity (`--env local` or `--env legacy`) |
-| `extract-seat-sizes.sh` | Extract seat sizes from orders_info + special_notes (`--env local/legacy/staging/production`, `--apply`) |
-| `sync-production-data.sh` | Full sync orchestration (`--from-dump FILE`, `--incremental`, `--extract-seats`) |
-| `docker-compose.yml` | Standalone Docker Compose for legacy PostgreSQL container |
-
-## Validation
-
-The `validate-data.sh` script checks:
-
-- **Record counts** — All 20 tables against expected values
-- **Referential integrity** — 7 relationship checks (orders→fitters, orders→customers, customers→fitters, factory_employees→factories, orders_info→orders, saddle_leathers→saddles, saddle_options_items→saddles)
-- **Sample data** — Displays brands, factories, statuses, recent orders, order status distribution
-
-## Known Legacy Data Issues
-
-These are expected from years of production use and are preserved:
-
-| Issue | Count | Details |
-|-------|-------|---------|
-| Orders → Missing Fitters | 16 | Reference 4 deleted fitters (IDs: 29, 46, 76, 89) |
-| Customers → Missing Fitters | 3 | Same deleted fitter references |
-| OrdersInfo → Missing Orders | ~49,794 | ~3,504 orders were hard-deleted but line items remain |
-
-The NestJS application handles missing references gracefully. The validation script reports these as expected warnings.
-
-**Double-encoded UTF-8** — about 2% of non-ASCII text in the dump is stored double-encoded (`Ã¶` for `ö`) because the legacy app wrote through a latin1 connection. Run `npm run data:fix-utf8 -- --apply` in `backend/` after every import; see [Production Data Migration](production-data-migration.md#double-encoded-utf-8-repair-after-every-import).
-
-## Troubleshooting
-
-**Port 5433 already in use:**
-```bash
-lsof -i :5433
-# Remove existing container and restart
-docker rm -f oms_postgres_legacy && ./setup-postgres.sh
-```
-
-**Container not running:**
-```bash
-docker logs oms_postgres_legacy
-# For local dev:
-cd backend && docker-compose up -d postgres
-```
-
-**Scripts not executable:**
-```bash
-chmod +x postgres/scripts/*.sh
-```
-
-**Import fails on large files (orders_info — 1.1M rows):**
-The import can take several minutes for the `orders_info` and `audit-logging` tables. This is normal.
-
-**Reset and reimport:**
-```bash
-./setup-postgres.sh --clean   # Removes container + volume, starts fresh
-./import-data.sh              # Reimport everything
-```
+Export of 2026-09-23: 2,211,463 rows in 21 tables (51,339 orders · 28,241 customers · 1,171,181 order line items · 821,198 log rows). The full table is in the [procedure](./production-data-migration.md#row-counts).
 
 ## Related Documentation
 
-- [Production Data Migration](./production-data-migration.md) — Full technical reference (schema, migrations, directory structure)
-- [Getting Started](./getting-started.md) — Project setup guide
-- [Staging Deployment](./staging-deployment.md) — Staging environment guide
+- [Production Data Migration](./production-data-migration.md) — the procedure and the reference
+- [Production Cutover Runbook](../backend/docs/prod-cutover-runbook.md) — the Kubernetes and DigitalOcean steps around it
+- [Getting Started](./getting-started.md) — project setup
+- [Staging Deployment](./staging-deployment.md) — staging environment
