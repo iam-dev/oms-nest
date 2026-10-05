@@ -15,7 +15,7 @@ services:
       MYSQL_USER: oms_user
       MYSQL_PASSWORD: oms_password
     ports:
-      - "3307:3306"  # Using 3307 to avoid conflict with any local MySQL
+      - "127.0.0.1:3307:3306"  # localhost only: the container holds production data
     volumes:
       - mysql_legacy_data:/var/lib/mysql
       - ./init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on startup

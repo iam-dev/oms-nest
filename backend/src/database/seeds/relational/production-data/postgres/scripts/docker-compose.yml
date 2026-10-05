@@ -12,7 +12,7 @@ services:
       POSTGRES_USER: oms_user
       POSTGRES_PASSWORD: oms_password
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"  # localhost only: the container holds production data
     volumes:
       - postgres_legacy_data:/var/lib/postgresql/data
     command:
