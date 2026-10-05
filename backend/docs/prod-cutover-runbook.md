@@ -2,9 +2,18 @@
 
 End-to-end procedure for replacing the production OMS PostgreSQL database in place with a fresh import from a MySQL/MariaDB production dump.
 
-This runbook is the **same procedure rehearsed against staging on 2026-06-18/19**. The full rehearsal log with surprises and lessons is in [`prod-migration-rehearsal-log.md`](prod-migration-rehearsal-log.md).
+The data steps are **not described here any more**. They are the single procedure in [`docs/production-data-migration.md`](../../docs/production-data-migration.md): Part A (export → verified dump, done before the window) and Part B (load a database, done inside the window). This runbook adds what is specific to a live environment: backups, scaling the app down and up, recreating the database, and rollback.
 
-> **Target downtime: ~45 minutes** (29 min budgeted execution + 16 min slack for verification and rollback decision).
+What was rehearsed, and when:
+
+| Part | Rehearsed |
+|---|---|
+| Scale down/up, drop and recreate the database with `doctl`, schema diff, rollback restore | Against staging on 2026-06-18/19 ([`prod-migration-rehearsal-log.md`](prod-migration-rehearsal-log.md)) |
+| Part A and Part B of the data procedure | Twice on 2026-10-05 in new local containers, including a PostgreSQL 16 database owned by a non-superuser |
+| Loading a DigitalOcean database from a local dump in one transaction | 2026-09-28 for the new staging cluster (about 10 minutes for the restore) |
+| This runbook as a whole, in its current form | **Not yet.** Rehearse it once against staging before the production cutover. |
+
+> **Target downtime: ~45 minutes.** Expected execution is about 20 minutes (restore about 10, verification about 3, the rest under a minute each); the remainder is slack for checks and the rollback decision.
 
 ## When to use this
 
@@ -18,7 +27,7 @@ Estimated time: 30 minutes the day before, 5 minutes the morning of.
 
 ```bash
 docker info                    # daemon up
-docker image inspect postgres:18 mysql:8.0  # both pulled
+docker image inspect postgres:18 postgres:17.6-alpine mysql:8.0  # all pulled
 doctl account get              # token valid; if not, rotate via DO web console + .env.production
 kubectl get ns oms-production  # cluster reachable (verify actual namespace name!)
 kubectl get deploy -n oms-production    # confirm deploy names
@@ -38,9 +47,10 @@ doctl databases list --format ID,Name,Region | grep prod
 ```bash
 # Unzip wherever the new dump lives (typically delivered by ops as a .zip):
 unzip /path/to/ordermysaddle-prod.sql.zip -d /tmp/oms_prod_dump/
-# Verify it's a MariaDB/MySQL dump:
-head -5 /tmp/oms_prod_dump/*.sql   # Should say "-- MySQL dump 10.15  Distrib 10.0.38-MariaDB" or similar
+head -c 300 /tmp/oms_prod_dump/*.sql   # CREATE TABLE `Brands` ... near the top
 ```
+
+The September 2026 export is a plain SQL file: no `-- MySQL dump` header and no `SET NAMES`. That is why the load command in Part A must pass `--default-character-set=utf8mb4`.
 
 ### 4. Backup everything
 
@@ -65,48 +75,19 @@ docker run --rm \
 ls -lh ~/db-backups/oms-prod/oms-prod-${TS}.dump
 ```
 
-### 5. Regenerate per-table SQL files from the new dump
+### 5. Run Part A of the data procedure
 
-This is Phase B of the rehearsal — must be done BEFORE the cutover window because it takes ~3 minutes and is non-destructive on prod.
+Follow [Part A of `docs/production-data-migration.md`](../../docs/production-data-migration.md#part-a--from-the-export-to-a-verified-dump) with the new export. It takes about 15 minutes, touches nothing remote, and ends with:
 
-```bash
-# 5a. Start the local MySQL legacy container and import the new dump:
-cd backend/src/database/seeds/relational/production-data/mysql-legacy/scripts
-./setup-mysql.sh
-docker exec -i oms_mysql_legacy mysql --max_allowed_packet=512M \
-  -u oms_user -poms_password oms_legacy < /tmp/oms_prod_dump/*.sql
+- `RESULT: PASS - every legacy row and cell matches MySQL.` from `verify-against-mysql.py` for the build database
+- `Total: 0 cells` from `npm run data:fix-utf8`
+- a dump file `~/db-backups/oms-legacy-data-<UTC time>.sql.gz` and its SHA256
 
-# 5b. Re-apply the documented FactoryEmployees fix
-# (Every fresh dump regresses this. See README "Fixed Issues" §1.)
-docker exec oms_mysql_legacy mysql -u oms_user -poms_password oms_legacy -e "
-UPDATE FactoryEmployees SET FactoryID = 3 WHERE ID = 1;
-UPDATE FactoryEmployees SET FactoryID = 4 WHERE ID = 2;"
+Write the dump file name and the checksum into the cutover notes. Keep the MySQL container `oms_mysql_legacy` running: the verification inside the window compares production with it.
 
-# 5c. Regenerate per-table .sql files in mysql-legacy/data/ (extended INSERT format):
-# Use the mapping in prod-migration-rehearsal-log.md "B2" section.
-# Important: pass --complete-insert (so column names are in the INSERT) and --no-tablespaces for schema dumps.
+Do not start the window without all three.
 
-# 5d. Regenerate postgres/ via the transform script:
-cd ../../postgres/scripts
-./transform-mysql-to-postgres.sh
-
-# 5e. CRITICAL — apply boolean transform to postgres/data/core-business/orders.sql
-# transform-orders-booleans.py is documented but only handles the extended-INSERT format.
-# Run the per-row boolean transform from the rehearsal log instead.
-# Result: positions 5/45/47/48/49/50 of every INSERT change from 0/1 to false/true.
-
-# 5f. Pre-generate TSV files for the large tables (avoid INSERT-loop latency at cutover time):
-python3 - <<'PY'
-# Convert orders_info.sql → /tmp/orders_info.tsv (1.15M rows in ~7s, gives 19MB file)
-# See rehearsal log "C3 surprise #2" for the conversion script.
-PY
-```
-
-After step 5, you have:
-- `postgres/data/*.sql` files validated locally (verify via `import-data.sh` against a local Docker PG18 if you want extra safety)
-- `/tmp/orders_info.tsv` ready for COPY
-
-## Cutover (the actual ~29 minute window)
+## Cutover (the downtime window)
 
 > **All commands assume:** `backend/.env.production` is set up with valid `DATABASE_*` vars (including `DATABASE_CA`) and `DIGITALOCEAN_ACCESS_TOKEN`.
 
@@ -135,6 +116,8 @@ doctl databases db create "$CLUSTER_ID" "$DB_NAME"
 
 Expected: ~10 seconds.
 
+If the production user is not `doadmin` and cannot drop the database, empty it instead with `DROP OWNED BY CURRENT_USER CASCADE` (step B3 of the data procedure; used for the new staging cluster on 2026-09-28).
+
 ### C1a — Wait for new DB ready
 
 ```bash
@@ -146,138 +129,27 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
 done
 ```
 
-### C2 — Apply all TypeORM migrations from scratch
+### C2 to C4 — Load and verify (Part B of the data procedure)
 
-```bash
-cd backend
-npm run migration:production:run   # if wired; otherwise:
-# env-cmd -f .env.production typeorm-ts-node-commonjs --dataSource=src/database/data-source.ts migration:run
-```
+Follow [Part B of `docs/production-data-migration.md`](../../docs/production-data-migration.md#part-b--load-a-database), steps B1 and B4 to B9, with `ENV_FILE=.env.production` and the production connection string. B2 (backup) was done in pre-flight step 4b and B3 (empty the database) is C1 above.
 
-Expected: ~22 seconds for 28 migrations. The data-dependent migrations (`SeedJobSheetsForAdamWhitehouse1773100000000` etc.) will return early because `credentials` is empty at this point — this is expected and matches the rehearsal.
+| Step | What | Must show |
+|---|---|---|
+| B1 | Point `DSN`, `PGPASSWORD`, `DUMP` at production | `current_database()` is the production database |
+| B4 | `npx env-cmd -f .env.production typeorm-ts-node-commonjs --dataSource=src/database/data-source.ts migration:run` | every migration `executed successfully` |
+| B5 | `./load-legacy-dump.sh "$DUMP" "$DSN"` | the checksum from pre-flight step 5, then the row counts |
+| B6 | `python3 verify-against-mysql.py --pg-dsn "$DSN"` | `RESULT: PASS` |
+| B7 | Re-run the three data migrations | exactly three `executed successfully` |
+| B8 | Refresh the two materialized views | no error |
+| B9 | Final checks | views equal to `orders`, 5 job sheet views, 0 fitters not normalized |
 
-### C3 — Load data via psql in FK dependency order
+**If B6 does not say PASS, stop and roll back.** Do not repair rows by hand inside the window.
 
-```bash
-export PGPASSWORD='<prod password>'
-CONN="host=<prod host> port=<prod port> dbname=$DB_NAME user=doadmin sslmode=require"
-PG_DATA=backend/src/database/seeds/relational/production-data/postgres/data
+Steps that older versions of this runbook had and that are gone on purpose:
 
-# Strict FK dependency order:
-FILES=(
-  "system-admin/user-types.sql"
-  "system-admin/roles.sql"
-  "system-admin/statuses.sql"
-  "system-admin/credentials.sql"
-  "system-admin/client-confirmation.sql"
-  "product-catalog/brands.sql"
-  "product-catalog/leather-types.sql"
-  "product-catalog/options.sql"
-  "product-catalog/options-items.sql"
-  "product-catalog/presets.sql"
-  "product-catalog/presets-items.sql"
-  "product-catalog/saddles.sql"
-  "core-business/factories.sql"
-  "core-business/factory-employees.sql"
-  "core-business/fitters.sql"
-  "core-business/customers.sql"
-  "core-business/orders.sql"   # MUST have booleans applied per step 5e
-  "relationships/saddle-leathers.sql"
-  "relationships/saddle-options-items.sql"
-)
-# orders-info handled separately via COPY (see below)
-
-for f in "${FILES[@]}"; do
-  STEP_START=$(date +%s)
-  psql "$CONN" -v ON_ERROR_STOP=0 -f "$PG_DATA/$f"
-  # CRITICAL: verify row count after each file — exit code alone is not trustworthy
-  TABLE=$(basename "$f" .sql | tr - _)
-  ACTUAL=$(psql "$CONN" -t -A -c "SELECT COUNT(*) FROM $TABLE;")
-  echo "  $f → $TABLE: $ACTUAL rows ($(($(date +%s) - STEP_START))s)"
-done
-```
-
-Compare each ACTUAL to the expected counts in `production-data/README.md`. If `orders` shows 0, **the boolean transform from step 5e was not applied** — stop and re-apply before continuing.
-
-**MANDATORY: cross-check row count against source MySQL after orders.sql.** Diff order IDs between source and staging to catch silent per-row failures from values like `'CUSTOMER BUCK\'` (literal trailing backslash) that confuse parsers:
-
-```bash
-docker exec oms_mysql_legacy mysql -u oms_user -poms_password oms_legacy -e "SELECT ID FROM Orders ORDER BY ID;" -BN > /tmp/mysql_order_ids.txt
-psql "$CONN" -tAc "SELECT id FROM orders ORDER BY id;" > /tmp/pg_order_ids.txt
-MISSING=$(comm -23 <(sort -n /tmp/mysql_order_ids.txt) <(sort -n /tmp/pg_order_ids.txt))
-if [ -n "$MISSING" ]; then
-  echo "MISSING IDS: $MISSING"
-  # Re-dump those rows with --complete-insert and use the name-based boolean fixup,
-  # then re-INSERT. See prod-migration-rehearsal-log.md Surprise #16 for the script.
-fi
-```
-
-### C3-COPY — Bulk-load orders_info via COPY (8 seconds for 1.15M rows)
-
-```bash
-psql "$CONN" -c "\COPY orders_info (order_id, option_id, option_item_id, clone_number, color, leathertype, custom) FROM '/tmp/orders_info.tsv' WITH (FORMAT text);"
-psql "$CONN" -c "SELECT COUNT(*) FROM orders_info;"
-```
-
-Expected: ~8 seconds. Result should match the row count in the source dump.
-
-### C3-SEQ — Reset all SERIAL sequences to MAX(id) (CRITICAL)
-
-> **Discovered in rehearsal Surprise #17.** psql/COPY imports preserve explicit IDs but do NOT advance the underlying sequences. Without this step, the app's first auto-INSERT collides with row id=1.
-
-```bash
-psql "$CONN" <<'SQL'
-DO $$
-DECLARE rec RECORD; max_id BIGINT; cmd TEXT;
-BEGIN
-  FOR rec IN
-    SELECT n.nspname AS schema_name, c.relname AS seq_name,
-           dep_tbl.relname AS table_name, a.attname AS column_name
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'a'
-    JOIN pg_class dep_tbl ON dep_tbl.oid = d.refobjid
-    JOIN pg_attribute a ON a.attrelid = dep_tbl.oid AND a.attnum = d.refobjsubid
-    WHERE c.relkind = 'S' AND n.nspname = 'public'
-  LOOP
-    cmd := format('SELECT COALESCE(MAX(%I), 0) FROM %I.%I',
-                  rec.column_name, rec.schema_name, rec.table_name);
-    EXECUTE cmd INTO max_id;
-    IF max_id > 0 THEN
-      EXECUTE format('SELECT setval(%L, %s, true)',
-                     rec.schema_name || '.' || rec.seq_name, max_id);
-      RAISE NOTICE 'Set % to %', rec.seq_name, max_id;
-    END IF;
-  END LOOP;
-END$$;
-SQL
-```
-
-Verify a critical sequence: `psql "$CONN" -c "SELECT last_value FROM pg_sequences WHERE sequencename='orders_id_seq';"` → should equal `MAX(id) FROM orders`.
-
-### C3b — Refresh materialized views
-
-```bash
-psql "$CONN" -c "REFRESH MATERIALIZED VIEW enriched_order_view; REFRESH MATERIALIZED VIEW order_edit_view;"
-psql "$CONN" -c "SELECT relname, n_live_tup FROM pg_stat_user_tables WHERE relname IN ('enriched_order_view','order_edit_view');"
-```
-
-Expected: ~4 seconds. Both views should now have rows matching the `orders` count.
-
-### C4 — Extract seat sizes
-
-```bash
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
-PGSSLMODE=require \
-PG_HOST=<prod host> \
-PG_PORT=<prod port> \
-PG_USER=doadmin \
-PG_PASSWORD='<prod password>' \
-PG_DATABASE=$DB_NAME \
-bash ./extract-seat-sizes.sh --env production --apply
-```
-
-Expected: ~20 seconds. Should report ~99% of orders updated.
+- Loading `postgres/data/*.sql` file by file with `psql`: per-row inserts over the network take hours for `log`, and errors were easy to miss. The dump loads with `COPY` in one transaction.
+- A separate `COPY` for `orders_info` and a sequence reset: both are part of the dump, and B6 checks every sequence.
+- `extract-seat-sizes.sh --env production`: seat sizes are filled in the build database and travel with the dump.
 
 ### C5 — Schema diff (sanity check)
 
@@ -297,8 +169,15 @@ diff <(grep -v "^\\\\restrict\|^-- Dumped from" /tmp/prod_old_schema.sql) \
 
 Compare current prod counts against the local pre-cutover backup restored into a local PG18 container (the same way A1+A2 worked in the rehearsal). Diff should match the rehearsal pattern:
 - Legacy tables ↑ (newer dump bigger)
-- NestJS-only tables (`audit_log`, `log`, `dblog`, `custom_order_views`, etc.) → 0 in new (runtime data lost, expected)
+- `log` / `dblog` ↑ (legacy tables, part of the dump)
+- NestJS-only tables (`audit_log`, `comment`, `report_saved_filters`, etc.) → 0 in new; `custom_order_views` → 5 (the job sheet tabs re-created in B7)
 - Schema-defined empty tables → still 0
+
+### C6 — Restore data that only existed in the old database (only if there is any)
+
+If the database being replaced was already used through the new app, the tables outside the export held people's work: `comment`, `custom_order_views`, `custom_order_view_groups`, `custom_order_cell_overrides`, `report_saved_filters`, `warehouse`, `extras`, `saddle_extras`, `audit_log`. Decide per table before the window whether it must come back. Restore from the pre-flight backup with `pg_dump --data-only --table=<each>` and `psql`, as the June rehearsal did (rehearsal log, D5 and D6). This step was not part of the October 2026 rehearsals; rehearse it against a copy first.
+
+For a first cutover, where nobody has worked in the new production database yet, skip C6.
 
 ### C7 — Scale prod app deploys back up
 
@@ -339,7 +218,7 @@ kubectl logs -n oms-production -l app=oms-backend --tail=50
 
 ## Rollback procedure
 
-If anything in C2–C5b looks wrong and you decide to abort:
+If the verification (B6) fails or anything in C2–C5b looks wrong and you decide to abort:
 
 ```bash
 # 1. Scale down again
@@ -377,14 +256,13 @@ The pg_restore for 50k orders + 1.1M orders_info typically takes ~15 minutes. Pl
 | Seat sizes populated | `SELECT COUNT(*) FROM orders WHERE seat_sizes IS NOT NULL;` ~99% |
 | audit_log starts accumulating | New rows since cutover timestamp |
 
-## Known caveats (carried over from staging rehearsal)
+## Known caveats
 
-These are not blockers but worth knowing:
-
-1. **Old runtime data is gone on the new DB:** `audit_log`, `log`, `dblog`, `custom_order_views` (Adam Whitehouse seeds skipped because credentials empty at migration time), `custom_order_view_groups`, runtime brand additions. None of this affects correctness of orders/customers/etc.
-2. **`brands` count differs from old prod by however many were manually added at runtime.** New dump's count is authoritative.
-3. **Materialized views needed REFRESH after import** (would be empty otherwise). C3b handles this.
-4. **`doadmin` cannot disable triggers** (`SET session_replication_role = replica` fails). Workaround is to load in FK order, which is what C3 does.
+1. **Rows written through the new app into the old database are gone** unless restored in C6: `audit_log`, comments, custom views other than the seeded job sheets, saved report filters, runtime brand additions. The legacy tables, including `log` and `dblog`, come complete from the export.
+2. **`brands` count differs from the old database by however many were added at runtime.** The export's count is authoritative.
+3. **The managed database user is not a superuser.** Nothing in Part B needs one: the NestJS schema has no foreign keys on legacy tables, so no triggers have to be disabled.
+4. **`NormalizeFitterCountries` has an open TODO** in its source (it maps only `NL`, `US` and `-1`). It changes 2 fitters of the 2026-09-23 export. Staging has it applied.
+5. **`pg_dump` must not be older than the server.** The commands use `postgres:18`; keep that at or above the production server's major version.
 
 ## Owner
 
@@ -396,4 +274,4 @@ Update this section with the actual on-call for the cutover. Include:
 
 ---
 
-*Generated from the staging rehearsal on 2026-06-18/19. See [`prod-migration-rehearsal-log.md`](prod-migration-rehearsal-log.md) for the full rehearsal log, surprises, and lessons learned.*
+*Generated from the staging rehearsal on 2026-06-18/19 ([`prod-migration-rehearsal-log.md`](prod-migration-rehearsal-log.md)); data steps replaced on 2026-10-05 by `docs/production-data-migration.md`.*

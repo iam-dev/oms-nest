@@ -273,17 +273,23 @@ npm run seed:run:relational
 
 ### Import Production Data
 
-To work with real production data locally, see [Production Data Migration](./production-data-migration.md).
+To work with real production data locally, follow [Production Data Migration](./production-data-migration.md). It is the only procedure for this.
 
-Quick summary:
+If a verified dump already exists (`~/db-backups/oms-legacy-data-<time>.sql.gz`, written by Part A of that procedure), loading your dev database is Part B:
 
 ```bash
-cd backend/src/database/seeds/relational/production-data/postgres/scripts
-./setup-postgres.sh              # PostgreSQL 15 container (port 5433)
-./transform-mysql-to-postgres.sh # First time only
-./import-data.sh                 # Import ~3M records
-./validate-data.sh               # Verify import
+# empty database + schema
+docker exec backend-postgres-1 psql -U oms -d postgres \
+  -c "DROP DATABASE IF EXISTS oms_nest WITH (FORCE)" -c "CREATE DATABASE oms_nest"
+cd backend && npm run migration:run
+
+# data (2.2M rows, about 20 seconds), then the check against the source
+cd src/database/seeds/relational/production-data/postgres/scripts
+PGPASSWORD=<password from backend/.env> ./load-legacy-dump.sh ~/db-backups/oms-legacy-data-<time>.sql.gz \
+  "host=host.docker.internal port=5432 dbname=oms_nest user=oms"
 ```
+
+Then steps B6 to B10 of the procedure (verification, data migrations, view refresh, test logins).
 
 ## Troubleshooting
 
