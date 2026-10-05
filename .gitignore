@@ -140,10 +140,23 @@ k8s-1-28-6-do-0-ams3-1713552913551-kubeconfig
 *kubeconfig.yaml
 *kubeconfig.yml
 
-# production data
-production-data
+# production data: the pipeline scripts and their docs are tracked, THE DATA NEVER IS.
+# Everything inside the folder is ignored unless it is listed below (whitelist).
+# Do not add data paths here and do not use `git add -f` in that folder.
+/production-data/
 ordermys_new.sql
-backend/src/database/seeds/relational/production-data
+backend/src/database/seeds/relational/production-data/**
+!backend/src/database/seeds/relational/production-data/**/
+!backend/src/database/seeds/relational/production-data/README.md
+!backend/src/database/seeds/relational/production-data/CLAUDE.md
+!backend/src/database/seeds/relational/production-data/mysql-legacy/scripts/README.md
+!backend/src/database/seeds/relational/production-data/mysql-legacy/scripts/docker-compose.yml
+!backend/src/database/seeds/relational/production-data/mysql-legacy/scripts/*.sh
+!backend/src/database/seeds/relational/production-data/mysql-legacy/scripts/fix-referential-integrity.sql
+!backend/src/database/seeds/relational/production-data/postgres/scripts/docker-compose.yml
+!backend/src/database/seeds/relational/production-data/postgres/scripts/*.sh
+!backend/src/database/seeds/relational/production-data/postgres/scripts/*.py
+!backend/src/database/seeds/relational/production-data/postgres/schema/*.sql
 
 # AI DOCS
 ARCHIVE

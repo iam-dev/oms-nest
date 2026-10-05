@@ -1,0 +1,34 @@
+# MySQL Legacy Data Validation Docker Setup
+# Usage: docker-compose up -d
+# Access: mysql -h 127.0.0.1 -P 3307 -u oms_user -p oms_legacy
+
+version: '3.8'
+
+services:
+  mysql-legacy:
+    image: mysql:8.0
+    container_name: oms_mysql_legacy
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: oms_legacy
+      MYSQL_USER: oms_user
+      MYSQL_PASSWORD: oms_password
+    ports:
+      - "3307:3306"  # Using 3307 to avoid conflict with any local MySQL
+    volumes:
+      - mysql_legacy_data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on startup
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_allowed_packet=256M
+      - --innodb_buffer_pool_size=256M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_legacy_data:

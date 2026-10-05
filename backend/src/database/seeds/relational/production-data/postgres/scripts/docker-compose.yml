@@ -1,0 +1,33 @@
+# PostgreSQL Legacy Data Validation Docker Setup
+# Usage: docker-compose up -d
+# Access: psql -h 127.0.0.1 -p 5433 -U oms_user -d oms_legacy
+
+services:
+  postgres-legacy:
+    image: postgres:15
+    container_name: oms_postgres_legacy
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oms_legacy
+      POSTGRES_USER: oms_user
+      POSTGRES_PASSWORD: oms_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_legacy_data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=16MB"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oms_user -d oms_legacy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_legacy_data:
